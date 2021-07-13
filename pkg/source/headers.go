@@ -16,8 +16,13 @@
 
 package source
 
+import "d7y.io/dragonfly/v2/pkg/util/rangeutils"
+
 // request header
-type RequestHeader map[string]string
+type RequestHeader struct {
+	Range  *rangeutils.Range
+	Header map[string]string
+}
 
 // response header
 type ResponseHeader map[string]string

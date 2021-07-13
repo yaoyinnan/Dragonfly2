@@ -78,7 +78,7 @@ func WithHTTPClient(client *http.Client) HTTPSourceClientOption {
 	}
 }
 
-func (client *httpSourceClient) GetContentLength(ctx context.Context, url string, header source.RequestHeader) (int64, error) {
+func (client *httpSourceClient) GetContentLength(ctx context.Context, request source.Request) (int64, error) {
 	resp, err := client.doRequest(ctx, http.MethodGet, url, header)
 	if err != nil {
 		return -1, err
@@ -92,11 +92,11 @@ func (client *httpSourceClient) GetContentLength(ctx context.Context, url string
 	return resp.ContentLength, nil
 }
 
-func (client *httpSourceClient) IsSupportRange(ctx context.Context, url string, header source.RequestHeader) (bool, error) {
-	copied := maputils.DeepCopyMap(nil, header)
+func (client *httpSourceClient) IsSupportRange(ctx context.Context, request source.Request) (bool, error) {
+	copied := maputils.DeepCopyMap(nil, request.Header.Header)
 	copied[headers.Range] = "bytes=0-0"
 
-	resp, err := client.doRequest(ctx, http.MethodGet, url, copied)
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, copied)
 	if err != nil {
 		return false, err
 	}
@@ -161,8 +161,8 @@ func (client *httpSourceClient) DownloadWithResponseHeader(ctx context.Context, 
 	return nil, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }
 
-func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, url string, header source.RequestHeader) (int64, error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, url, header)
+func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, request source.Request) (int64, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request)
 	if err != nil {
 		return -1, err
 	}
