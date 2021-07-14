@@ -16,19 +16,24 @@
 
 package types
 
+import (
+	"d7y.io/dragonfly/v2/pkg/rpc/base"
+	"d7y.io/dragonfly/v2/pkg/source"
+)
+
 type SeedTask struct {
-	TaskID           string            `json:"taskId,omitempty"`
-	URL              string            `json:"url,omitempty"`
-	TaskURL          string            `json:"taskUrl,omitempty"`
-	SourceFileLength int64             `json:"sourceFileLength,omitempty"`
-	CdnFileLength    int64             `json:"cdnFileLength,omitempty"`
-	PieceSize        int32             `json:"pieceSize,omitempty"`
-	Header           map[string]string `json:"header,omitempty"`
-	CdnStatus        string            `json:"cdnStatus,omitempty"`
-	PieceTotal       int32             `json:"pieceTotal,omitempty"`
-	RequestMd5       string            `json:"requestMd5,omitempty"`
-	SourceRealMd5    string            `json:"sourceRealMd5,omitempty"`
-	PieceMd5Sign     string            `json:"pieceMd5Sign,omitempty"`
+	TaskID           string        `json:"taskId,omitempty"`
+	URL              string        `json:"url,omitempty"`
+	TaskURL          string        `json:"taskUrl,omitempty"`
+	SourceFileLength int64         `json:"sourceFileLength,omitempty"`
+	CdnFileLength    int64         `json:"cdnFileLength,omitempty"`
+	PieceSize        int32         `json:"pieceSize,omitempty"`
+	Header           *base.UrlMeta `json:"header,omitempty"`
+	CdnStatus        string        `json:"cdnStatus,omitempty"`
+	PieceTotal       int32         `json:"pieceTotal,omitempty"`
+	RequestMd5       string        `json:"requestMd5,omitempty"`
+	SourceRealMd5    string        `json:"sourceRealMd5,omitempty"`
+	PieceMd5Sign     string        `json:"pieceMd5Sign,omitempty"`
 }
 
 // IsSuccess determines that whether the CDNStatus is success.
@@ -66,6 +71,17 @@ func (task *SeedTask) UpdateTaskInfo(cdnStatus, realMD5, pieceMd5Sign string, so
 	task.SourceFileLength = sourceFileLength
 	task.CdnFileLength = cdnFileLength
 }
+
+func (task *SeedTask) GetSourceRequest() *source.Request {
+	return &source.Request{
+		URL: task.URL,
+		Header: source.RequestHeader{
+			Header: nil,
+		},
+	}
+}
+
+const IllegalSourceFileLen = -100
 
 const (
 

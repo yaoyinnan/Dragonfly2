@@ -38,10 +38,6 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, detectRes
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to calculate the breakRange")
 		}
-		// check if Range in header? if Range already in Header, priority use this range
-		if _, ok := headers[RangeHeaderName]; !ok {
-			headers[RangeHeaderName] = fmt.Sprintf("bytes=%s", breakRange)
-		}
 	}
 	logger.WithTaskID(task.TaskID).Infof("start download url %s at range: %d-%d: with header: %+v", task.URL, detectResult.breakPoint,
 		task.SourceFileLength, task.Header)

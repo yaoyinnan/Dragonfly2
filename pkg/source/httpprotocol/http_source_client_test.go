@@ -132,7 +132,10 @@ func (suite *HTTPSourceClientTestSuite) TestNewHTTPSourceClient() {
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponseHeader() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	reader, responseHeader, err := suite.DownloadWithResponseHeader(ctx, timeoutURL, source.RequestHeader{})
+	response, err := suite.DownloadWithResponseHeader(ctx, &source.Request{
+		URL:    timeoutURL,
+		Header: source.RequestHeader{}}
+	})
 	cancel()
 	suite.NotNil(err)
 	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())

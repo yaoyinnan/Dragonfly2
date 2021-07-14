@@ -27,6 +27,7 @@ import (
 	"time"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
 
 var _ ResourceClient = (*ClientManagerImpl)(nil)
@@ -44,7 +45,7 @@ type ResourceClient interface {
 	IsSupportRange(ctx context.Context, request *Request) (bool, error)
 
 	// IsExpired checks if a resource received or stored is the same.
-	IsExpired(ctx context.Context, request *Request, expireInfo map[string]string) (bool, error)
+	IsExpired(ctx context.Context, request *Request) (bool, error)
 
 	// Download download from source
 	Download(ctx context.Context, request *Request) (io.ReadCloser, error)
@@ -59,6 +60,18 @@ type ResourceClient interface {
 type Request struct {
 	URL    string
 	Header RequestHeader
+}
+
+func (request *Request) WithRange(p *rangeutils.Range) {
+	request.Header.ran = p
+}
+
+func (request *Request) GetRange() *rangeutils.Range {
+	return request.Header.ran
+}
+
+func (request *Request) WithExpireInfo(expireInfo map[string]string) {
+	request.Header.expireInfo = expireInfo
 }
 
 type Response struct {

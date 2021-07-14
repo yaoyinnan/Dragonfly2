@@ -16,11 +16,14 @@
 
 package types
 
+import "d7y.io/dragonfly/v2/pkg/rpc/base"
+
 // TaskRegisterRequest
 type TaskRegisterRequest struct {
-	URL    string            `json:"rawURL,omitempty"`
-	TaskID string            `json:"taskId,omitempty"`
-	Md5    string            `json:"md5,omitempty"`
-	Filter []string          `json:"filter,omitempty"`
-	Header map[string]string `json:"header,omitempty"`
+	TaskID  string            `json:"taskId,omitempty"`
+	URL     string            `json:"rawURL,omitempty"`
+	Filter  []string          `json:"filter,omitempty"`
+	URLMeta *base.UrlMeta     `json:"urlMeta,omitempty"`
+	Digest  string            `json:"digest,omitempty"`
+	Header  map[string]string `json:"header,omitempty"`
 }

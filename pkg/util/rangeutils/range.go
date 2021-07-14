@@ -94,6 +94,10 @@ func ParseHTTPRange(rangeStr string) (r *Range, err error) {
 	}, nil
 }
 
+func GetHTTPRange(ran *Range) string {
+	return fmt.Sprintf("bytes=%d-%d", ran.StartIndex, ran.EndIndex)
+}
+
 func GetBreakRange(breakPoint int64, sourceFileLength int64) (*Range, error) {
 	if breakPoint < 0 {
 		return nil, fmt.Errorf("breakPoint is illegal for value: %d", breakPoint)

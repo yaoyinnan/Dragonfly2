@@ -28,72 +28,55 @@ import (
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 )
 
-const (
-	IllegalSourceFileLen = -100
-)
-
 // addOrUpdateTask add a new task or update exist task
-func (tm *Manager) addOrUpdateTask(ctx context.Context, request *types.TaskRegisterRequest) (*types.SeedTask, error) {
-	taskURL := request.URL
-	if request.Filter != nil {
-		taskURL = urlutils.FilterURLParam(request.URL, request.Filter)
-	}
-	taskID := request.TaskID
+func (tm *Manager) addOrUpdateTask(ctx context.Context, createTask *types.SeedTask) (task *types.SeedTask, err error) {
+	taskID := createTask.TaskID
 	synclock.Lock(taskID, false)
 	defer synclock.UnLock(taskID, false)
 	if key, err := tm.taskURLUnReachableStore.Get(taskID); err == nil {
 		if unReachableStartTime, ok := key.(time.Time); ok && time.Since(unReachableStartTime) < tm.cfg.FailAccessInterval {
 			existTask, err := tm.taskStore.Get(taskID)
-			if err != nil || reflect.DeepEqual(request.Header, existTask.(*types.SeedTask).Header) {
-				return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: request.URL}, "task hit unReachable cache and interval less than %d, "+
-					"url: %s", tm.cfg.FailAccessInterval, request.URL)
+			if err != nil || reflect.DeepEqual(createTask.Header, existTask.(*types.SeedTask).Header) {
+				return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: createTask.URL}, "task hit unReachable cache and interval less than %d, "+
+					"url: %s", tm.cfg.FailAccessInterval, createTask.URL)
 			}
 		}
 		tm.taskURLUnReachableStore.Delete(taskID)
 		logger.Debugf("delete taskID: %s from url unReachable store", taskID)
 	}
-
-	var task *types.SeedTask
-	newTask := &types.SeedTask{
-		TaskID:           taskID,
-		Header:           request.Header,
-		RequestMd5:       request.Md5,
-		URL:              request.URL,
-		TaskURL:          taskURL,
-		CdnStatus:        types.TaskInfoCdnStatusWaiting,
-		SourceFileLength: IllegalSourceFileLen,
-	}
 	// using the existing task if it already exists corresponding to taskID
 	if v, err := tm.taskStore.Get(taskID); err == nil {
 		existTask := v.(*types.SeedTask)
-		if !isSameTask(existTask, newTask) {
-			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", newTask, existTask)}
+		if !isSameTask(existTask, createTask) {
+			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", createTask, existTask)}
 		}
 		task = existTask
 		logger.Debugf("get exist task for taskID: %s", taskID)
 	} else {
 		logger.Debugf("get new task for taskID: %s", taskID)
-		task = newTask
+		task = createTask
 	}
 
-	if task.SourceFileLength != IllegalSourceFileLen {
+	if task.SourceFileLength != types.IllegalSourceFileLen {
 		return task, nil
 	}
 
 	// get sourceContentLength with req.Header
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	sourceFileLength, err := source.GetContentLength(ctx, task.URL, request.Header)
+	sourceFileLength, err := source.GetContentLength(ctx, createTask.GetSourceRequest())
 	if err != nil {
 		logger.WithTaskID(task.TaskID).Errorf("failed to get url (%s) content length: %v", task.URL, err)
 
 		if cdnerrors.IsURLNotReachable(err) {
-			tm.taskURLUnReachableStore.Add(taskID, time.Now())
+			err := tm.taskURLUnReachableStore.Add(taskID, time.Now())
+			if err != nil {
+
+			}
 			return nil, err
 		}
 	}
@@ -102,8 +85,8 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, request *types.TaskRegis
 	logger.WithTaskID(taskID).Debugf("get file content length: %d", sourceFileLength)
 
 	// if success to get the information successfully with the req.Header then update the task.Header to req.Header.
-	if request.Header != nil {
-		task.Header = request.Header
+	if createTask.Header != nil {
+		task.Header = createTask.Header
 	}
 
 	// calculate piece size and update the PieceSize and PieceTotal

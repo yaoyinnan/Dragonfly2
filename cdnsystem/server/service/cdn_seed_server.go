@@ -51,32 +51,6 @@ func NewCdnSeedServer(cfg *config.Config, taskMgr daemon.SeedTaskMgr) (*CdnSeedS
 	}, nil
 }
 
-func constructRegisterRequest(req *cdnsystem.SeedRequest) (*types.TaskRegisterRequest, error) {
-	if err := checkSeedRequestParams(req); err != nil {
-		return nil, err
-	}
-	meta := req.UrlMeta
-	header := make(map[string]string)
-	if meta != nil {
-		if !stringutils.IsBlank(meta.Digest) {
-			header["md5"] = meta.Digest
-		}
-		if !stringutils.IsBlank(meta.Range) {
-			header["range"] = meta.Range
-		}
-		for k, v := range meta.Header {
-			header[k] = v
-		}
-	}
-	return &types.TaskRegisterRequest{
-		Header: header,
-		URL:    req.Url,
-		Md5:    header["md5"],
-		TaskID: req.TaskId,
-		Filter: strings.Split(req.Filter, "&"),
-	}, nil
-}
-
 // checkSeedRequestParams check the params of SeedRequest.
 func checkSeedRequestParams(req *cdnsystem.SeedRequest) error {
 	if !urlutils.IsValidURL(req.Url) {
@@ -100,17 +74,17 @@ func (css *CdnSeedServer) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRe
 		}
 	}()
 	logger.Infof("obtain seeds request: %+v", req)
-	registerRequest, err := constructRegisterRequest(req)
-	if err != nil {
+	if err := checkSeedRequestParams(req); err != nil {
 		return dferrors.Newf(dfcodes.BadRequest, "bad seed request for task(%s): %v", req.TaskId, err)
 	}
+	task := constructRegisterTask(req)
 	// register task
-	pieceChan, err := css.taskMgr.Register(ctx, registerRequest)
+	pieceChan, err := css.taskMgr.Register(ctx, task)
 
 	if err != nil {
 		return dferrors.Newf(dfcodes.CdnTaskRegistryFail, "failed to register seed task(%s): %v", req.TaskId, err)
 	}
-	task, err := css.taskMgr.Get(req.TaskId)
+	task, err = css.taskMgr.Get(req.TaskId)
 	if err != nil {
 		return dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
 	}
@@ -142,6 +116,21 @@ func (css *CdnSeedServer) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRe
 		ContentLength: task.SourceFileLength,
 	}
 	return nil
+}
+
+func constructRegisterTask(req *cdnsystem.SeedRequest) *types.SeedTask {
+	taskURL := ""
+	if !stringutils.IsEmpty(req.Filter) {
+		taskURL = urlutils.FilterURLParam(req.Url, strings.Split(req.Filter, "&"))
+	}
+	return &types.SeedTask{
+		TaskID:           req.TaskId,
+		URL:              req.Url,
+		TaskURL:          taskURL,
+		Header:           req.UrlMeta,
+		CdnStatus:        types.TaskInfoCdnStatusWaiting,
+		SourceFileLength: types.IllegalSourceFileLen,
+	}
 }
 
 func (css *CdnSeedServer) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest) (piecePacket *base.PiecePacket, err error) {

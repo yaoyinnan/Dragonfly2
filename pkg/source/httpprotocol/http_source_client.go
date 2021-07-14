@@ -27,6 +27,7 @@ import (
 	"d7y.io/dragonfly/v2/cdnsystem/daemon/task"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/structure/maputils"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/go-http-utils/headers"
@@ -78,8 +79,8 @@ func WithHTTPClient(client *http.Client) HTTPSourceClientOption {
 	}
 }
 
-func (client *httpSourceClient) GetContentLength(ctx context.Context, request source.Request) (int64, error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, url, header)
+func (client *httpSourceClient) GetContentLength(ctx context.Context, request *source.Request) (int64, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
 		return -1, err
 	}
@@ -92,11 +93,8 @@ func (client *httpSourceClient) GetContentLength(ctx context.Context, request so
 	return resp.ContentLength, nil
 }
 
-func (client *httpSourceClient) IsSupportRange(ctx context.Context, request source.Request) (bool, error) {
-	copied := maputils.DeepCopyMap(nil, request.Header.Header)
-	copied[headers.Range] = "bytes=0-0"
-
-	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, copied)
+func (client *httpSourceClient) IsSupportRange(ctx context.Context, request *source.Request) (bool, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
 		return false, err
 	}
@@ -105,7 +103,7 @@ func (client *httpSourceClient) IsSupportRange(ctx context.Context, request sour
 }
 
 // todo Consider the situation where there is no last-modified such as baidu
-func (client *httpSourceClient) IsExpired(ctx context.Context, url string, header source.RequestHeader, expireInfo map[string]string) (bool, error) {
+func (client *httpSourceClient) IsExpired(ctx context.Context, request *source.Request) (bool, error) {
 	lastModified := timeutils.UnixMillis(expireInfo[source.LastModified])
 
 	eTag := expireInfo[headers.ETag]
@@ -114,7 +112,7 @@ func (client *httpSourceClient) IsExpired(ctx context.Context, url string, heade
 	}
 
 	// set header: header is a reference to map, should not change it
-	copied := maputils.DeepCopyMap(nil, header)
+	copied := maputils.DeepCopyMap(nil, request.Header.Header)
 	if lastModified > 0 {
 		copied[headers.IfModifiedSince] = expireInfo[headers.LastModified]
 	}
@@ -122,8 +120,11 @@ func (client *httpSourceClient) IsExpired(ctx context.Context, url string, heade
 		copied[headers.IfNoneMatch] = eTag
 	}
 
+	header2 := source.RequestHeader{
+		Header: copied,
+	}
 	// send request
-	resp, err := client.doRequest(ctx, http.MethodGet, url, copied)
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, header2)
 	if err != nil {
 		// If it fails to get the result, it is considered that the source has not expired, to prevent the source from exploding
 		return false, err
@@ -132,8 +133,8 @@ func (client *httpSourceClient) IsExpired(ctx context.Context, url string, heade
 	return resp.StatusCode != http.StatusNotModified, nil
 }
 
-func (client *httpSourceClient) Download(ctx context.Context, url string, header source.RequestHeader) (io.ReadCloser, error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, url, header)
+func (client *httpSourceClient) Download(ctx context.Context, request *source.Request) (io.ReadCloser, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -144,25 +145,27 @@ func (client *httpSourceClient) Download(ctx context.Context, url string, header
 	return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }
 
-func (client *httpSourceClient) DownloadWithResponseHeader(ctx context.Context, url string, header source.RequestHeader) (io.ReadCloser, source.ResponseHeader,
-	error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, url, header)
+func (client *httpSourceClient) DownloadWithResponseHeader(ctx context.Context, request *source.Request) (*source.Response, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
 		responseHeader := source.ResponseHeader{
 			source.LastModified: resp.Header.Get(headers.LastModified),
 			source.ETag:         resp.Header.Get(headers.ETag),
 		}
-		return resp.Body, responseHeader, nil
+		return &source.Response{
+			ReadCloser: resp.Body,
+			Header:     responseHeader,
+		}, nil
 	}
 	resp.Body.Close()
-	return nil, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }
 
-func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, request source.Request) (int64, error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, request)
+func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, request *source.Request) (int64, error) {
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
 		return -1, err
 	}
@@ -178,7 +181,8 @@ func (client *httpSourceClient) doRequest(ctx context.Context, method string, ur
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range header {
+	req.Header.Add(headers.Range, rangeutils.GetHTTPRange(header.Range))
+	for k, v := range header.Header {
 		req.Header.Add(k, v)
 	}
 	return client.httpClient.Do(req)

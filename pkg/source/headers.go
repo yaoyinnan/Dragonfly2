@@ -20,8 +20,9 @@ import "d7y.io/dragonfly/v2/pkg/util/rangeutils"
 
 // request header
 type RequestHeader struct {
-	Range  *rangeutils.Range
-	Header map[string]string
+	ran        *rangeutils.Range
+	expireInfo map[string]string
+	Header     map[string]string
 }
 
 // response header
