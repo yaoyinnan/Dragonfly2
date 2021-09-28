@@ -30,11 +30,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
+
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/client/clientutil"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
@@ -120,14 +121,17 @@ type SchedulerOption struct {
 
 	// ScheduleTimeout is request timeout.
 	ScheduleTimeout clientutil.Duration `mapstructure:"scheduleTimeout" yaml:"scheduleTimeout"`
+
+	// DisableAutoBackSource indicates not back source normally, only scheduler says back source
+	DisableAutoBackSource bool `mapstructure:"disableAutoBackSource" yaml:"disableAutoBackSource"`
 }
 
 type HostOption struct {
 	// SecurityDomain is the security domain
 	SecurityDomain string `mapstructure:"securityDomain" yaml:"securityDomain"`
-	// Peerhost location for scheduler
+	// Location for scheduler
 	Location string `mapstructure:"location" yaml:"location"`
-	// Peerhost idc for scheduler
+	// IDC for scheduler
 	IDC string `mapstructure:"idc" yaml:"idc"`
 	// Peerhost net topology for scheduler
 	NetTopology string `mapstructure:"netTopology" yaml:"netTopology"`
@@ -138,11 +142,12 @@ type HostOption struct {
 }
 
 type DownloadOption struct {
-	TotalRateLimit   clientutil.RateLimit `mapstructure:"totalRateLimit" yaml:"totalRateLimit"`
-	PerPeerRateLimit clientutil.RateLimit `mapstructure:"perPeerRateLimit" yaml:"perPeerRateLimit"`
-	DownloadGRPC     ListenOption         `mapstructure:"downloadGRPC" yaml:"downloadGRPC"`
-	PeerGRPC         ListenOption         `mapstructure:"peerGRPC" yaml:"peerGRPC"`
-	CalculateDigest  bool                 `mapstructure:"calculateDigest" yaml:"calculateDigest"`
+	TotalRateLimit       clientutil.RateLimit `mapstructure:"totalRateLimit" yaml:"totalRateLimit"`
+	PerPeerRateLimit     clientutil.RateLimit `mapstructure:"perPeerRateLimit" yaml:"perPeerRateLimit"`
+	PieceDownloadTimeout time.Duration        `mapstructure:"pieceDownloadTimeout" yaml:"pieceDownloadTimeout"`
+	DownloadGRPC         ListenOption         `mapstructure:"downloadGRPC" yaml:"downloadGRPC"`
+	PeerGRPC             ListenOption         `mapstructure:"peerGRPC" yaml:"peerGRPC"`
+	CalculateDigest      bool                 `mapstructure:"calculateDigest" yaml:"calculateDigest"`
 }
 
 type ProxyOption struct {
@@ -467,6 +472,10 @@ type RegistryMirror struct {
 	// Remote url for the registry mirror, default is https://index.docker.io
 	Remote *URL `yaml:"url" mapstructure:"url"`
 
+	// DynamicRemote indicates using header "X-Dragonfly-Registry" for remote instead of Remote
+	// if header "X-Dragonfly-Registry" does not exist, use Remote by default
+	DynamicRemote bool `yaml:"dynamic" mapstructure:"dynamic"`
+
 	// Optional certificates if the mirror uses self-signed certificates
 	Certs *CertPool `yaml:"certs" mapstructure:"certs"`
 
@@ -669,9 +678,10 @@ func (r *Regexp) MarshalYAML() (interface{}, error) {
 
 // HijackConfig represents how dfdaemon hijacks http requests.
 type HijackConfig struct {
-	Cert  string        `yaml:"cert" mapstructure:"cert"`
-	Key   string        `yaml:"key" mapstructure:"key"`
-	Hosts []*HijackHost `yaml:"hosts" mapstructure:"hosts"`
+	Cert  string             `yaml:"cert" mapstructure:"cert"`
+	Key   string             `yaml:"key" mapstructure:"key"`
+	Hosts []*HijackHost      `yaml:"hosts" mapstructure:"hosts"`
+	SNI   []*TCPListenOption `yaml:"sni" mapstructure:"sni"`
 }
 
 // HijackHost is a hijack rule for the hosts that matches Regx.

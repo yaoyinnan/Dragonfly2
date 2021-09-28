@@ -4,6 +4,7 @@ package manager
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -20,20 +21,12 @@ const _ = grpc.SupportPackageIsVersion7
 type ManagerClient interface {
 	// Get CDN and CDN cluster configuration
 	GetCDN(ctx context.Context, in *GetCDNRequest, opts ...grpc.CallOption) (*CDN, error)
-	// Create CDN configuration
-	CreateCDN(ctx context.Context, in *CreateCDNRequest, opts ...grpc.CallOption) (*CDN, error)
 	// Update CDN configuration
 	UpdateCDN(ctx context.Context, in *UpdateCDNRequest, opts ...grpc.CallOption) (*CDN, error)
-	// AddCDNToCDNCluster add cdn to cdn cluster
-	AddCDNToCDNCluster(ctx context.Context, in *AddCDNToCDNClusterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Get Scheduler and Scheduler cluster configuration
 	GetScheduler(ctx context.Context, in *GetSchedulerRequest, opts ...grpc.CallOption) (*Scheduler, error)
-	// Create scheduler configuration
-	CreateScheduler(ctx context.Context, in *CreateSchedulerRequest, opts ...grpc.CallOption) (*Scheduler, error)
 	// Update scheduler configuration
 	UpdateScheduler(ctx context.Context, in *UpdateSchedulerRequest, opts ...grpc.CallOption) (*Scheduler, error)
-	// AddSchedulerClusterToSchedulerCluster add scheduler to scheduler cluster
-	AddSchedulerClusterToSchedulerCluster(ctx context.Context, in *AddSchedulerClusterToSchedulerClusterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// List acitve schedulers configuration
 	ListSchedulers(ctx context.Context, in *ListSchedulersRequest, opts ...grpc.CallOption) (*ListSchedulersResponse, error)
 	// KeepAlive with manager
@@ -57,27 +50,9 @@ func (c *managerClient) GetCDN(ctx context.Context, in *GetCDNRequest, opts ...g
 	return out, nil
 }
 
-func (c *managerClient) CreateCDN(ctx context.Context, in *CreateCDNRequest, opts ...grpc.CallOption) (*CDN, error) {
-	out := new(CDN)
-	err := c.cc.Invoke(ctx, "/manager.Manager/CreateCDN", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *managerClient) UpdateCDN(ctx context.Context, in *UpdateCDNRequest, opts ...grpc.CallOption) (*CDN, error) {
 	out := new(CDN)
 	err := c.cc.Invoke(ctx, "/manager.Manager/UpdateCDN", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) AddCDNToCDNCluster(ctx context.Context, in *AddCDNToCDNClusterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/AddCDNToCDNCluster", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,27 +68,9 @@ func (c *managerClient) GetScheduler(ctx context.Context, in *GetSchedulerReques
 	return out, nil
 }
 
-func (c *managerClient) CreateScheduler(ctx context.Context, in *CreateSchedulerRequest, opts ...grpc.CallOption) (*Scheduler, error) {
-	out := new(Scheduler)
-	err := c.cc.Invoke(ctx, "/manager.Manager/CreateScheduler", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *managerClient) UpdateScheduler(ctx context.Context, in *UpdateSchedulerRequest, opts ...grpc.CallOption) (*Scheduler, error) {
 	out := new(Scheduler)
 	err := c.cc.Invoke(ctx, "/manager.Manager/UpdateScheduler", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) AddSchedulerClusterToSchedulerCluster(ctx context.Context, in *AddSchedulerClusterToSchedulerClusterRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/AddSchedulerClusterToSchedulerCluster", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -169,20 +126,12 @@ func (x *managerKeepAliveClient) CloseAndRecv() (*emptypb.Empty, error) {
 type ManagerServer interface {
 	// Get CDN and CDN cluster configuration
 	GetCDN(context.Context, *GetCDNRequest) (*CDN, error)
-	// Create CDN configuration
-	CreateCDN(context.Context, *CreateCDNRequest) (*CDN, error)
 	// Update CDN configuration
 	UpdateCDN(context.Context, *UpdateCDNRequest) (*CDN, error)
-	// AddCDNToCDNCluster add cdn to cdn cluster
-	AddCDNToCDNCluster(context.Context, *AddCDNToCDNClusterRequest) (*emptypb.Empty, error)
 	// Get Scheduler and Scheduler cluster configuration
 	GetScheduler(context.Context, *GetSchedulerRequest) (*Scheduler, error)
-	// Create scheduler configuration
-	CreateScheduler(context.Context, *CreateSchedulerRequest) (*Scheduler, error)
 	// Update scheduler configuration
 	UpdateScheduler(context.Context, *UpdateSchedulerRequest) (*Scheduler, error)
-	// AddSchedulerClusterToSchedulerCluster add scheduler to scheduler cluster
-	AddSchedulerClusterToSchedulerCluster(context.Context, *AddSchedulerClusterToSchedulerClusterRequest) (*emptypb.Empty, error)
 	// List acitve schedulers configuration
 	ListSchedulers(context.Context, *ListSchedulersRequest) (*ListSchedulersResponse, error)
 	// KeepAlive with manager
@@ -197,26 +146,14 @@ type UnimplementedManagerServer struct {
 func (UnimplementedManagerServer) GetCDN(context.Context, *GetCDNRequest) (*CDN, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCDN not implemented")
 }
-func (UnimplementedManagerServer) CreateCDN(context.Context, *CreateCDNRequest) (*CDN, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateCDN not implemented")
-}
 func (UnimplementedManagerServer) UpdateCDN(context.Context, *UpdateCDNRequest) (*CDN, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateCDN not implemented")
-}
-func (UnimplementedManagerServer) AddCDNToCDNCluster(context.Context, *AddCDNToCDNClusterRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddCDNToCDNCluster not implemented")
 }
 func (UnimplementedManagerServer) GetScheduler(context.Context, *GetSchedulerRequest) (*Scheduler, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetScheduler not implemented")
 }
-func (UnimplementedManagerServer) CreateScheduler(context.Context, *CreateSchedulerRequest) (*Scheduler, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateScheduler not implemented")
-}
 func (UnimplementedManagerServer) UpdateScheduler(context.Context, *UpdateSchedulerRequest) (*Scheduler, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateScheduler not implemented")
-}
-func (UnimplementedManagerServer) AddSchedulerClusterToSchedulerCluster(context.Context, *AddSchedulerClusterToSchedulerClusterRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddSchedulerClusterToSchedulerCluster not implemented")
 }
 func (UnimplementedManagerServer) ListSchedulers(context.Context, *ListSchedulersRequest) (*ListSchedulersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSchedulers not implemented")
@@ -255,24 +192,6 @@ func _Manager_GetCDN_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_CreateCDN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateCDNRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).CreateCDN(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.Manager/CreateCDN",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).CreateCDN(ctx, req.(*CreateCDNRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Manager_UpdateCDN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateCDNRequest)
 	if err := dec(in); err != nil {
@@ -287,24 +206,6 @@ func _Manager_UpdateCDN_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).UpdateCDN(ctx, req.(*UpdateCDNRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_AddCDNToCDNCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddCDNToCDNClusterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).AddCDNToCDNCluster(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.Manager/AddCDNToCDNCluster",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).AddCDNToCDNCluster(ctx, req.(*AddCDNToCDNClusterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -327,24 +228,6 @@ func _Manager_GetScheduler_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_CreateScheduler_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateSchedulerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).CreateScheduler(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.Manager/CreateScheduler",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).CreateScheduler(ctx, req.(*CreateSchedulerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Manager_UpdateScheduler_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateSchedulerRequest)
 	if err := dec(in); err != nil {
@@ -359,24 +242,6 @@ func _Manager_UpdateScheduler_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).UpdateScheduler(ctx, req.(*UpdateSchedulerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_AddSchedulerClusterToSchedulerCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddSchedulerClusterToSchedulerClusterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).AddSchedulerClusterToSchedulerCluster(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.Manager/AddSchedulerClusterToSchedulerCluster",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).AddSchedulerClusterToSchedulerCluster(ctx, req.(*AddSchedulerClusterToSchedulerClusterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -434,32 +299,16 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_GetCDN_Handler,
 		},
 		{
-			MethodName: "CreateCDN",
-			Handler:    _Manager_CreateCDN_Handler,
-		},
-		{
 			MethodName: "UpdateCDN",
 			Handler:    _Manager_UpdateCDN_Handler,
-		},
-		{
-			MethodName: "AddCDNToCDNCluster",
-			Handler:    _Manager_AddCDNToCDNCluster_Handler,
 		},
 		{
 			MethodName: "GetScheduler",
 			Handler:    _Manager_GetScheduler_Handler,
 		},
 		{
-			MethodName: "CreateScheduler",
-			Handler:    _Manager_CreateScheduler_Handler,
-		},
-		{
 			MethodName: "UpdateScheduler",
 			Handler:    _Manager_UpdateScheduler_Handler,
-		},
-		{
-			MethodName: "AddSchedulerClusterToSchedulerCluster",
-			Handler:    _Manager_AddSchedulerClusterToSchedulerCluster_Handler,
 		},
 		{
 			MethodName: "ListSchedulers",

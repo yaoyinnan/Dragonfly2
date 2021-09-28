@@ -1,3 +1,19 @@
+/*
+ *     Copyright 2020 The Dragonfly Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package model
 
 const (
@@ -7,13 +23,13 @@ const (
 
 type User struct {
 	Model
-	Email             string `gorm:"column:email;size:256;uniqueIndex;not null" json:"email"`
-	Name              string `gorm:"column:name;size:256;uniqueIndex;not null" json:"name"`
-	EncryptedPassword string `gorm:"column:encrypted_password;size:1024" json:"-"`
-	Avatar            string `gorm:"column:avatar;size:256" json:"avatar"`
-	Phone             string `gorm:"column:phone;size:256" json:"phone"`
-	PrivateToken      string `gorm:"column:private_token;size:256" json:"private_token"`
-	State             string `gorm:"type:enum('enable', 'disable');default:'enable'" json:"state"`
-	Location          string `gorm:"column:location;size:1024" json:"location"`
-	BIO               string `gorm:"column:bio;size:1024" json:"bio"`
+	Email             string `gorm:"column:email;type:varchar(256);index:uk_user_email,unique;not null;comment:email address" json:"email"`
+	Name              string `gorm:"column:name;type:varchar(256);index:uk_user_name,unique;not null;comment:name" json:"name"`
+	EncryptedPassword string `gorm:"column:encrypted_password;size:1024;comment:encrypted password" json:"-"`
+	Avatar            string `gorm:"column:avatar;type:varchar(256);comment:avatar address" json:"avatar"`
+	Phone             string `gorm:"column:phone;type:varchar(256);comment:phone number" json:"phone"`
+	PrivateToken      string `gorm:"column:private_token;type:varchar(256);comment:private token" json:"-"`
+	State             string `gorm:"column:state;type:varchar(256);default:'enable';comment:state" json:"state"`
+	Location          string `gorm:"column:location;type:varchar(256);comment:location" json:"location"`
+	BIO               string `gorm:"column:bio;type:varchar(256);comment:biography" json:"bio"`
 }

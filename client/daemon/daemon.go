@@ -29,10 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"d7y.io/dragonfly/v2/internal/dfpath"
-	"d7y.io/dragonfly/v2/internal/idgen"
-	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -43,14 +41,17 @@ import (
 	"d7y.io/dragonfly/v2/client/daemon/gc"
 	"d7y.io/dragonfly/v2/client/daemon/peer"
 	"d7y.io/dragonfly/v2/client/daemon/proxy"
-	"d7y.io/dragonfly/v2/client/daemon/service"
+	"d7y.io/dragonfly/v2/client/daemon/rpcserver"
 	"d7y.io/dragonfly/v2/client/daemon/storage"
 	"d7y.io/dragonfly/v2/client/daemon/upload"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/internal/dfpath"
+	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
 	"d7y.io/dragonfly/v2/pkg/rpc"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	schedulerclient "d7y.io/dragonfly/v2/pkg/rpc/scheduler/client"
+	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 )
 
 type Daemon interface {
@@ -71,7 +72,7 @@ type clientDaemon struct {
 
 	Option config.DaemonOption
 
-	ServiceManager service.Manager
+	RPCManager     rpcserver.Server
 	UploadManager  upload.Manager
 	ProxyManager   proxy.Manager
 	StorageManager storage.Manager
@@ -96,7 +97,11 @@ func New(opt *config.DaemonOption) (Daemon, error) {
 		NetTopology:    opt.Host.NetTopology,
 	}
 
-	sched, err := schedulerclient.GetClientByAddr(opt.Scheduler.NetAddrs)
+	var opts []grpc.DialOption
+	if opt.Options.Telemetry.Jaeger != "" {
+		opts = append(opts, grpc.WithChainUnaryInterceptor(otelgrpc.UnaryClientInterceptor()), grpc.WithChainStreamInterceptor(otelgrpc.StreamClientInterceptor()))
+	}
+	sched, err := schedulerclient.GetClientByAddr(opt.Scheduler.NetAddrs, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get schedulers")
 	}
@@ -111,9 +116,9 @@ func New(opt *config.DaemonOption) (Daemon, error) {
 				PeerId: request.PeerID,
 			})
 			if er != nil {
-				logger.Errorf("leave task %s/%s, error: %v", request.TaskID, request.PeerID, er)
+				logger.Errorf("step 4:leave task %s/%s, error: %v", request.TaskID, request.PeerID, er)
 			} else {
-				logger.Infof("leave task %s/%s state ok", request.TaskID, request.PeerID)
+				logger.Infof("step 4:leave task %s/%s state ok", request.TaskID, request.PeerID)
 			}
 		})
 	if err != nil {
@@ -121,8 +126,10 @@ func New(opt *config.DaemonOption) (Daemon, error) {
 	}
 
 	pieceManager, err := peer.NewPieceManager(storageManager,
+		opt.Download.PieceDownloadTimeout,
 		peer.WithLimiter(rate.NewLimiter(opt.Download.TotalRateLimit.Limit, int(opt.Download.TotalRateLimit.Limit))),
-		peer.WithCalculateDigest(opt.Download.CalculateDigest))
+		peer.WithCalculateDigest(opt.Download.CalculateDigest),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +156,7 @@ func New(opt *config.DaemonOption) (Daemon, error) {
 		}
 		peerServerOption = append(peerServerOption, grpc.Creds(tlsCredentials))
 	}
-	serviceManager, err := service.NewManager(host, peerTaskManager, storageManager, downloadServerOption, peerServerOption)
+	rpcManager, err := rpcserver.NewServer(host, peerTaskManager, storageManager, downloadServerOption, peerServerOption)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +179,7 @@ func New(opt *config.DaemonOption) (Daemon, error) {
 		schedPeerHost: host,
 		Option:        *opt,
 
-		ServiceManager:  serviceManager,
+		RPCManager:      rpcManager,
 		PeerTaskManager: peerTaskManager,
 		PieceManager:    pieceManager,
 		ProxyManager:    proxyManager,
@@ -279,7 +286,7 @@ func (*clientDaemon) prepareTCPListener(opt config.ListenOption, withTLS bool) (
 
 func (cd *clientDaemon) Serve() error {
 	cd.GCManager.Start()
-	// todo remove this field, and use directly dfpath.DaemonSockPath
+	// TODO remove this field, and use directly dfpath.DaemonSockPath
 	cd.Option.Download.DownloadGRPC.UnixListen.Socket = dfpath.DaemonSockPath
 	// prepare download service listen
 	if cd.Option.Download.DownloadGRPC.UnixListen == nil {
@@ -322,7 +329,7 @@ func (cd *clientDaemon) Serve() error {
 	g.Go(func() error {
 		defer downloadListener.Close()
 		logger.Infof("serve download grpc at unix://%s", cd.Option.Download.DownloadGRPC.UnixListen.Socket)
-		if err := cd.ServiceManager.ServeDownload(downloadListener); err != nil {
+		if err := cd.RPCManager.ServeDownload(downloadListener); err != nil {
 			logger.Errorf("failed to serve for download grpc service: %v", err)
 			return err
 		}
@@ -333,7 +340,7 @@ func (cd *clientDaemon) Serve() error {
 	g.Go(func() error {
 		defer peerListener.Close()
 		logger.Infof("serve peer grpc at %s://%s", peerListener.Addr().Network(), peerListener.Addr().String())
-		if err := cd.ServiceManager.ServePeer(peerListener); err != nil {
+		if err := cd.RPCManager.ServePeer(peerListener); err != nil {
 			logger.Errorf("failed to serve for peer grpc service: %v", err)
 			return err
 		}
@@ -362,6 +369,28 @@ func (cd *clientDaemon) Serve() error {
 			}
 			return nil
 		})
+		// serve proxy sni service
+		if cd.Option.Proxy.HijackHTTPS != nil && len(cd.Option.Proxy.HijackHTTPS.SNI) > 0 {
+			for _, opt := range cd.Option.Proxy.HijackHTTPS.SNI {
+
+				listener, port, err := cd.prepareTCPListener(config.ListenOption{
+					TCPListen: opt,
+				}, false)
+				if err != nil {
+					logger.Errorf("failed to listen for proxy sni service: %v", err)
+					return err
+				}
+				logger.Infof("serve proxy sni at tcp://%s:%d", opt.Listen, port)
+
+				g.Go(func() error {
+					err := cd.ProxyManager.ServeSNI(listener)
+					if err != nil {
+						logger.Errorf("failed to serve proxy sni service: %v", err)
+					}
+					return err
+				})
+			}
+		}
 	}
 
 	// serve upload service
@@ -383,7 +412,7 @@ func (cd *clientDaemon) Serve() error {
 			case <-time.After(cd.Option.AliveTime.Duration):
 				var keepalives = []clientutil.KeepAlive{
 					cd.StorageManager,
-					cd.ServiceManager,
+					cd.RPCManager,
 				}
 				var keep bool
 				for _, keepalive := range keepalives {
@@ -411,7 +440,7 @@ func (cd *clientDaemon) Stop() {
 	cd.once.Do(func() {
 		close(cd.done)
 		cd.GCManager.Stop()
-		cd.ServiceManager.Stop()
+		cd.RPCManager.Stop()
 		cd.UploadManager.Stop()
 
 		if cd.ProxyManager.IsEnabled() {

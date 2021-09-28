@@ -208,7 +208,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			reader, responseHeader, err := suite.DownloadWithResponseHeader(tt.args.ctx, tt.args.url, tt.args.header)
+			reader, responseHeader, err := suite.DownloadWithResponseHeader(tt.args.ctx, tt.args.url, tt.args.header, nil)
 			suite.Equal(tt.wantErr, err)
 			if err != nil {
 				return
@@ -241,7 +241,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.GetContentLength(tt.args.ctx, tt.args.url, tt.args.header)
+			got, err := suite.GetContentLength(tt.args.ctx, tt.args.url, tt.args.header, nil)
 			suite.Equal(tt.wantErr, err)
 			suite.Equal(tt.want, got)
 		})

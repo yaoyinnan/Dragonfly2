@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
 	"d7y.io/dragonfly/v2/pkg/rpc"
@@ -51,7 +52,7 @@ func GetClientByAddr(addrs []dfnet.NetAddr, opts ...grpc.DialOption) (DaemonClie
 var once sync.Once
 var elasticDaemonClient *daemonClient
 
-func GetElasticClientByAdders(addrs []dfnet.NetAddr, opts ...grpc.DialOption) (DaemonClient, error) {
+func GetElasticClientByAddrs(addrs []dfnet.NetAddr, opts ...grpc.DialOption) (DaemonClient, error) {
 	once.Do(func() {
 		elasticDaemonClient = &daemonClient{
 			rpc.NewConnection(context.Background(), "daemon-elastic", make([]dfnet.NetAddr, 0), []rpc.ConnOption{
@@ -67,7 +68,7 @@ func GetElasticClientByAdders(addrs []dfnet.NetAddr, opts ...grpc.DialOption) (D
 	return elasticDaemonClient, nil
 }
 
-// see dfdaemon.DaemonClient
+// DaemonClient see dfdaemon.DaemonClient
 type DaemonClient interface {
 	Download(ctx context.Context, req *dfdaemon.DownRequest, opts ...grpc.CallOption) (*DownResultStream, error)
 
@@ -101,7 +102,7 @@ func (dc *daemonClient) getDaemonClientWithTarget(target string) (dfdaemon.Daemo
 func (dc *daemonClient) Download(ctx context.Context, req *dfdaemon.DownRequest, opts ...grpc.CallOption) (*DownResultStream, error) {
 	req.Uuid = uuid.New().String()
 	// generate taskID
-	taskID := idgen.TaskID(req.Url, req.UrlMeta.Filter, req.UrlMeta, req.UrlMeta.Tag)
+	taskID := idgen.TaskID(req.Url, req.UrlMeta)
 	return newDownResultStream(ctx, dc, taskID, req, opts)
 }
 
@@ -114,12 +115,11 @@ func (dc *daemonClient) GetPieceTasks(ctx context.Context, target dfnet.NetAddr,
 		}
 		return client.GetPieceTasks(ctx, ptr, opts...)
 	}, 0.2, 2.0, 3, nil)
-
-	if err == nil {
-		return res.(*base.PiecePacket), nil
+	if err != nil {
+		logger.WithTaskID(ptr.TaskId).Infof("GetPieceTasks: invoke daemon node %s GetPieceTasks failed: %v", target, err)
+		return nil, err
 	}
-
-	return nil, err
+	return res.(*base.PiecePacket), nil
 }
 
 func (dc *daemonClient) CheckHealth(ctx context.Context, target dfnet.NetAddr, opts ...grpc.CallOption) (err error) {
@@ -130,6 +130,9 @@ func (dc *daemonClient) CheckHealth(ctx context.Context, target dfnet.NetAddr, o
 		}
 		return client.CheckHealth(ctx, new(empty.Empty), opts...)
 	}, 0.2, 2.0, 3, nil)
-
+	if err != nil {
+		logger.Infof("CheckHealth: invoke daemon node %s CheckHealth failed: %v", target, err)
+		return
+	}
 	return
 }

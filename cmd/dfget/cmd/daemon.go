@@ -29,6 +29,7 @@ import (
 	"d7y.io/dragonfly/v2/internal/dfpath"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
 	"d7y.io/dragonfly/v2/pkg/rpc/dfdaemon/client"
+	"d7y.io/dragonfly/v2/version"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -88,6 +89,8 @@ func init() {
 }
 
 func runDaemon() error {
+	logger.Infof("Version:\n%s", version.Version())
+
 	target := dfnet.NetAddr{Type: dfnet.UNIX, Addr: dfpath.DaemonSockPath}
 	daemonClient, err := client.GetClientByAddr([]dfnet.NetAddr{target})
 	if err != nil {
@@ -135,7 +138,7 @@ func runDaemon() error {
 	s, _ := yaml.Marshal(cfg)
 	logger.Infof("client daemon configuration:\n%s", string(s))
 
-	ff := dependency.InitMonitor(cfg.Verbose, cfg.PProfPort, cfg.Telemetry.Jaeger)
+	ff := dependency.InitMonitor(cfg.Verbose, cfg.PProfPort, cfg.Telemetry)
 	defer ff()
 
 	svr, err := server.New(cfg)

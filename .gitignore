@@ -18,7 +18,6 @@ vendor/
 .cache
 *.DS_Store
 target/
-log
 scheduler/test/misc
 .chglog
 
@@ -33,7 +32,6 @@ mysql
 !.vscode/extensions.json
 *.code-workspace
 
-### macOS ###
 # General
 .DS_Store
 .AppleDouble

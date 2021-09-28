@@ -45,8 +45,6 @@ func (m *SeedRequest) Validate() error {
 
 	// no validation rules for Url
 
-	// no validation rules for Filter
-
 	if v, ok := interface{}(m.GetUrlMeta()).(interface{ Validate() error }); ok {
 		if err := v.Validate(); err != nil {
 			return SeedRequestValidationError{
@@ -123,7 +121,7 @@ func (m *PieceSeed) Validate() error {
 
 	// no validation rules for PeerId
 
-	// no validation rules for SeederName
+	// no validation rules for HostUuid
 
 	if v, ok := interface{}(m.GetPieceInfo()).(interface{ Validate() error }); ok {
 		if err := v.Validate(); err != nil {
@@ -138,6 +136,8 @@ func (m *PieceSeed) Validate() error {
 	// no validation rules for Done
 
 	// no validation rules for ContentLength
+
+	// no validation rules for TotalPieceCount
 
 	return nil
 }

@@ -22,15 +22,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/serialx/hashring"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
-	"d7y.io/dragonfly/v2/pkg/synclock"
-	"github.com/pkg/errors"
-	"github.com/serialx/hashring"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -49,13 +52,13 @@ type Closer interface {
 	Close() error
 }
 
-// todo Perfect state
+// TODO Perfect state
 type ConnStatus string
 
 type Connection struct {
 	ctx            context.Context
 	cancelFun      context.CancelFunc
-	rwMutex        *synclock.LockerPool
+	rwMutex        sync.RWMutex
 	dialOpts       []grpc.DialOption
 	key2NodeMap    sync.Map // key -> node(many to one)
 	node2ClientMap sync.Map // node -> clientConn(one to one)
@@ -75,11 +78,7 @@ func newDefaultConnection(ctx context.Context) *Connection {
 	return &Connection{
 		ctx:            childCtx,
 		cancelFun:      cancel,
-		rwMutex:        synclock.NewLockerPool(),
 		dialOpts:       defaultClientOpts,
-		key2NodeMap:    sync.Map{},
-		node2ClientMap: sync.Map{},
-		accessNodeMap:  sync.Map{},
 		connExpireTime: defaultConnExpireTime,
 		gcConnTimeout:  defaultGcConnTimeout,
 		gcConnInterval: defaultGcConnInterval,
@@ -149,15 +148,15 @@ func WithDialTimeout(dialTimeout time.Duration) ConnOption {
 	})
 }
 
-func NewConnection(ctx context.Context, name string, adders []dfnet.NetAddr, connOpts []ConnOption) *Connection {
+func NewConnection(ctx context.Context, name string, addrs []dfnet.NetAddr, connOpts []ConnOption) *Connection {
 	conn := newDefaultConnection(ctx)
 	conn.name = name
-	addresses := make([]string, 0, len(adders))
-	for _, addr := range adders {
+	addresses := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
 		addresses = append(addresses, addr.GetEndpoint())
 	}
 	conn.hashRing = hashring.New(addresses)
-	conn.serverNodes = adders
+	conn.serverNodes = addrs
 	for _, opt := range connOpts {
 		opt.apply(conn)
 	}
@@ -169,10 +168,10 @@ func (conn *Connection) CorrectKey2NodeRelation(tmpHashKey, realHashKey string) 
 	if tmpHashKey == realHashKey {
 		return
 	}
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
 	key, _ := conn.key2NodeMap.Load(tmpHashKey)
 	serverNode := key.(string)
-	conn.rwMutex.Lock(serverNode, false)
-	defer conn.rwMutex.UnLock(serverNode, false)
 	conn.key2NodeMap.Store(realHashKey, serverNode)
 	conn.key2NodeMap.Delete(tmpHashKey)
 }
@@ -181,14 +180,15 @@ func (conn *Connection) UpdateAccessNodeMapByHashKey(key string) {
 	node, ok := conn.key2NodeMap.Load(key)
 	if ok {
 		conn.accessNodeMap.Store(node, time.Now())
-		logger.With("conn", conn.name).Debugf("successfully update server node %s access time for hashKey %s", node, key)
 		_, ok := conn.node2ClientMap.Load(node)
-		if !ok {
-			logger.With("conn", conn.name).Warnf("successfully update server node %s access time for hashKey %s,"+
+		if ok {
+			logger.GrpcLogger.With("conn", conn.name).Debugf("successfully update server node %s access time for hashKey %s", node, key)
+		} else {
+			logger.GrpcLogger.With("conn", conn.name).Warnf("successfully update server node %s access time for hashKey %s,"+
 				"but cannot found client conn in node2ClientMap", node, key)
 		}
 	} else {
-		logger.With("conn", conn.name).Errorf("update access node map failed, hash key (%s) not found in key2NodeMap", key)
+		logger.GrpcLogger.With("conn", conn.name).Errorf("update access node map failed, hash key (%s) not found in key2NodeMap", key)
 	}
 }
 
@@ -197,61 +197,67 @@ func (conn *Connection) UpdateAccessNodeMapByServerNode(serverNode string) {
 }
 
 func (conn *Connection) AddServerNodes(addrs []dfnet.NetAddr) error {
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
 	for _, addr := range addrs {
 		serverNode := addr.GetEndpoint()
-		conn.rwMutex.Lock(serverNode, false)
 		conn.hashRing = conn.hashRing.AddNode(serverNode)
-		conn.rwMutex.UnLock(serverNode, false)
-		logger.With("conn", conn.name).Debugf("success add %s to server node list", addr)
+		logger.GrpcLogger.With("conn", conn.name).Debugf("success add %s to server node list", addr)
 	}
 	return nil
 }
 
 // findCandidateClientConn find candidate node client conn other than exclusiveNodes
-func (conn *Connection) findCandidateClientConn(key string, exclusiveNodes ...string) (*candidateClient, error) {
-	ringNodes, ok := conn.hashRing.GetNodes(key, conn.hashRing.Size())
-	if !ok {
-		return nil, dferrors.ErrNoCandidateNode
-	}
-	candidateNodes := make([]string, 0, 0)
-	for _, ringNode := range ringNodes {
-		candidate := true
-		for _, exclusiveNode := range exclusiveNodes {
-			if exclusiveNode == ringNode {
-				candidate = false
+func (conn *Connection) findCandidateClientConn(key string, exclusiveNodes sets.String) (*candidateClient, error) {
+	if node, ok := conn.key2NodeMap.Load(key); ok {
+		candidateNode := node.(string)
+		if !exclusiveNodes.Has(candidateNode) {
+			if client, ok := conn.node2ClientMap.Load(node); ok {
+				return &candidateClient{
+					node: candidateNode,
+					Ref:  client,
+				}, nil
 			}
 		}
-		if candidate {
+	}
+
+	ringNodes, ok := conn.hashRing.GetNodes(key, conn.hashRing.Size())
+	if !ok {
+		logger.GrpcLogger.Warnf("cannot obtain expected %d server nodes", conn.hashRing.Size())
+	}
+	if len(ringNodes) == 0 {
+		return nil, dferrors.ErrNoCandidateNode
+	}
+	candidateNodes := make([]string, 0)
+	for _, ringNode := range ringNodes {
+		if !exclusiveNodes.Has(ringNode) {
 			candidateNodes = append(candidateNodes, ringNode)
 		}
 	}
-	logger.With("conn", conn.name).Infof("candidate result for hash key %s: all server node list: %v, exclusiveNodes node list: %v, candidate node list: %v",
-		key, ringNodes, exclusiveNodes, candidateNodes)
+	logger.GrpcLogger.With("conn", conn.name).Infof("candidate result for hash key %s: all server node list: %v, exclusiveNodes node list: %v, "+
+		"candidate node list: %v",
+		key, ringNodes, exclusiveNodes.List(), candidateNodes)
 	for _, candidateNode := range candidateNodes {
-		conn.rwMutex.Lock(candidateNode, true)
 		// Check whether there is a corresponding mapping client in the node2ClientMap
-		// todo 下面部分可以直接调用loadOrCreate方法，但是日志没有这么调用打印全
+		// TODO 下面部分可以直接调用loadOrCreate方法，但是日志没有这么调用打印全
 		if client, ok := conn.node2ClientMap.Load(candidateNode); ok {
-			logger.With("conn", conn.name).Infof("hit cache candidateNode %s for hash key %s", candidateNode, key)
-			conn.rwMutex.UnLock(candidateNode, true)
+			logger.GrpcLogger.With("conn", conn.name).Debugf("hit cache candidateNode %s for hash key %s", candidateNode, key)
 			return &candidateClient{
 				node: candidateNode,
 				Ref:  client,
 			}, nil
 		}
-		logger.With("conn", conn.name).Debugf("attempt to connect candidateNode %s for hash key %s", candidateNode, key)
+		logger.GrpcLogger.With("conn", conn.name).Debugf("attempt to connect candidateNode %s for hash key %s", candidateNode, key)
 		clientConn, err := conn.createClient(candidateNode, append(defaultClientOpts, conn.dialOpts...)...)
 		if err == nil {
-			logger.With("conn", conn.name).Infof("success connect to candidateNode %s for hash key %s", candidateNode, key)
-			conn.rwMutex.UnLock(candidateNode, true)
+			logger.GrpcLogger.With("conn", conn.name).Infof("success connect to candidateNode %s for hash key %s", candidateNode, key)
 			return &candidateClient{
 				node: candidateNode,
 				Ref:  clientConn,
 			}, nil
 		}
 
-		logger.With("conn", conn.name).Infof("failed to connect candidateNode %s for hash key %s: %v", candidateNode, key, err)
-		conn.rwMutex.UnLock(candidateNode, true)
+		logger.GrpcLogger.With("conn", conn.name).Infof("failed to connect candidateNode %s for hash key %s: %v", candidateNode, key, err)
 	}
 	return nil, dferrors.ErrNoCandidateNode
 }
@@ -270,6 +276,8 @@ func (conn *Connection) createClient(target string, opts ...grpc.DialOption) (*g
 
 // GetServerNode
 func (conn *Connection) GetServerNode(hashKey string) (string, bool) {
+	conn.rwMutex.RLock()
+	defer conn.rwMutex.RUnlock()
 	node, ok := conn.key2NodeMap.Load(hashKey)
 	serverNode := node.(string)
 	if ok {
@@ -279,14 +287,14 @@ func (conn *Connection) GetServerNode(hashKey string) (string, bool) {
 }
 
 func (conn *Connection) GetClientConnByTarget(node string) (*grpc.ClientConn, error) {
-	logger.With("conn", conn.name).Debugf("start to get client conn by target %s", node)
-	conn.rwMutex.Lock(node, true)
-	defer conn.rwMutex.UnLock(node, true)
+	logger.GrpcLogger.With("conn", conn.name).Debugf("start to get client conn by target %s", node)
+	conn.rwMutex.RLock()
+	defer conn.rwMutex.RUnlock()
 	clientConn, err := conn.loadOrCreateClientConnByNode(node)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get client conn by conn %s", node)
 	}
-	logger.With("conn", conn.name).Debugf("successfully get %s client conn", node)
+	logger.GrpcLogger.With("conn", conn.name).Debugf("successfully get %s client conn", node)
 	return clientConn, nil
 }
 
@@ -299,14 +307,14 @@ func (conn *Connection) loadOrCreateClientConnByNode(node string) (clientConn *g
 	conn.accessNodeMap.Store(node, time.Now())
 	client, ok := conn.node2ClientMap.Load(node)
 	if ok {
-		logger.With("conn", conn.name).Debugf("hit cache clientConn associated with node %s", node)
+		logger.GrpcLogger.With("conn", conn.name).Debugf("hit cache clientConn associated with node %s", node)
 		return client.(*grpc.ClientConn), nil
 	}
 
-	logger.With("conn", conn.name).Debugf("failed to load clientConn associated with node %s, attempt to create it", node)
+	logger.GrpcLogger.With("conn", conn.name).Debugf("failed to load clientConn associated with node %s, attempt to create it", node)
 	clientConn, err = conn.createClient(node, append(defaultClientOpts, conn.dialOpts...)...)
 	if err == nil {
-		logger.With("conn", conn.name).Infof("success connect to node %s", node)
+		logger.GrpcLogger.With("conn", conn.name).Infof("success connect to node %s", node)
 		// bind
 		conn.node2ClientMap.Store(node, clientConn)
 		return clientConn, nil
@@ -317,32 +325,37 @@ func (conn *Connection) loadOrCreateClientConnByNode(node string) (clientConn *g
 
 // GetClientConn get conn or bind hashKey to candidate node, don't do the migrate action
 // stick whether hash key need already associated with specify node
-func (conn *Connection) GetClientConn(hashKey string, stick bool) (*grpc.ClientConn, error) {
-	logger.With("conn", conn.name).Debugf("start to get client conn hashKey %s, stick %t", hashKey, stick)
+func (conn *Connection) GetClientConn(hashKey string, stick bool) (clientConn *grpc.ClientConn, err error) {
+	logger.GrpcLogger.With("conn", conn.name).Debugf("start to get client conn hashKey %s, stick %t", hashKey, stick)
+	defer func() {
+		logger.GrpcLogger.With("conn", conn.name).Debugf("get client conn done, hashKey %s, stick %t end: %v", hashKey, stick, err)
+	}()
+	conn.rwMutex.RLock()
 	node, ok := conn.key2NodeMap.Load(hashKey)
 	if stick && !ok {
+		conn.rwMutex.RUnlock()
 		// if request is stateful, hash key must exist in key2NodeMap
-		return nil, fmt.Errorf("it is a stateful request， but cannot find hash key(%s) in key2NodeMap", hashKey)
+		return nil, fmt.Errorf("it is a stateful request, but cannot find hash key(%s) in key2NodeMap", hashKey)
 	}
 	if ok {
 		// if exist
 		serverNode := node.(string)
-		conn.rwMutex.Lock(serverNode, true)
-		clientConn, err := conn.loadOrCreateClientConnByNode(serverNode)
-		conn.rwMutex.UnLock(serverNode, true)
+		clientConn, err = conn.loadOrCreateClientConnByNode(serverNode)
+		conn.rwMutex.RUnlock()
 		if err != nil {
 			return nil, err
 		}
 		return clientConn, nil
 	}
-	logger.With("conn", conn.name).Infof("no server node associated with hash key %s was found, start find candidate", hashKey)
+	logger.GrpcLogger.With("conn", conn.name).Infof("no server node associated with hash key %s was found, start find candidate server", hashKey)
+	conn.rwMutex.RUnlock()
 	// if absence
-	client, err := conn.findCandidateClientConn(hashKey)
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
+	client, err := conn.findCandidateClientConn(hashKey, sets.NewString())
 	if err != nil {
-		return nil, errors.Wrapf(err, "find candidate client conn for hash key %s", hashKey)
+		return nil, errors.Wrapf(err, "prob candidate client conn for hash key %s", hashKey)
 	}
-	conn.rwMutex.Lock(client.node, false)
-	defer conn.rwMutex.UnLock(client.node, false)
 	conn.key2NodeMap.Store(hashKey, client.node)
 	conn.node2ClientMap.Store(client.node, client.Ref)
 	conn.accessNodeMap.Store(client.node, time.Now())
@@ -352,27 +365,32 @@ func (conn *Connection) GetClientConn(hashKey string, stick bool) (*grpc.ClientC
 // TryMigrate migrate key to another hash node other than exclusiveNodes
 // preNode node before the migration
 func (conn *Connection) TryMigrate(key string, cause error, exclusiveNodes []string) (preNode string, err error) {
-	logger.With("conn", conn.name).Infof("start try migrate server node for key %s, cause err: %v", key, cause)
-	// todo recover findCandidateClientConn error
+	logger.GrpcLogger.With("conn", conn.name).Infof("start try migrate server node for key %s, cause err: %v", key, cause)
+	if status.Code(cause) == codes.DeadlineExceeded || status.Code(cause) == codes.Canceled {
+		logger.GrpcLogger.With("conn", conn.name).Infof("migrate server node for key %s failed, cause err: %v", key, cause)
+		return "", cause
+	}
+	// TODO recover findCandidateClientConn error
 	if e, ok := cause.(*dferrors.DfError); ok {
-		if e.Code != dfcodes.ResourceLacked && e.Code != dfcodes.UnknownError {
+		if e.Code != dfcodes.ResourceLacked {
 			return "", cause
 		}
 	}
 	currentNode := ""
-	if currentNode, ok := conn.key2NodeMap.Load(key); ok {
-		preNode = currentNode.(string)
-		exclusiveNodes = append(exclusiveNodes, currentNode.(string))
-	} else {
-		logger.With("conn", conn.name).Warnf("failed to find server node for hash key %s", key)
+	conn.rwMutex.RLock()
+	if node, ok := conn.key2NodeMap.Load(key); ok {
+		currentNode = node.(string)
+		preNode = currentNode
+		exclusiveNodes = append(exclusiveNodes, preNode)
 	}
-	client, err := conn.findCandidateClientConn(key, exclusiveNodes...)
+	conn.rwMutex.RUnlock()
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
+	client, err := conn.findCandidateClientConn(key, sets.NewString(exclusiveNodes...))
 	if err != nil {
 		return "", errors.Wrapf(err, "find candidate client conn for hash key %s", key)
 	}
-	logger.With("conn", conn.name).Infof("successfully migrate hash key %s from server node %s to %s", key, currentNode, client.node)
-	conn.rwMutex.Lock(client.node, false)
-	defer conn.rwMutex.UnLock(client.node, false)
+	logger.GrpcLogger.With("conn", conn.name).Infof("successfully migrate hash key %s from server node %s to %s", key, currentNode, client.node)
 	conn.key2NodeMap.Store(key, client.node)
 	conn.node2ClientMap.Store(client.node, client.Ref)
 	conn.accessNodeMap.Store(client.node, time.Now())
@@ -380,9 +398,10 @@ func (conn *Connection) TryMigrate(key string, cause error, exclusiveNodes []str
 }
 
 func (conn *Connection) Close() error {
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
 	for i := range conn.serverNodes {
 		serverNode := conn.serverNodes[i].GetEndpoint()
-		conn.rwMutex.Lock(serverNode, false)
 		conn.hashRing.RemoveNode(serverNode)
 		value, ok := conn.node2ClientMap.Load(serverNode)
 		if ok {
@@ -403,19 +422,18 @@ func (conn *Connection) Close() error {
 			return true
 		})
 		conn.accessNodeMap.Delete(serverNode)
-		conn.rwMutex.UnLock(serverNode, false)
 	}
 	conn.cancelFun()
 	return nil
 }
 
-func (conn *Connection) UpdateState(adders []dfnet.NetAddr) {
-	// todo lock
-	conn.serverNodes = adders
+func (conn *Connection) UpdateState(addrs []dfnet.NetAddr) {
 	var addresses []string
-	for _, addr := range adders {
+	for _, addr := range addrs {
 		addresses = append(addresses, addr.GetEndpoint())
 	}
-
+	conn.rwMutex.Lock()
+	defer conn.rwMutex.Unlock()
+	conn.serverNodes = addrs
 	conn.hashRing = hashring.New(addresses)
 }

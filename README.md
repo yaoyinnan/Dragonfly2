@@ -3,6 +3,7 @@
 ![alt][logo-linear]
 
 [![GitHub release](https://img.shields.io/github/release/dragonflyoss/Dragonfly2.svg)](https://github.com/dragonflyoss/Dragonfly2/releases)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/dragonfly)](https://artifacthub.io/packages/search?repo=dragonfly)
 [![CI](https://github.com/dragonflyoss/Dragonfly2/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dragonflyoss/Dragonfly2/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/dragonflyoss/Dragonfly2/branch/main/graph/badge.svg)](https://codecov.io/gh/dragonflyoss/Dragonfly2)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dragonflyoss/Dragonfly2?style=flat-square)](https://goreportcard.com/report/github.com/dragonflyoss/Dragonfly2)
@@ -56,17 +57,24 @@ Dragonfly is now hosted by the Cloud Native Computing Foundation (CNCF) as an In
 
 ## Getting Started
 
-- [Quick start][quickstart]
+- [Quick Start][quickstart]
 - [Installation][installation]
 
 ## Documentation
-You can find the Dragonfly documentation [on the website][website].
+
+You can find the full documentation [on the repo][document].
 
 ## Community
+
 Welcome developers to actively participate in community discussions and contribute code to Dragonfly. We will remain concerned about the issues discussed in the community and respond quickly.
 
 - Discussions: [Github Discussion Forum][discussion]
+- Twitter: [@dragonfly_oss](https://twitter.com/dragonfly_oss)
 - DingTalk: 23304666
+
+<div align="center">
+  <img src="docs/en/images/community/dingtalk-group.jpeg" width="250" title="dingtalk">
+</div>
 
 ## Contributing
 You should check out our [CONTRIBUTING][contributing] and develop the project together.
@@ -82,3 +90,4 @@ Please refer to our [Code of Conduct][codeconduct].
 [discussion]: https://github.com/dragonflyoss/Dragonfly2/discussions
 [contributing]: CONTRIBUTING.md
 [codeconduct]: CODE_OF_CONDUCT.md
+[document]: docs/README.md

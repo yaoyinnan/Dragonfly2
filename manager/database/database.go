@@ -1,14 +1,34 @@
+/*
+ *     Copyright 2020 The Dragonfly Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package database
 
 import (
+	"context"
 	"fmt"
 
-	"d7y.io/dragonfly/v2/manager/config"
-	"d7y.io/dragonfly/v2/manager/model"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"moul.io/zapgorm2"
+
+	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/manager/config"
+	"d7y.io/dragonfly/v2/manager/model"
 )
 
 type Database struct {
@@ -22,35 +42,54 @@ func New(cfg *config.Config) (*Database, error) {
 		return nil, err
 	}
 
+	rdb, err := NewRedis(cfg.Database.Redis)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Database{
 		DB:  db,
-		RDB: NewRedis(cfg.Database.Redis),
+		RDB: rdb,
 	}, nil
 }
 
-func NewRedis(cfg *config.RedisConfig) *redis.Client {
-	return redis.NewClient(&redis.Options{
+func NewRedis(cfg *config.RedisConfig) (*redis.Client, error) {
+	redis.SetLogger(&redisLogger{})
+
+	client := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password: cfg.Password,
-		DB:       cfg.DB,
+		DB:       cfg.CacheDB,
 	})
+
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func newMyqsl(cfg *config.MysqlConfig) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName)
+	logger := zapgorm2.New(logger.CoreLogger.Desugar())
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&interpolateParams=true", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName)
 	dialector := mysql.Open(dsn)
 	db, err := gorm.Open(dialector, &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
+		DisableForeignKeyConstraintWhenMigrating: true,
+		Logger:                                   logger,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Run migration
-	if err := migrate(db); err != nil {
-		return nil, err
+	if cfg.Migrate {
+		if err := migrate(db); err != nil {
+			return nil, err
+		}
 	}
 
 	// Run seed
@@ -62,32 +101,44 @@ func newMyqsl(cfg *config.MysqlConfig) (*gorm.DB, error) {
 }
 
 func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	return db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4 ROW_FORMAT=Dynamic").AutoMigrate(
 		&model.CDNCluster{},
 		&model.CDN{},
 		&model.SchedulerCluster{},
 		&model.Scheduler{},
 		&model.SecurityGroup{},
 		&model.User{},
+		&model.Oauth{},
 	)
 }
 
 func seed(db *gorm.DB) error {
 	var cdnClusterCount int64
-	db.Model(model.CDNCluster{}).Count(&cdnClusterCount)
+	if err := db.Model(model.CDNCluster{}).Count(&cdnClusterCount).Error; err != nil {
+		return err
+	}
 	if cdnClusterCount <= 0 {
 		if err := db.Create(&model.CDNCluster{
-			Name:   "cdn-cluster-1",
-			Config: map[string]interface{}{},
+			Model: model.Model{
+				ID: uint(1),
+			},
+			Name:      "cdn-cluster-1",
+			Config:    map[string]interface{}{},
+			IsDefault: true,
 		}).Error; err != nil {
 			return err
 		}
 	}
 
 	var schedulerClusterCount int64
-	db.Model(model.SchedulerCluster{}).Count(&schedulerClusterCount)
+	if err := db.Model(model.SchedulerCluster{}).Count(&schedulerClusterCount).Error; err != nil {
+		return err
+	}
 	if schedulerClusterCount <= 0 {
 		if err := db.Create(&model.SchedulerCluster{
+			Model: model.Model{
+				ID: uint(1),
+			},
 			Name:         "scheduler-cluster-1",
 			Config:       map[string]interface{}{},
 			ClientConfig: map[string]interface{}{},

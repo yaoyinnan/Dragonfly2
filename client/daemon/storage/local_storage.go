@@ -149,6 +149,8 @@ func (t *localTaskStore) ReadPiece(ctx context.Context, req *ReadPieceRequest) (
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// If req.Num is equal to -1, range has a fixed value.
 	if req.Num != -1 {
 		t.RLock()
 		if piece, ok := t.persistentMetadata.Pieces[req.Num]; ok {
@@ -156,10 +158,15 @@ func (t *localTaskStore) ReadPiece(ctx context.Context, req *ReadPieceRequest) (
 			req.Range = piece.Range
 		} else {
 			t.RUnlock()
+			file.Close()
+			t.Errorf("invalid piece num: %d", req.Num)
 			return nil, nil, ErrPieceNotFound
 		}
 	}
+
 	if _, err = file.Seek(req.Range.Start, io.SeekStart); err != nil {
+		file.Close()
+		t.Errorf("file seek failed: %v", err)
 		return nil, nil, err
 	}
 	// who call ReadPiece, who close the io.ReadCloser
@@ -173,6 +180,8 @@ func (t *localTaskStore) ReadAllPieces(ctx context.Context, req *PeerTaskMetaDat
 		return nil, err
 	}
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		file.Close()
+		t.Errorf("file seek failed: %v", err)
 		return nil, err
 	}
 	// who call ReadPiece, who close the io.ReadCloser
@@ -321,12 +330,12 @@ func (t *localTaskStore) Reclaim() error {
 	return nil
 }
 
-func (t *localTaskStore) reclaimData(log *logger.SugaredLoggerOnWith) error {
+func (t *localTaskStore) reclaimData(sLogger *logger.SugaredLoggerOnWith) error {
 	// remove data
 	data := path.Join(t.dataDir, taskData)
 	stat, err := os.Lstat(data)
 	if err != nil {
-		log.Errorf("stat task data %q error: %s", data, err)
+		sLogger.Errorf("stat task data %q error: %s", data, err)
 		return err
 	}
 	// remove sym link cache file
@@ -334,36 +343,36 @@ func (t *localTaskStore) reclaimData(log *logger.SugaredLoggerOnWith) error {
 		dest, err0 := os.Readlink(data)
 		if err0 == nil {
 			if err = os.Remove(dest); err != nil {
-				log.Warnf("remove symlink target file %s error: %s", dest, err)
+				sLogger.Warnf("remove symlink target file %s error: %s", dest, err)
 			} else {
-				log.Infof("remove data file %s", dest)
+				sLogger.Infof("remove data file %s", dest)
 			}
 		}
 	} else { // remove cache file
 		if err = os.Remove(t.DataFilePath); err != nil {
-			log.Errorf("remove data file %s error: %s", data, err)
+			sLogger.Errorf("remove data file %s error: %s", data, err)
 			return err
 		}
 	}
 	if err = os.Remove(data); err != nil {
-		log.Errorf("remove data file %s error: %s", data, err)
+		sLogger.Errorf("remove data file %s error: %s", data, err)
 		return err
 	}
-	log.Infof("purged task data: %s", data)
+	sLogger.Infof("purged task data: %s", data)
 	return nil
 }
 
-func (t *localTaskStore) reclaimMeta(log *logger.SugaredLoggerOnWith) error {
+func (t *localTaskStore) reclaimMeta(sLogger *logger.SugaredLoggerOnWith) error {
 	if err := t.metadataFile.Close(); err != nil {
-		log.Warnf("close task meta data %q error: %s", t.metadataFilePath, err)
+		sLogger.Warnf("close task meta data %q error: %s", t.metadataFilePath, err)
 		return err
 	}
-	log.Infof("start gc task metadata")
+	sLogger.Infof("start gc task metadata")
 	if err := os.Remove(t.metadataFilePath); err != nil && !os.IsNotExist(err) {
-		log.Warnf("remove task meta data %q error: %s", t.metadataFilePath, err)
+		sLogger.Warnf("remove task meta data %q error: %s", t.metadataFilePath, err)
 		return err
 	}
-	log.Infof("purged task mata data: %s", t.metadataFilePath)
+	sLogger.Infof("purged task mata data: %s", t.metadataFilePath)
 	return nil
 }
 

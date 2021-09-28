@@ -30,6 +30,7 @@ func TestManagerConfig_Load(t *testing.T) {
 
 	config := &Config{
 		Server: &ServerConfig{
+			Name: "foo",
 			GRPC: &TCPListenConfig{
 				Listen: "127.0.0.1",
 				PortRange: TCPListenPortRange{
@@ -39,6 +40,9 @@ func TestManagerConfig_Load(t *testing.T) {
 			},
 			REST: &RestConfig{
 				Addr: ":8080",
+			},
+			Metric: &RestConfig{
+				Addr: ":8000",
 			},
 		},
 		Database: &DatabaseConfig{
@@ -50,10 +54,12 @@ func TestManagerConfig_Load(t *testing.T) {
 				DBName:   "foo",
 			},
 			Redis: &RedisConfig{
-				Host:     "bar",
-				Password: "bar",
-				Port:     6379,
-				DB:       0,
+				Host:      "bar",
+				Password:  "bar",
+				Port:      6379,
+				CacheDB:   0,
+				BrokerDB:  1,
+				BackendDB: 2,
 			},
 		},
 		Cache: &CacheConfig{

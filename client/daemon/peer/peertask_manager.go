@@ -26,12 +26,12 @@ import (
 	"sync"
 	"time"
 
-	"d7y.io/dragonfly/v2/client/clientutil"
 	"github.com/go-http-utils/headers"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/time/rate"
 
+	"d7y.io/dragonfly/v2/client/clientutil"
 	"d7y.io/dragonfly/v2/client/config"
 	"d7y.io/dragonfly/v2/client/daemon/storage"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -62,12 +62,13 @@ type TaskManager interface {
 type Task interface {
 	Context() context.Context
 	Log() *logger.SugaredLoggerOnWith
-	ReportPieceResult(pieceTask *base.PieceInfo, pieceResult *scheduler.PieceResult) error
+	ReportPieceResult(result *pieceTaskResult) error
 	GetPeerID() string
 	GetTaskID() string
 	GetTotalPieces() int32
+	SetTotalPieces(int32)
 	GetContentLength() int64
-	// SetContentLength will called after download completed, when download from source without content length
+	// SetContentLength will be called after download completed, when download from source without content length
 	SetContentLength(int64) error
 	SetCallback(TaskCallback)
 	AddTraffic(int64)
@@ -147,8 +148,12 @@ func (ptm *peerTaskManager) StartFilePeerTask(ctx context.Context, req *FilePeer
 	}
 	// TODO ensure scheduler is ok first
 	start := time.Now()
+	limit := ptm.perPeerRateLimit
+	if req.Limit > 0 {
+		limit = rate.Limit(req.Limit)
+	}
 	ctx, pt, tiny, err := newFilePeerTask(ctx, ptm.host, ptm.pieceManager,
-		&req.PeerTaskRequest, ptm.schedulerClient, ptm.schedulerOption, ptm.perPeerRateLimit)
+		req, ptm.schedulerClient, ptm.schedulerOption, limit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,11 +185,12 @@ func (ptm *peerTaskManager) StartFilePeerTask(ctx context.Context, req *FilePeer
 		}
 		log.Debugf("copied tasks data %d bytes to %s", n, req.Output)
 		tiny.span.SetAttributes(config.AttributePeerTaskSuccess.Bool(true))
+		tiny.span.SetAttributes(config.AttributePeerTaskSize.Int(n))
 		return nil, tiny, nil
 	}
 	pt.SetCallback(&filePeerTaskCallback{
-		ctx:   ctx,
 		ptm:   ptm,
+		pt:    pt,
 		req:   req,
 		start: start,
 	})
@@ -220,12 +226,13 @@ func (ptm *peerTaskManager) StartStreamPeerTask(ctx context.Context, req *schedu
 		}, nil
 	}
 
-	pt.SetCallback(&streamPeerTaskCallback{
-		ctx:   ctx,
-		ptm:   ptm,
-		req:   req,
-		start: start,
-	})
+	pt.SetCallback(
+		&streamPeerTaskCallback{
+			ptm:   ptm,
+			pt:    pt,
+			req:   req,
+			start: start,
+		})
 
 	ptm.runningPeerTasks.Store(req.PeerId, pt)
 

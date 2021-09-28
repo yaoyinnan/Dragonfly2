@@ -53,10 +53,6 @@ func (m *PeerTaskRequest) Validate() error {
 
 	// no validation rules for Url
 
-	// no validation rules for Filter
-
-	// no validation rules for BizId
-
 	if v, ok := interface{}(m.GetUrlMeta()).(interface{ Validate() error }); ok {
 		if err := v.Validate(); err != nil {
 			return PeerTaskRequestValidationError{
@@ -411,7 +407,15 @@ func (m *PieceResult) Validate() error {
 
 	// no validation rules for DstPid
 
-	// no validation rules for PieceNum
+	if v, ok := interface{}(m.GetPieceInfo()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return PieceResultValidationError{
+				field:  "PieceInfo",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
 
 	// no validation rules for BeginTime
 
@@ -615,6 +619,8 @@ func (m *PeerResult) Validate() error {
 	// no validation rules for Success
 
 	// no validation rules for Code
+
+	// no validation rules for TotalPieceCount
 
 	return nil
 }

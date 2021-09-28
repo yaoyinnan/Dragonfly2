@@ -18,8 +18,8 @@ package client
 
 import (
 	"context"
-	"io"
 
+	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc"
 	"d7y.io/dragonfly/v2/pkg/rpc/dfdaemon"
@@ -50,9 +50,9 @@ func newDownResultStream(ctx context.Context, dc *daemonClient, hashKey string, 
 		opts:    opts,
 
 		RetryMeta: rpc.RetryMeta{
-			MaxAttempts: 5,
-			MaxBackOff:  5.0,
-			InitBackoff: 1.0,
+			MaxAttempts: 3,
+			MaxBackOff:  2.0,
+			InitBackoff: 0.2,
 		},
 	}
 
@@ -63,51 +63,49 @@ func newDownResultStream(ctx context.Context, dc *daemonClient, hashKey string, 
 }
 
 func (drs *DownResultStream) initStream() error {
+	var target string
 	stream, err := rpc.ExecuteWithRetry(func() (interface{}, error) {
-		client, _, err := drs.dc.getDaemonClient(drs.hashKey, false)
+		var client dfdaemon.DaemonClient
+		var err error
+		client, target, err = drs.dc.getDaemonClient(drs.hashKey, false)
 		if err != nil {
 			return nil, err
 		}
 		return client.Download(drs.ctx, drs.req, drs.opts...)
 	}, drs.InitBackoff, drs.MaxBackOff, drs.MaxAttempts, nil)
-	if err == nil {
-		drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
-		drs.StreamTimes = 1
-	}
 	if err != nil {
-		err = drs.replaceClient(err)
+		if errors.Cause(err) == dferrors.ErrNoCandidateNode {
+			return errors.Wrapf(err, "get grpc server instance failed")
+		}
+		logger.WithTaskID(drs.hashKey).Infof("initStream: invoke daemon node %s Download failed: %v", target, err)
+		return drs.replaceClient(err)
 	}
-
-	return err
+	drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
+	drs.StreamTimes = 1
+	return nil
 }
 
 func (drs *DownResultStream) Recv() (dr *dfdaemon.DownResult, err error) {
 	defer func() {
 		if dr != nil {
 			if dr.TaskId != drs.hashKey {
-				logger.WithPeerID(dr.PeerId).Warnf("down result stream correct taskId from %s to %s", drs.hashKey, dr.TaskId)
+				logger.WithTaskAndPeerID(dr.TaskId, dr.PeerId).Warnf("down result stream correct taskId from %s to %s", drs.hashKey, dr.TaskId)
 				drs.dc.Connection.CorrectKey2NodeRelation(drs.hashKey, dr.TaskId)
 				drs.hashKey = dr.TaskId
 			}
 		}
 	}()
 	drs.dc.UpdateAccessNodeMapByHashKey(drs.hashKey)
-	if dr, err = drs.stream.Recv(); err != nil && err != io.EOF {
-		dr, err = drs.retryRecv(err)
-	}
-
-	return
+	return drs.stream.Recv()
 }
 
 func (drs *DownResultStream) retryRecv(cause error) (*dfdaemon.DownResult, error) {
-	if status.Code(cause) == codes.DeadlineExceeded {
+	if status.Code(cause) == codes.DeadlineExceeded || status.Code(cause) == codes.Canceled {
 		return nil, cause
 	}
 
 	if err := drs.replaceStream(cause); err != nil {
-		if err := drs.replaceClient(cause); err != nil {
-			return nil, cause
-		}
+		return nil, err
 	}
 
 	return drs.Recv()
@@ -115,43 +113,51 @@ func (drs *DownResultStream) retryRecv(cause error) (*dfdaemon.DownResult, error
 
 func (drs *DownResultStream) replaceStream(cause error) error {
 	if drs.StreamTimes >= drs.MaxAttempts {
-		return errors.New("times of replacing stream reaches limit")
+		logger.WithTaskID(drs.hashKey).Info("replace stream reach max attempt")
+		return cause
 	}
-
+	var target string
 	stream, err := rpc.ExecuteWithRetry(func() (interface{}, error) {
-		client, _, err := drs.dc.getDaemonClient(drs.hashKey, true)
+		var client dfdaemon.DaemonClient
+		var err error
+		client, target, err = drs.dc.getDaemonClient(drs.hashKey, true)
 		if err != nil {
 			return nil, err
 		}
 		return client.Download(drs.ctx, drs.req, drs.opts...)
 	}, drs.InitBackoff, drs.MaxBackOff, drs.MaxAttempts, cause)
-	if err == nil {
-		drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
-		drs.StreamTimes++
+	if err != nil {
+		logger.WithTaskID(drs.hashKey).Infof("replaceStream: invoke daemon node %s Download failed: %v", target, err)
+		return drs.replaceClient(cause)
 	}
-	return err
+	drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
+	drs.StreamTimes++
+	return nil
 }
 
 func (drs *DownResultStream) replaceClient(cause error) error {
 	preNode, err := drs.dc.TryMigrate(drs.hashKey, cause, drs.failedServers)
 	if err != nil {
-		return err
+		logger.WithTaskID(drs.hashKey).Infof("replaceClient: tryMigrate daemon node failed: %v", err)
+		return cause
 	}
 	drs.failedServers = append(drs.failedServers, preNode)
 
+	var target string
 	stream, err := rpc.ExecuteWithRetry(func() (interface{}, error) {
-		client, _, err := drs.dc.getDaemonClient(drs.hashKey, true)
+		var client dfdaemon.DaemonClient
+		var err error
+		client, target, err = drs.dc.getDaemonClient(drs.hashKey, true)
 		if err != nil {
 			return nil, err
 		}
 		return client.Download(drs.ctx, drs.req, drs.opts...)
 	}, drs.InitBackoff, drs.MaxBackOff, drs.MaxAttempts, cause)
-	if err == nil {
-		drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
-		drs.StreamTimes = 1
-	}
 	if err != nil {
-		err = drs.replaceClient(cause)
+		logger.WithTaskID(drs.hashKey).Infof("replaceClient: invoke daemon node %s Download failed: %v", target, err)
+		return drs.replaceClient(cause)
 	}
-	return err
+	drs.stream = stream.(dfdaemon.Daemon_DownloadClient)
+	drs.StreamTimes = 1
+	return nil
 }
