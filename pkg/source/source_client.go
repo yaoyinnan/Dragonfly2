@@ -20,7 +20,6 @@ package source
 import (
 	"context"
 	"io"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +74,7 @@ type clientManager struct {
 var _defaultManager = NewManager()
 
 func (m *clientManager) GetContentLength(ctx context.Context, request *Request) (int64, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return -1, err
 	}
@@ -88,7 +87,7 @@ func (m *clientManager) GetContentLength(ctx context.Context, request *Request) 
 }
 
 func (m *clientManager) IsSupportRange(ctx context.Context, request *Request) (bool, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return false, err
 	}
@@ -101,7 +100,7 @@ func (m *clientManager) IsSupportRange(ctx context.Context, request *Request) (b
 }
 
 func (m *clientManager) IsExpired(ctx context.Context, request *Request) (bool, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return false, err
 	}
@@ -114,7 +113,7 @@ func (m *clientManager) IsExpired(ctx context.Context, request *Request) (bool, 
 }
 
 func (m *clientManager) Download(ctx context.Context, request *Request) (io.ReadCloser, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +121,7 @@ func (m *clientManager) Download(ctx context.Context, request *Request) (io.Read
 }
 
 func (m *clientManager) DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +129,7 @@ func (m *clientManager) DownloadWithResponseHeader(ctx context.Context, request 
 }
 
 func (m *clientManager) GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error) {
-	sourceClient, err := m.getSourceClient(request.URL)
+	sourceClient, err := m.getSourceClient(request.URL.Scheme)
 	if err != nil {
 		return -1, err
 	}
@@ -171,11 +170,11 @@ func UnRegister(schema string) {
 }
 
 func GetContentLength(ctx context.Context, request *Request) (int64, error) {
-	return _defaultMgr.GetContentLength(ctx, request)
+	return _defaultManager.GetContentLength(ctx, request)
 }
 
 func IsSupportRange(ctx context.Context, request *Request) (bool, error) {
-	return _defaultMgr.IsSupportRange(ctx, request)
+	return _defaultManager.IsSupportRange(ctx, request)
 }
 
 func IsExpired(ctx context.Context, request *Request) (bool, error) {
@@ -183,29 +182,25 @@ func IsExpired(ctx context.Context, request *Request) (bool, error) {
 }
 
 func Download(ctx context.Context, request *Request) (io.ReadCloser, error) {
-	return _defaultMgr.Download(ctx, request)
+	return _defaultManager.Download(ctx, request)
 }
 
 func DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error) {
-	return _defaultMgr.DownloadWithResponseHeader(ctx, request)
+	return _defaultManager.DownloadWithResponseHeader(ctx, request)
 }
 
 func GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error) {
-	return _defaultMgr.GetLastModifiedMillis(ctx, request)
+	return _defaultManager.GetLastModifiedMillis(ctx, request)
 }
 
 // getSourceClient get a source client from source manager with specified schema.
-func (m *clientManager) getSourceClient(rawURL string) (ResourceClient, error) {
+func (m *clientManager) getSourceClient(schema string) (ResourceClient, error) {
 	logger.Debugf("current clients: %#v", m.clients)
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, err
-	}
 	m.RLock()
-	client, ok := m.clients[strings.ToLower(parsedURL.Scheme)]
+	client, ok := m.clients[strings.ToLower(schema)]
 	m.RUnlock()
 	if !ok || client == nil {
-		return nil, errors.Errorf("can not find client for supporting url %s, clients:%v", rawURL, m.clients)
+		return nil, errors.Errorf("can not find client supporting schema %s, clients:%v", schema, m.clients)
 	}
 	return client, nil
 }

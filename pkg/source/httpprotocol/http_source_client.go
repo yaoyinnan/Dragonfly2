@@ -102,7 +102,12 @@ func WithHTTPClient(client *http.Client) HTTPSourceClientOption {
 }
 
 func (client *httpSourceClient) GetContentLength(ctx context.Context, request *source.Request) (int64, error) {
-	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL.RawPath, nil)
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Add()
+	resp, err := client.doRequest(ctx, http.MethodGet, request.URL.RawPath, request.Header)
 	if err != nil {
 		return -1, err
 	}
@@ -191,6 +196,7 @@ func (client *httpSourceClient) DownloadWithResponseHeader(ctx context.Context, 
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, request *source.Request) (int64, error) {
+	http.NewRequestWithContext(ctx, http.MethodGet, request.URL.RawPath, nil)
 	resp, err := client.doRequest(ctx, http.MethodGet, request.URL, request.Header)
 	if err != nil {
 		return -1, err
@@ -202,7 +208,7 @@ func (client *httpSourceClient) GetLastModifiedMillis(ctx context.Context, reque
 	return -1, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }
 
-func (client *httpSourceClient) doRequest(ctx context.Context, method string, url string, header source.RequestHeader) (*http.Response, error) {
+func (client *httpSourceClient) doRequest(ctx context.Context, method string, url string, header source.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, err
