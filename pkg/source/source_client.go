@@ -52,13 +52,9 @@ type ResourceClient interface {
 	DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error)
 
 	// GetLastModifiedMillis gets last modified timestamp milliseconds of resource
+	// return -l if request fail
 	GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error)
 }
-
-const (
-	LastModified = "Last-Modified"
-	ETag         = "ETag"
-)
 
 type ClientManager interface {
 	ResourceClient
