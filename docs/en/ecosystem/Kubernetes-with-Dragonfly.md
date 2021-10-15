@@ -17,11 +17,19 @@ When enable runtime configuration in dragonfly, you can skip [Configure Runtime]
 
 #### 1. Docker
 
+> **We did not recommend to using dragonfly with docker in Kubernetes** due to many reasons: 1. no fallback image pulling policy. 2. deprecated in Kubernetes.
+> Because the original `daemonset` in Kubernetes did not support `Surging Rolling Update` policy.
+> When kill current dfdaemon pod, the new pod image can not be pulled anymore.
+
+> If you can not change runtime from docker to others, remind to choose a plan when upgrade dfdaemon:
+>     Option 1: pull newly dfdaemon image manually before upgrade dragonfly, or use [ImagePullJob](https://openkruise.io/docs/user-manuals/imagepulljob) to pull image automate.
+>     Option 2: keep the image registry of dragonfly is different from common registries and add host in `containerRuntime.docker.skipHosts`.
+
 Dragonfly helm supports config docker automatically.
 
 Config cases:
 
-**Case 1: Implicit registries support**
+**Case 1: [Preferred] Implicit registries support without restart docker**
 
 Chart customize values.yaml:
 ```yaml
@@ -29,7 +37,7 @@ containerRuntime:
   docker:
     enable: true
     # -- Inject domains into /etc/hosts to force redirect traffic to dfdaemon.
-    # Caution: This feature need dfdaemon to implement SNI Proxy, confirm image tag is greater than v0.4.0.
+    # Caution: This feature need dfdaemon to implement SNI Proxy, confirm image tag is greater than v2.0.0.
     # When use certs and inject hosts in docker, no necessary to restart docker daemon.
     injectHosts: true
     registryDomains:
@@ -40,10 +48,16 @@ containerRuntime:
 This config enables docker pulling images from registries `harbor.example.com` and `harbor.example.net` via Dragonfly.
 When deploying Dragonfly with above config, it's unnecessary to restart docker daemon.
 
+Advantages:
+* Support upgrade dfdaemon smoothness
+
+> In this mode, when dfdaemon pod deleted, the `preStop` hook will remove all injected hosts info in /etc/hosts,
+> all images traffic fallbacks to original registries.
+
 Limitations:
 * Only support implicit registries
 
-**Case 2: Arbitrary registries support**
+**Case 2: Arbitrary registries support with restart docker**
 
 Chart customize values.yaml:
 ```yaml
@@ -54,14 +68,21 @@ containerRuntime:
     # When containerRuntime.docker.restart=true, containerRuntime.docker.injectHosts and containerRuntime.registry.domains is ignored.
     # If did not want restart docker daemon, keep containerRuntime.docker.restart=false and containerRuntime.docker.injectHosts=true.
     restart: true
+    skipHosts:
+    - "127.0.0.1"
+    - "docker.io" # Dragonfly use this image registry to upgrade itself, so we need skip it. Change it in real environment.
 ```
 
 This config enables docker pulling images from arbitrary registries via Dragonfly.
 When deploying Dragonfly with above config, dfdaemon will restart docker daemon.
 
+Advantages:
+* Support arbitrary registries
+
 Limitations:
 * Must enable live-restore feature in docker
 * Need restart docker daemon
+* When upgrade dfdaemon, new image must be pulled beforehand.
 
 #### 2. Containerd
 

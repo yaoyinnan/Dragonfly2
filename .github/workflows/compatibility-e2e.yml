@@ -3,8 +3,10 @@ name: Compatibility E2E Test
 on:
   push:
     branches: [main, release-*]
+    paths-ignore: [ '**.md', '**.png', '**.jpg', '**.svg', '**/docs/**' ]
   pull_request:
     branches: [main, release-*]
+    paths-ignore: [ '**.md', '**.png', '**.jpg', '**.svg', '**/docs/**' ]
 
 env:
   GO_VERSION: 1.15
@@ -17,28 +19,12 @@ env:
   DRAGONFLY_FILE_SERVER_PATH: test/testdata/k8s/file-server.yaml
 
 jobs:
-  skip_check:
-    runs-on: ubuntu-latest
-    outputs:
-      should_skip: ${{ steps.skip_check.outputs.should_skip }}
-    steps:
-      - name: Skip Check
-        id: skip_check
-        uses: fkirc/skip-duplicate-actions@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          paths_ignore: '["**.md", "**.png", "**.jpg", "**.svg", "**/docs/**"]'
-          do_not_skip: '["push", "workflow_dispatch", "schedule"]'
-
   compatibility_e2e_tests:
     name: e2e_tests_with_${{ matrix.module }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         module: ["manager", "scheduler", "cdn", "dfdaemon"]
-    needs: skip_check
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -92,7 +78,11 @@ jobs:
 
       - name: Upload Logs
         uses: actions/upload-artifact@v2
-        if: failure()
+        if: always()
         with:
           name: ${{ matrix.module }}-compatibility-e2e-tests-logs
-          path: /tmp/artifact/
+          path: |
+            /tmp/artifact/manager/*.log
+            /tmp/artifact/daemon/*.log
+            /tmp/artifact/scheduler/*.log
+            /tmp/artifact/cdn/*.log

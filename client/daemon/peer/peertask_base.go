@@ -369,7 +369,6 @@ func (pt *peerTask) pullSinglePiece(cleanUnfinishedFunc func()) {
 
 func (pt *peerTask) pullPiecesFromPeers(cleanUnfinishedFunc func()) {
 	defer func() {
-		close(pt.failedPieceCh)
 		cleanUnfinishedFunc()
 	}()
 
@@ -505,18 +504,11 @@ func (pt *peerTask) waitFirstPeerPacket() bool {
 				time.Now().Sub(pt.callback.GetStartTime()).Microseconds(), pt.peerPacket.Load().(*scheduler.PeerPacket).MainPeer)
 			return true
 		}
-		// when schedule timeout, receivePeerPacket will close pt.peerPacketReady
-		if pt.schedulerOption.DisableAutoBackSource {
-			pt.failedReason = reasonBackSourceDisabled
-			err := fmt.Errorf("%s, auto back source disabled", pt.failedReason)
-			pt.span.RecordError(err)
-			pt.Errorf(err.Error())
-		} else {
-			pt.Warnf("start download from source due to dfcodes.SchedNeedBackSource")
-			pt.span.AddEvent("back source due to scheduler says need back source")
-			pt.needBackSource = true
-			pt.backSource()
-		}
+		// when scheduler says dfcodes.SchedNeedBackSource, receivePeerPacket will close pt.peerPacketReady
+		pt.Infof("start download from source due to dfcodes.SchedNeedBackSource")
+		pt.span.AddEvent("back source due to scheduler says need back source")
+		pt.needBackSource = true
+		pt.backSource()
 	case <-time.After(pt.schedulerOption.ScheduleTimeout.Duration):
 		if pt.schedulerOption.DisableAutoBackSource {
 			pt.failedReason = reasonScheduleTimeout
@@ -555,18 +547,11 @@ func (pt *peerTask) waitAvailablePeerPacket() (int32, bool) {
 			// research from piece 0
 			return pt.getNextPieceNum(0), true
 		}
-		// when schedule timeout, receivePeerPacket will close pt.peerPacketReady
-		if pt.schedulerOption.DisableAutoBackSource {
-			pt.failedReason = reasonBackSourceDisabled
-			err := fmt.Errorf("%s, auto back source disabled", pt.failedReason)
-			pt.span.RecordError(err)
-			pt.Errorf(err.Error())
-		} else {
-			pt.Warnf("start download from source due to dfcodes.SchedNeedBackSource")
-			pt.span.AddEvent("back source due to scheduler says need back source ")
-			pt.needBackSource = true
-			pt.backSource()
-		}
+		// when scheduler says dfcodes.SchedNeedBackSource, receivePeerPacket will close pt.peerPacketReady
+		pt.Infof("start download from source due to dfcodes.SchedNeedBackSource")
+		pt.span.AddEvent("back source due to scheduler says need back source ")
+		pt.needBackSource = true
+		pt.backSource()
 	case <-time.After(pt.schedulerOption.ScheduleTimeout.Duration):
 		if pt.schedulerOption.DisableAutoBackSource {
 			pt.failedReason = reasonReScheduleTimeout
@@ -619,10 +604,10 @@ func (pt *peerTask) waitFailedPiece() (int32, bool) {
 	// use no default branch select to wait failed piece or exit
 	select {
 	case <-pt.done:
-		pt.Infof("peer task done, stop wait failed piece")
+		pt.Infof("peer task done, stop to wait failed piece")
 		return -1, false
 	case <-pt.ctx.Done():
-		pt.Debugf("context done due to %s, stop wait failed piece", pt.ctx.Err())
+		pt.Debugf("context done due to %s, stop to wait failed piece", pt.ctx.Err())
 		return -1, false
 	case failed := <-pt.failedPieceCh:
 		pt.Warnf("download piece/%d failed, retry", failed)

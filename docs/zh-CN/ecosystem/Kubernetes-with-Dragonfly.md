@@ -16,9 +16,18 @@
 
 #### 1. Docker
 
+> **不推荐在 docker 环境中使用蜻蜓**：1. 拉镜像没有 fallback 机制，2. 在未来的 Kubernetes 中已经废弃。
+> 
+> 因为当前 Kubernetes 里的 `daemonset` 并不支持 `Surging Rolling Update` 策略,
+> 一旦旧的 dfdaemon pod 被删除后，新的 dfdaemon 就再也拉取不了了。
+
+> 如果无法更换容器运行时的话，那在升级蜻蜓的时候，请从下面两种方案选择比较适合的：
+> 选项1：先手动拉取新的 dfdaemon 镜像，或者使用 [ImagePullJob](https://openkruise.io/docs/user-manuals/imagepulljob) 去自动拉取，
+> 选项2：保持蜻蜓的镜像中心和通用的镜像中心不一样，同时将蜻蜓镜像中心相关的 host 加入 `containerRuntime.docker.skipHosts`。
+
 Dragonfly Helm 支持自动更改 docker 配置。
 
-**情况 1: 支持指定仓库**
+**情况 1:【推荐的】支持指定仓库**
 
 定制 values.yaml 文件:
 ```yaml
@@ -26,7 +35,7 @@ containerRuntime:
   docker:
     enable: true
     # -- Inject domains into /etc/hosts to force redirect traffic to dfdaemon.
-    # Caution: This feature need dfdaemon to implement SNI Proxy, confirm image tag is greater than v0.4.0.
+    # Caution: This feature need dfdaemon to implement SNI Proxy, confirm image tag is greater than v2.0.0.
     # When use certs and inject hosts in docker, no necessary to restart docker daemon.
     injectHosts: true
     registryDomains:
@@ -34,8 +43,19 @@ containerRuntime:
     - "harbor.example.net"
 ```
 
+When upgrade dfdaemon, the old pods will be deleted and the injected hosts info will be removed,
+then docker will pull image without dragonfly, finally, the new pods will be created.
+
+Advantages:
+* Support upgrade dfdaemon smoothness
+
 此配置允许 docker 通过 Dragonfly 拉取 `harbor.example.com` 和 `harbor.example.net` 域名镜像。
 使用上述配置部署 Dragonfly 时，无需重新启动 docker。
+
+优点：
+* 支持 dfdaemon 自身平滑升级
+
+> 这种模式下，当删除 dfdaemon pod 的时候，`preStop` 钩子将会清理已经注入到 `/etc/hosts` 下的所有主机信息，所有流量将会走原来的镜像中心。
 
 限制:
 * 只支持指定域名。
