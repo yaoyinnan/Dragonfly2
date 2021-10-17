@@ -68,8 +68,10 @@ func New(cfg *config.Config) (*Server, error) {
 	if ok := storage.IsSupport(cfg.StorageMode); !ok {
 		return nil, fmt.Errorf("os %s is not support storage mode %s", runtime.GOOS, cfg.StorageMode)
 	}
+
+	// Initialize plugins
 	if err := plugins.Initialize(cfg.Plugins); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "init plugins")
 	}
 
 	// Initialize progress manager
@@ -81,7 +83,7 @@ func New(cfg *config.Config) (*Server, error) {
 	// Initialize storage manager
 	storageMgr, ok := storage.Get(cfg.StorageMode)
 	if !ok {
-		return nil, fmt.Errorf("can not find storage pattern %s", cfg.StorageMode)
+		return nil, fmt.Errorf("can not find storage manager mode %s", cfg.StorageMode)
 	}
 
 	// Initialize CDN manager
