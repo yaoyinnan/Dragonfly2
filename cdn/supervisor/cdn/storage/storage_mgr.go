@@ -149,62 +149,62 @@ func ParsePieceMetaRecord(value string) (record *PieceMetaRecord, err error) {
 	}, nil
 }
 
-type managerPlugin struct {
+type storeManagerPlugin struct {
 	// name is a unique identifier, you can also name it ID.
 	name string
 	// instance holds a manger instant which implements the interface of Manager.
 	instance Manager
 }
 
-func (m *managerPlugin) Type() plugins.PluginType {
+func (m *storeManagerPlugin) Type() plugins.PluginType {
 	return plugins.StorageManagerPlugin
 }
 
-func (m *managerPlugin) Name() string {
+func (m *storeManagerPlugin) Name() string {
 	return m.name
 }
 
-func (m *managerPlugin) ResetRepo(task *types.SeedTask) error {
+func (m *storeManagerPlugin) ResetRepo(task *types.SeedTask) error {
 	return m.instance.ResetRepo(task)
 }
 
-func (m *managerPlugin) StatDownloadFile(path string) (*storedriver.StorageInfo, error) {
+func (m *storeManagerPlugin) StatDownloadFile(path string) (*storedriver.StorageInfo, error) {
 	return m.instance.StatDownloadFile(path)
 }
 
-func (m *managerPlugin) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
+func (m *storeManagerPlugin) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
 	return m.instance.WriteDownloadFile(taskID, offset, len, data)
 }
 
-func (m *managerPlugin) ReadDownloadFile(taskID string) (io.ReadCloser, error) {
+func (m *storeManagerPlugin) ReadDownloadFile(taskID string) (io.ReadCloser, error) {
 	return m.instance.ReadDownloadFile(taskID)
 }
 
-func (m *managerPlugin) CreateUploadLink(taskID string) error {
+func (m *storeManagerPlugin) CreateUploadLink(taskID string) error {
 	return m.instance.CreateUploadLink(taskID)
 }
 
-func (m *managerPlugin) ReadFileMetaData(taskID string) (*FileMetaData, error) {
+func (m *storeManagerPlugin) ReadFileMetaData(taskID string) (*FileMetaData, error) {
 	return m.instance.ReadFileMetaData(taskID)
 }
 
-func (m *managerPlugin) WriteFileMetaData(taskID string, data *FileMetaData) error {
+func (m *storeManagerPlugin) WriteFileMetaData(taskID string, data *FileMetaData) error {
 	return m.instance.WriteFileMetaData(taskID, data)
 }
 
-func (m *managerPlugin) WritePieceMetaRecords(taskID string, records []*PieceMetaRecord) error {
+func (m *storeManagerPlugin) WritePieceMetaRecords(taskID string, records []*PieceMetaRecord) error {
 	return m.instance.WritePieceMetaRecords(taskID, records)
 }
 
-func (m *managerPlugin) AppendPieceMetaData(taskID string, record *PieceMetaRecord) error {
+func (m *storeManagerPlugin) AppendPieceMetaData(taskID string, record *PieceMetaRecord) error {
 	return m.instance.AppendPieceMetaData(taskID, record)
 }
 
-func (m *managerPlugin) ReadPieceMetaRecords(taskID string) ([]*PieceMetaRecord, error) {
+func (m *storeManagerPlugin) ReadPieceMetaRecords(taskID string) ([]*PieceMetaRecord, error) {
 	return m.instance.ReadPieceMetaRecords(taskID)
 }
 
-func (m *managerPlugin) DeleteTask(taskID string) error {
+func (m *storeManagerPlugin) DeleteTask(taskID string) error {
 	return m.instance.DeleteTask(taskID)
 }
 
@@ -257,7 +257,7 @@ func newManagerPlugin(name string, builder ManagerBuilder, cfg *Config) (plugins
 		return nil, fmt.Errorf("init storage manager %s: %v", name, err)
 	}
 
-	return &managerPlugin{
+	return &storeManagerPlugin{
 		name:     name,
 		instance: instant,
 	}, nil
@@ -269,7 +269,7 @@ func Get(name string) (Manager, bool) {
 	if !ok {
 		return nil, false
 	}
-	return v.(*managerPlugin).instance, true
+	return v.(*storeManagerPlugin).instance, true
 }
 
 type Config struct {

@@ -22,11 +22,31 @@ import (
 	"testing"
 
 	"d7y.io/dragonfly/v2/cdn/config"
+	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
+	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
+	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
+	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
+	"github.com/distribution/distribution/v3/uuid"
+	"github.com/stretchr/testify/suite"
+
+	// Register oss client
+	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"
 )
+
+func TestRpcServerTestSuite(t *testing.T) {
+	suite.Run(t, new(RpcServerTestSuite))
+}
+
+type RpcServerTestSuite struct {
+	suite.Suite
+	mgr Manager
+}
 
 func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 	type fields struct {
@@ -65,6 +85,32 @@ func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 }
 
 func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
+	cfg := config.New()
+	if err := plugins.Initialize(cfg.Plugins); err != nil {
+		t.Fatal(err, "Initialize plugins")
+	}
+	progressMgr, err := progress.NewManager()
+	if err != nil {
+		t.Fatal(err, "create progress manager")
+	}
+
+	// Initialize storage manager
+	storageMgr, ok := storage.Get(cfg.StorageMode)
+	if !ok {
+		t.Fatal(err, "create storage")
+	}
+
+	// Initialize CDN manager
+	cdnMgr, err := cdn.NewManager(cfg, storageMgr, progressMgr)
+	if err != nil {
+		t.Fatal(err, "create cdn manager")
+	}
+
+	// Initialize task manager
+	taskMgr, err := task.NewManager(cfg, cdnMgr, progressMgr)
+	if err != nil {
+		t.Fatal(err, "create task manager")
+	}
 	type fields struct {
 		taskMgr supervisor.SeedTaskMgr
 		cfg     *config.Config
@@ -72,26 +118,58 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 	type args struct {
 		ctx context.Context
 		req *cdnsystem.SeedRequest
-		psc chan<- *cdnsystem.PieceSeed
+		psc chan *cdnsystem.PieceSeed
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
+		name      string
+		fields    fields
+		args      args
+		wantErr   bool
+		testCount int
 	}{
-		// TODO: Add test cases.
+		{
+			name: "testObtain",
+			fields: fields{
+				taskMgr: taskMgr,
+				cfg:     cfg,
+			},
+			args: args{
+				ctx: context.Background(),
+				req: &cdnsystem.SeedRequest{
+					TaskId: uuid.Generate().String(),
+					Url:    "http://ant:sys@fileshare.glusterfs.svc.eu95.alipay.net/misc/d7y-test/blobs/sha256/16M",
+					UrlMeta: &base.UrlMeta{
+						Digest: "",
+						Tag:    "",
+						Range:  "",
+						Filter: "",
+						Header: nil,
+					},
+				},
+				psc: make(chan *cdnsystem.PieceSeed, 4),
+			},
+			testCount: 1000,
+		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			css := &server{
-				taskMgr: tt.fields.taskMgr,
-				cfg:     tt.fields.cfg,
-			}
-			if err := css.ObtainSeeds(tt.args.ctx, tt.args.req, tt.args.psc); (err != nil) != tt.wantErr {
-				t.Errorf("ObtainSeeds() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+		for i := 0; i < tt.testCount; i++ {
+			t.Run(tt.name, func(t *testing.T) {
+				css := &server{
+					taskMgr: tt.fields.taskMgr,
+					cfg:     tt.fields.cfg,
+				}
+				go func() {
+					for range tt.args.psc {
+					}
+				}()
+				if err := css.ObtainSeeds(tt.args.ctx, tt.args.req, tt.args.psc); (err != nil) != tt.wantErr {
+					t.Fatalf("ObtainSeeds() error = %v, wantErr %v", err, tt.wantErr)
+				} else {
+					println("obtain success")
+				}
+
+			})
+		}
 	}
 }
 
