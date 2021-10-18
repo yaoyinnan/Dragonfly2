@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-//go:generate mockgen -destination ./mock/mock_cdn_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor CDNMgr
+//go:generate mockgen -destination ./mock/mock_cdn_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor CDNManager
 
 package supervisor
 
@@ -24,11 +24,11 @@ import (
 	"d7y.io/dragonfly/v2/cdn/types"
 )
 
-// CDNMgr as an interface defines all operations against CDN and
+// CDNManager as an interface defines all operations against CDN and
 // operates on the underlying files stored on the local disk, etc.
-type CDNMgr interface {
+type CDNManager interface {
 
-	// TriggerCDN will trigger CDN to download the resource from sourceUrl.
+	// TriggerCDN will trigger CDN to download the resource from sourceURL.
 	TriggerCDN(context.Context, *types.SeedTask) (*types.SeedTask, error)
 
 	// Delete the cdn meta with specified taskID.

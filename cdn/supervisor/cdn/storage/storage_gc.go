@@ -34,11 +34,11 @@ import (
 type Cleaner struct {
 	cfg        *GCConfig
 	driver     storedriver.Driver
-	taskMgr    supervisor.SeedTaskMgr
+	taskMgr    supervisor.SeedTaskManager
 	storageMgr Manager
 }
 
-func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageMgr Manager, taskMgr supervisor.SeedTaskMgr) (*Cleaner, error) {
+func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageMgr Manager, taskMgr supervisor.SeedTaskManager) (*Cleaner, error) {
 	return &Cleaner{
 		cfg:        cfg,
 		driver:     driver,

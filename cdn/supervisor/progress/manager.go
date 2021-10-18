@@ -37,22 +37,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var _ supervisor.SeedProgressMgr = (*Manager)(nil)
+var _ supervisor.SeedProgressManager = (*Manager)(nil)
 
 type Manager struct {
 	seedSubscribers      *syncmap.SyncMap
 	taskPieceMetaRecords *syncmap.SyncMap
-	taskMgr              supervisor.SeedTaskMgr
 	mu                   *synclock.LockerPool
 	timeout              time.Duration
 	buffer               int
 }
 
-func (pm *Manager) SetTaskMgr(taskMgr supervisor.SeedTaskMgr) {
-	pm.taskMgr = taskMgr
-}
-
-func NewManager() (supervisor.SeedProgressMgr, error) {
+func NewManager() (supervisor.SeedProgressManager, error) {
 	return &Manager{
 		seedSubscribers:      syncmap.NewSyncMap(),
 		taskPieceMetaRecords: syncmap.NewSyncMap(),

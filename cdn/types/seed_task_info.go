@@ -17,40 +17,81 @@
 package types
 
 import (
+	"net/url"
+	"strings"
+
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
+	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 
 type SeedTask struct {
-	TaskID           string        `json:"taskId,omitempty"`
-	URL              string        `json:"url,omitempty"`
-	TaskURL          string        `json:"taskUrl,omitempty"`
-	SourceFileLength int64         `json:"sourceFileLength,omitempty"`
-	CdnFileLength    int64         `json:"cdnFileLength,omitempty"`
-	PieceSize        int32         `json:"pieceSize,omitempty"`
-	Header           *base.UrlMeta `json:"header,omitempty"`
-	CdnStatus        string        `json:"cdnStatus,omitempty"`
-	PieceTotal       int32         `json:"pieceTotal,omitempty"`
-	RequestDigest    string        `json:"requestDigest,omitempty"`
-	SourceRealDigest string        `json:"sourceRealDigest,omitempty"`
-	PieceMd5Sign     string        `json:"pieceMd5Sign,omitempty"`
-	logger           *logger.SugaredLoggerOnWith
+	// ID of the task
+	ID string `json:"ID,omitempty"`
+
+	// RawURL is the resource's URL which user uses dfget to download. The location of URL can be anywhere, LAN or WAN.
+	// For image distribution, this is image layer's URL in image registry.
+	// The resource url is provided by dfget command line parameter.
+	RawURL string `json:"rawURL,omitempty"`
+
+	// TaskURL is generated from rawURL. rawURL may contain some queries or parameter, dfget will filter some queries via
+	// --filter parameter of dfget. The usage of it is that different rawURL may generate the same taskID.
+	TaskURL string `json:"taskURL,omitempty"`
+
+	// SourceFileLength is the length of the source file in bytes.
+	SourceFileLength int64 `json:"sourceFileLength,omitempty"`
+
+	// CdnFileLength is the length of the file stored on CDN
+	CdnFileLength int64 `json:"cdnFileLength,omitempty"`
+
+	// PieceSize is the size of pieces in bytes
+	PieceSize int32 `json:"pieceSize,omitempty"`
+
+	// UrlMeta is meta info of downloading request url
+	UrlMeta *base.UrlMeta `json:"header,omitempty"`
+
+	// CdnStatus is the status of the created task related to CDN functionality.
+	//
+	// Enum: [WAITING RUNNING FAILED SUCCESS SOURCE_ERROR]
+	CdnStatus string `json:"cdnStatus,omitempty"`
+
+	// PieceTotal is the total count of all pieces
+	PieceTotal int32 `json:"pieceTotal,omitempty"`
+
+	// RequestDigest is the digest of request which is provided by dfget cli
+	RequestDigest string `json:"requestDigest,omitempty"`
+
+	// SourceRealDigest when CDN finishes downloading file/image from the source location,
+	// the md5 sum of the source file will be calculated as the value of the SourceRealDigest.
+	// And it will be used to compare with RequestDigest value to check whether file is complete.
+	SourceRealDigest string `json:"sourceRealDigest,omitempty"`
+
+	// PieceMd5Sign Is the SHA256 signature of all pieces md5 signature
+	PieceMd5Sign string `json:"pieceMd5Sign,omitempty"`
+
+	logger *logger.SugaredLoggerOnWith
 }
 
 const (
-	IllegalSourceFileLen = -100
+	UnKnownSourceFileLen = -100
 )
 
-func NewSeedTask(taskID string, header map[string]string, digest string, url string, taskURL string) *SeedTask {
+func NewSeedTask(taskID string, rawURL string, urlMeta *base.UrlMeta) *SeedTask {
+	taskURL := rawURL
+	if urlMeta != nil && !stringutils.IsEmpty(urlMeta.Filter) {
+		taskURL = urlutils.FilterURLParam(rawURL, strings.Split(urlMeta.Filter, "&"))
+	}
 	return &SeedTask{
-		TaskID:           taskID,
-		Header:           header,
-		RequestDigest:    digest,
-		URL:              url,
-		TaskURL:          taskURL,
+		ID:            taskID,
+		RawURL:        rawURL,
+		TaskURL:       taskURL,
+		UrlMeta:       urlMeta,
+		RequestDigest: urlMeta.Digest,
+
 		CdnStatus:        TaskInfoCdnStatusWaiting,
-		SourceFileLength: IllegalSourceFileLen,
+		SourceFileLength: UnKnownSourceFileLen,
 		logger:           logger.WithTaskID(taskID),
 	}
 }
@@ -92,15 +133,12 @@ func (task *SeedTask) UpdateTaskInfo(cdnStatus, realDigest, pieceMd5Sign string,
 }
 
 func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
-	if task.logger == nil {
-		task.logger = logger.WithTaskID(task.TaskID)
-	}
 	return task.logger
 }
 
 func (task *SeedTask) GetSourceRequest() *source.Request {
 	return &source.Request{
-		URL: task.URL,
+		URL: url.Parse(task.RawURL),
 		Header: source.RequestHeader{
 			Header: nil,
 		},

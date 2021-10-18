@@ -123,9 +123,9 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	task := constructRegisterTask(req)
+	registerTask := types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta)
 	// register task
-	pieceChan, err := css.taskMgr.Register(ctx, task)
+	pieceChan, err := css.taskMgr.Register(ctx, registerTask)
 
 	if err != nil {
 		if cdnerrors.IsResourcesLacked(err) {
@@ -176,11 +176,11 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 }
 
 func constructRegisterTask(req *cdnsystem.SeedRequest) *types.SeedTask {
-	taskURL := ""
-	if !stringutils.IsEmpty(req.Filter) {
-		taskURL = urlutils.FilterURLParam(req.Url, strings.Split(req.Filter, "&"))
+	taskURL := req.Url
+	if req.UrlMeta != nil && !stringutils.IsEmpty(req.UrlMeta.Filter) {
+		taskURL = urlutils.FilterURLParam(req.Url, strings.Split(req.UrlMeta.Filter, "&"))
 	}
-	return &types.SeedTask{
+	return types.NewSeedTask(req.TaskId, req.UrlMeta){
 		TaskID:           req.TaskId,
 		URL:              req.Url,
 		TaskURL:          taskURL,

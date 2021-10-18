@@ -35,21 +35,17 @@ import (
 )
 
 // addOrUpdateTask add a new task or update exist task
-func (tm *Manager) addOrUpdateTask(ctx context.Context, createTask *types.SeedTask) (task *types.SeedTask, err error) {
+func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) (task *types.SeedTask, err error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
 	defer span.End()
-	taskID := createTask.TaskID
-	synclock.Lock(taskID, false)
-	defer synclock.UnLock(taskID, false)
+	taskID := registerTask.ID
+	synclock.Lock(taskID, true)
+	defer synclock.UnLock(taskID, true)
 	if key, err := tm.taskURLUnReachableStore.Get(taskID); err == nil {
 		if unReachableStartTime, ok := key.(time.Time); ok && time.Since(unReachableStartTime) < tm.cfg.FailAccessInterval {
-			existTask, err := tm.taskStore.Get(taskID)
-			if err != nil || reflect.DeepEqual(createTask.Header, existTask.(*types.SeedTask).Header) {
-				span.AddEvent(config.EventHitUnReachableURL)
-				return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: createTask.URL}, "task hit unReachable cache and interval less than %d, "+
-					"url: %s", tm.cfg.FailAccessInterval, createTask.URL)
-			}
+			span.AddEvent(config.EventHitUnReachableURL)
+			return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: registerTask.RawURL}, "hit unReachable cache and interval less than %d", tm.cfg.FailAccessInterval)
 		}
 		span.AddEvent(config.EventDeleteUnReachableTask)
 		tm.taskURLUnReachableStore.Delete(taskID)
@@ -60,19 +56,19 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, createTask *types.SeedTa
 	if v, err := tm.taskStore.Get(taskID); err == nil {
 		span.SetAttributes(config.AttributeIfReuseTask.Bool(true))
 		existTask := v.(*types.SeedTask)
-		if !isSameTask(existTask, createTask) {
-			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", createTask, existTask))
-			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", createTask, existTask)}
+		if !isSameTask(existTask, registerTask) {
+			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask))
+			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask)}
 		}
 		task = existTask
 		logger.Debugf("get exist task for taskID: %s", taskID)
 	} else {
 		span.SetAttributes(config.AttributeIfReuseTask.Bool(false))
 		logger.Debugf("get new task for taskID: %s", taskID)
-		task = createTask
+		task = registerTask
 	}
 
-	if task.SourceFileLength != types.IllegalSourceFileLen {
+	if task.SourceFileLength != types.UnKnownSourceFileLen {
 		return task, nil
 	}
 
@@ -80,31 +76,29 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, createTask *types.SeedTa
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 	span.AddEvent(config.EventRequestSourceFileLength)
-	sourceFileLength, err := source.GetContentLength(ctx, createTask.GetSourceRequest())
+	sourceFileLength, err := source.GetContentLength(ctx, registerTask.GetSourceRequest())
 	if err != nil {
-		task.Log().Errorf("failed to get url (%s) content length: %v", task.URL, err)
+		task.Log().Errorf("failed to get url (%s) content length: %v", task.RawURL, err)
 		if cdnerrors.IsURLNotReachable(err) {
-			err := tm.taskURLUnReachableStore.Add(taskID, time.Now())
-			if err != nil {
-
-			}
+			tm.taskURLUnReachableStore.Add(taskID, time.Now())
 			return nil, err
 		}
 	}
 	// if not support file length header request ,return -1
 	task.SourceFileLength = sourceFileLength
-	logger.WithTaskID(taskID).Debugf("get file content length: %d", sourceFileLength)
+	task.Log().Debugf("get file content length: %d", sourceFileLength)
 	if task.SourceFileLength > 0 {
 		ok, err := tm.cdnMgr.TryFreeSpace(task.SourceFileLength)
 		if err != nil {
-			logger.Errorf("failed to try free space: %v", err)
-		} else if !ok {
+			task.Log().Errorf("failed to try free space: %v", err)
+		}
+		if !ok {
 			return nil, cdnerrors.ErrResourcesLacked
 		}
 	}
 
 	// if success to get the information successfully with the req.Header then update the task.Header to req.Header.
-	if createTask.Header != nil {
+	if registerTask.Header != nil {
 		task.Header = createTask.Header
 	}
 
@@ -113,8 +107,8 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, createTask *types.SeedTa
 		pieceSize := cdnutil.ComputePieceSize(task.SourceFileLength)
 		task.PieceSize = pieceSize
 	}
-	tm.taskStore.Add(task.TaskID, task)
-	logger.Debugf("success add task: %+v into taskStore", task)
+	tm.taskStore.Add(task.ID, task)
+	task.Log().Debugf("success add task: %+v into taskStore", task)
 
 	return task, nil
 }
@@ -180,19 +174,14 @@ func isSameTask(task1, task2 *types.SeedTask) bool {
 	if task1 == task2 {
 		return true
 	}
+
+	if task1.ID != task2.ID {
+		return false
+	}
+
 	if task1.TaskURL != task2.TaskURL {
 		return false
 	}
 
-	if !stringutils.IsBlank(task1.RequestDigest) && !stringutils.IsBlank(task2.RequestDigest) {
-		if task1.RequestDigest != task2.RequestDigest {
-			return false
-		}
-	}
-
-	if !stringutils.IsBlank(task1.RequestDigest) && !stringutils.IsBlank(task2.SourceRealDigest) {
-		return task1.SourceRealDigest == task2.RequestDigest
-	}
-
-	return true
+	return reflect.DeepEqual(task1.UrlMeta, task2.UrlMeta)
 }

@@ -76,7 +76,7 @@ func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
 	return storageMgr, nil
 }
 
-func (h *hybridStorageMgr) Initialize(taskMgr supervisor.SeedTaskMgr) {
+func (h *hybridStorageMgr) Initialize(taskMgr supervisor.SeedTaskManager) {
 	h.taskMgr = taskMgr
 	diskGcConfig := h.cfg.DriverConfigs[local.DiskDriverName].GCConfig
 
@@ -138,7 +138,7 @@ type hybridStorageMgr struct {
 	diskDriver          storedriver.Driver
 	diskDriverCleaner   *storage.Cleaner
 	memoryDriverCleaner *storage.Cleaner
-	taskMgr             supervisor.SeedTaskMgr
+	taskMgr             supervisor.SeedTaskManager
 	shmSwitch           *shmSwitch
 	hasShm              bool
 }
@@ -275,13 +275,13 @@ func (h *hybridStorageMgr) CreateUploadLink(taskID string) error {
 }
 
 func (h *hybridStorageMgr) ResetRepo(task *types.SeedTask) error {
-	if err := h.deleteTaskFiles(task.TaskID, false, true); err != nil {
+	if err := h.deleteTaskFiles(task.ID, false, true); err != nil {
 		task.Log().Errorf("reset repo: failed to delete task files: %v", err)
 	}
 	// 判断是否有足够空间存放
-	shmPath, err := h.tryShmSpace(task.URL, task.TaskID, task.SourceFileLength)
+	shmPath, err := h.tryShmSpace(task.RawURL, task.ID, task.SourceFileLength)
 	if err == nil {
-		return fileutils.SymbolicLink(shmPath, h.diskDriver.GetPath(storage.GetDownloadRaw(task.TaskID)))
+		return fileutils.SymbolicLink(shmPath, h.diskDriver.GetPath(storage.GetDownloadRaw(task.ID)))
 	}
 	return nil
 }

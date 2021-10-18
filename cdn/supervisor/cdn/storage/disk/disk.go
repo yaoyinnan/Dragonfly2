@@ -74,7 +74,7 @@ type diskStorageMgr struct {
 	cfg        *storage.Config
 	diskDriver storedriver.Driver
 	cleaner    *storage.Cleaner
-	taskMgr    supervisor.SeedTaskMgr
+	taskMgr    supervisor.SeedTaskManager
 }
 
 func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
@@ -94,7 +94,7 @@ func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
 	}
 }
 
-func (s *diskStorageMgr) Initialize(taskMgr supervisor.SeedTaskMgr) {
+func (s *diskStorageMgr) Initialize(taskMgr supervisor.SeedTaskManager) {
 	s.taskMgr = taskMgr
 	diskGcConfig := s.cfg.DriverConfigs[local.DiskDriverName].GCConfig
 	if diskGcConfig == nil {
@@ -232,7 +232,7 @@ func (s *diskStorageMgr) DeleteTask(taskID string) error {
 }
 
 func (s *diskStorageMgr) ResetRepo(task *types.SeedTask) error {
-	return s.DeleteTask(task.TaskID)
+	return s.DeleteTask(task.ID)
 }
 
 func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {

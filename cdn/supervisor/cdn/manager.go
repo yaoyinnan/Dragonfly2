@@ -45,8 +45,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Ensure that Manager implements the CDNMgr interface
-var _ supervisor.CDNMgr = (*Manager)(nil)
+// Ensure that Manager implements the CDNManager interface
+var _ supervisor.CDNManager = (*Manager)(nil)
 
 var tracer trace.Tracer
 
@@ -61,18 +61,18 @@ type Manager struct {
 	limiter          *ratelimiter.RateLimiter
 	cdnLocker        *synclock.LockerPool
 	cacheDataManager *cacheDataManager
-	progressMgr      supervisor.SeedProgressMgr
+	progressMgr      supervisor.SeedProgressManager
 	cdnReporter      *reporter
 	detector         *cacheDetector
 	writer           *cacheWriter
 }
 
 // NewManager returns a new Manager.
-func NewManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressMgr) (supervisor.CDNMgr, error) {
+func NewManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressManager) (supervisor.CDNManager, error) {
 	return newManager(cfg, cacheStore, progressMgr)
 }
 
-func newManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressMgr) (*Manager, error) {
+func newManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressManager) (*Manager, error) {
 	rateLimiter := ratelimiter.NewRateLimiter(ratelimiter.TransRate(int64(cfg.MaxBandwidth-cfg.SystemReservedBandwidth)), 2)
 	cacheDataManager := newCacheDataManager(cacheStore)
 	cdnReporter := newReporter(progressMgr)
@@ -96,8 +96,8 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTa
 	tempTask := *task
 	seedTask = &tempTask
 	// obtain taskId write lock
-	cm.cdnLocker.Lock(task.TaskID, false)
-	defer cm.cdnLocker.UnLock(task.TaskID, false)
+	cm.cdnLocker.Lock(task.ID, false)
+	defer cm.cdnLocker.UnLock(task.ID, false)
 
 	var fileDigest = md5.New()
 	var digestType = digestutils.Md5Hash.String()
@@ -115,7 +115,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTa
 	span.SetAttributes(config.AttributeCacheResult.String(detectResult.String()))
 	task.Log().Debugf("detects cache result: %+v", detectResult)
 	// second: report detect result
-	err = cm.cdnReporter.reportCache(ctx, task.TaskID, detectResult)
+	err = cm.cdnReporter.reportCache(ctx, task.ID, detectResult)
 	if err != nil {
 		task.Log().Errorf("failed to report cache, reset detectResult: %v", err)
 	}

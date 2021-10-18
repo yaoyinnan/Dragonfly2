@@ -37,7 +37,7 @@ import (
 )
 
 type Manager interface {
-	Initialize(taskMgr supervisor.SeedTaskMgr)
+	Initialize(taskMgr supervisor.SeedTaskManager)
 
 	// ResetRepo reset the storage of task
 	ResetRepo(*types.SeedTask) error
@@ -78,30 +78,35 @@ type Manager interface {
 
 // FileMetaData meta data of task
 type FileMetaData struct {
-	TaskID           string            `json:"taskId"`
-	TaskURL          string            `json:"taskUrl"`
+	TaskID           string            `json:"taskID"`
+	TaskURL          string            `json:"taskURL"`
 	PieceSize        int32             `json:"pieceSize"`
 	SourceFileLen    int64             `json:"sourceFileLen"`
 	AccessTime       int64             `json:"accessTime"`
 	Interval         int64             `json:"interval"`
 	CdnFileLength    int64             `json:"cdnFileLength"`
 	SourceRealDigest string            `json:"sourceRealDigest"`
-	PieceMd5Sign     string            `json:"pieceMd5Sign"`
 	ExpireInfo       map[string]string `json:"expireInfo"`
 	Finish           bool              `json:"finish"`
 	Success          bool              `json:"success"`
 	TotalPieceCount  int32             `json:"totalPieceCount"`
-	//PieceMetaDataSign string            `json:"pieceMetaDataSign"`
+	PieceMd5Sign     string            `json:"pieceMd5Sign"`
 }
 
 // PieceMetaRecord meta data of piece
 type PieceMetaRecord struct {
-	PieceNum    int32             `json:"pieceNum"`    // piece Num start from 0
-	PieceLen    int32             `json:"pieceLen"`    // 存储到存储介质的真实长度
-	Md5         string            `json:"md5"`         // for transported piece content，不是origin source 的 md5，是真是存储到存储介质后的md5（为了读取数据文件时方便校验完整性）
-	Range       *rangeutils.Range `json:"range"`       // 下载存储到磁盘的range，不是origin source的range.提供给客户端发送下载请求,for transported piece content
-	OriginRange *rangeutils.Range `json:"originRange"` //  piece's real offset in the file
-	PieceStyle  types.PieceFormat `json:"pieceStyle"`  // 1: PlainUnspecified
+	// piece Num start from 0
+	PieceNum int32 `json:"pieceNum"`
+	// 存储到存储介质的真实长度
+	PieceLen int32 `json:"pieceLen"`
+	// for transported piece content，不是origin source 的 md5，是真是存储到存储介质后的md5（为了读取数据文件时方便校验完整性）
+	Md5 string `json:"md5"`
+	// 下载存储到磁盘的range，不是origin source的range.提供给客户端发送下载请求,for transported piece content
+	Range *rangeutils.Range `json:"range"`
+	//  piece's real offset in the file
+	OriginRange *rangeutils.Range `json:"originRange"`
+	// 1: PlainUnspecified
+	PieceStyle types.PieceFormat `json:"pieceStyle"`
 }
 
 const fieldSeparator = ":"

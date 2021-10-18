@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//go:generate mockgen -destination ./mock/mock_progress_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor SeedProgressMgr
+//go:generate mockgen -destination ./mock/mock_progress_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor SeedProgressManager
 
 package supervisor
 
@@ -23,8 +23,8 @@ import (
 	"d7y.io/dragonfly/v2/cdn/types"
 )
 
-// SeedProgressMgr as an interface defines all operations about seed progress
-type SeedProgressMgr interface {
+// SeedProgressManager as an interface defines all operations about seed progress
+type SeedProgressManager interface {
 
 	// InitSeedProgress init task seed progress
 	InitSeedProgress(ctx context.Context, taskID string)
@@ -43,6 +43,4 @@ type SeedProgressMgr interface {
 
 	// Clear meta info of task
 	Clear(taskID string) error
-
-	SetTaskMgr(taskMgr SeedTaskMgr)
 }

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//go:generate mockgen -destination ./mock/mock_task_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor SeedTaskMgr
+//go:generate mockgen -destination ./mock/mock_task_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor SeedTaskManager
 
 package supervisor
 
@@ -23,23 +23,23 @@ import (
 	"d7y.io/dragonfly/v2/cdn/types"
 )
 
-// SeedTaskMgr as an interface defines all operations against SeedTask.
+// SeedTaskManager as an interface defines all operations against SeedTask.
 // A SeedTask will store some meta info about the taskFile, pieces and something else.
 // A seedTask corresponds to three files on the disk, which are identified by taskId, the data file meta file piece file
-type SeedTaskMgr interface {
+type SeedTaskManager interface {
 
-	// Register register seed task
-	Register(context.Context, *types.SeedTask) (pieceCh <-chan *types.SeedPiece, err error)
+	// Register a task corresponding to a downloaded file.
+	Register(ctx context.Context, registerTask *types.SeedTask) (pieceCh <-chan *types.SeedPiece, err error)
 
-	// Get get task Info with specified taskId.
-	Get(string) (*types.SeedTask, error)
+	// Get the task Info with specified taskID.
+	Get(taskID string) (*types.SeedTask, error)
 
-	// Exist check task existence with specified taskId.
-	Exist(string) (*types.SeedTask, bool)
+	// Exist check task existence with specified taskID.
+	Exist(taskID string) (*types.SeedTask, bool)
 
-	// Delete delete a task.
-	Delete(string) error
+	// Delete a task with specified taskID.
+	Delete(taskID string) error
 
-	// GetPieces
-	GetPieces(context.Context, string) (pieces []*types.SeedPiece, err error)
+	// GetPieces gets the pieces which has been downloaded from source.
+	GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error)
 }

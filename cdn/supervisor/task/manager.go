@@ -37,7 +37,7 @@ import (
 )
 
 // Ensure that Manager implements the SeedTaskMgr and gcExecutor interfaces
-var _ supervisor.SeedTaskMgr = (*Manager)(nil)
+var _ supervisor.SeedTaskManager = (*Manager)(nil)
 var _ gc.Executor = (*Manager)(nil)
 
 var tracer trace.Tracer
@@ -52,12 +52,12 @@ type Manager struct {
 	taskStore               *syncmap.SyncMap
 	accessTimeMap           *syncmap.SyncMap
 	taskURLUnReachableStore *syncmap.SyncMap
-	cdnMgr                  supervisor.CDNMgr
-	progressMgr             supervisor.SeedProgressMgr
+	cdnMgr                  supervisor.CDNManager
+	progressMgr             supervisor.SeedProgressManager
 }
 
 // NewManager returns a new Manager Object.
-func NewManager(cfg *config.Config, cdnMgr supervisor.CDNMgr, progressMgr supervisor.SeedProgressMgr) (*Manager, error) {
+func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr supervisor.SeedProgressManager) (*Manager, error) {
 	taskMgr := &Manager{
 		cfg:                     cfg,
 		taskStore:               syncmap.NewSyncMap(),
@@ -75,10 +75,11 @@ func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTaskRegister)
 	defer span.End()
+	// add a new task or update a exist task
 	task, err := tm.addOrUpdateTask(ctx, registerTask)
 	if err != nil {
 		span.RecordError(err)
-		logger.WithTaskID(registerTask.TaskID).Infof("failed to add or update task with req: %+v: %v", registerTask, err)
+		task.Log().Infof("failed to add or update task with req: %+v: %v", registerTask, err)
 		return nil, err
 	}
 	taskBytes, _ := json.Marshal(task)
@@ -86,7 +87,7 @@ func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (
 	task.Log().Debugf("success get task info: %+v", task)
 
 	// update accessTime for taskId
-	if err := tm.accessTimeMap.Add(task.TaskID, time.Now()); err != nil {
+	if err := tm.accessTimeMap.Add(task.ID, time.Now()); err != nil {
 		task.Log().Warnf("failed to update accessTime: %v", err)
 	}
 
@@ -96,7 +97,7 @@ func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (
 	}
 	task.Log().Infof("successfully trigger cdn sync action")
 	// watch seed progress
-	return tm.progressMgr.WatchSeedProgress(ctx, task.TaskID)
+	return tm.progressMgr.WatchSeedProgress(ctx, task.ID)
 }
 
 // triggerCdnSyncAction
@@ -104,17 +105,17 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTriggerCDNSyncAction)
 	defer span.End()
-	synclock.Lock(task.TaskID, true)
+	synclock.Lock(task.ID, true)
 	if !task.IsFrozen() {
 		span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
 		task.Log().Infof("seedTask is running or has been downloaded successfully, status: %s", task.CdnStatus)
-		synclock.UnLock(task.TaskID, true)
+		synclock.UnLock(task.ID, true)
 		return nil
 	}
-	synclock.UnLock(task.TaskID, true)
+	synclock.UnLock(task.ID, true)
 
-	synclock.Lock(task.TaskID, false)
-	defer synclock.UnLock(task.TaskID, false)
+	synclock.Lock(task.ID, false)
+	defer synclock.UnLock(task.ID, false)
 	// reconfirm
 	span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
 	if !task.IsFrozen() {
@@ -122,10 +123,10 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 		return nil
 	}
 	if task.IsWait() {
-		tm.progressMgr.InitSeedProgress(ctx, task.TaskID)
+		tm.progressMgr.InitSeedProgress(ctx, task.ID)
 		task.Log().Infof("successfully init seed progress for task")
 	}
-	updatedTask, err := tm.updateTask(task.TaskID, &types.SeedTask{
+	updatedTask, err := tm.updateTask(task.ID, &types.SeedTask{
 		CdnStatus: types.TaskInfoCdnStatusRunning,
 	})
 	if err != nil {
@@ -138,12 +139,12 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 			task.Log().Errorf("trigger cdn get error: %v", err)
 		}
 		go func() {
-			if err := tm.progressMgr.PublishTask(ctx, task.TaskID, updateTaskInfo); err != nil {
+			if err := tm.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
 				task.Log().Errorf("failed to publish task: %v", err)
 			}
 
 		}()
-		updatedTask, err = tm.updateTask(task.TaskID, updateTaskInfo)
+		updatedTask, err = tm.updateTask(task.ID, updateTaskInfo)
 		if err != nil {
 			task.Log().Errorf("failed to update task: %v", err)
 		}
