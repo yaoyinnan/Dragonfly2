@@ -507,8 +507,8 @@ func (s *LocalDriverTestSuite) TestLocalDriverExitsAndRemove() {
 	s.False(s.Exits(raw))
 }
 
-func (s *LocalDriverTestSuite) TestLocalDriverGetHomePath() {
-	s.Equal(filepath.Join(s.workHome, "repo"), s.GetHomePath())
+func (s *LocalDriverTestSuite) TestLocalDriverGetBaseDir() {
+	s.Equal(filepath.Join(s.workHome, "repo"), s.GetBaseDir())
 }
 
 func (s *LocalDriverTestSuite) TestLocalDriverGetPath() {
@@ -522,7 +522,7 @@ func (s *LocalDriverTestSuite) TestLocalDriverGetPath() {
 
 func (s *LocalDriverTestSuite) TestLocalDriverGetTotalAndFreeSpace() {
 	fs := syscall.Statfs_t{}
-	s.Nil(syscall.Statfs(s.GetHomePath(), &fs))
+	s.Nil(syscall.Statfs(s.GetBaseDir(), &fs))
 	total := unit.Bytes(fs.Blocks * uint64(fs.Bsize))
 	free := unit.Bytes(fs.Bavail * uint64(fs.Bsize))
 	got, got1, err := s.GetTotalAndFreeSpace()
@@ -559,7 +559,7 @@ func (s *LocalDriverTestSuite) checkStat(raw *storedriver.Raw) {
 	info, err := s.Stat(raw)
 	s.Equal(isNil(err), true)
 
-	pathTemp := filepath.Join(s.Driver.GetHomePath(), raw.Bucket, raw.Key)
+	pathTemp := filepath.Join(s.Driver.GetBaseDir(), raw.Bucket, raw.Key)
 	f, _ := os.Stat(pathTemp)
 
 	s.EqualValues(info, &storedriver.StorageInfo{

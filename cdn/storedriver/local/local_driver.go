@@ -67,7 +67,7 @@ func (ds *driver) GetTotalSpace() (unit.Bytes, error) {
 	return fileutils.GetTotalSpace(path)
 }
 
-func (ds *driver) GetHomePath() string {
+func (ds *driver) GetBaseDir() string {
 	return ds.BaseDir
 }
 

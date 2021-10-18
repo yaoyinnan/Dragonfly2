@@ -216,8 +216,8 @@ func (m *storeManagerPlugin) DeleteTask(taskID string) error {
 // ManagerBuilder is a function that creates a new storage manager plugin instant with the giving conf.
 type ManagerBuilder func(cfg *Config) (Manager, error)
 
-// Register defines an interface to register a storage manager with specified name.
-// All storage managers should call this function to register itself to the storage manager factory.
+// Register defines an interface to register a storage manager builder with specified name.
+// All storage managers should call this function to register its builder to the storage manager factory.
 func Register(name string, builder ManagerBuilder) error {
 	name = strings.ToLower(name)
 	// plugin builder

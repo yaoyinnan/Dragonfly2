@@ -55,7 +55,7 @@ func init() {
 
 func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
 	if len(cfg.DriverConfigs) != 1 {
-		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong config: %v", cfg)
+		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", cfg)
 	}
 	diskDriver, ok := storedriver.Get(local.DiskDriverName)
 	if !ok {

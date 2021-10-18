@@ -21,14 +21,52 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/pkg/unit"
+	"d7y.io/dragonfly/v2/pkg/util/fileutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 )
+
+// DriverBuilder is a function that creates a new storage driver plugin instant with the giving Config.
+type DriverBuilder func(cfg *Config) (Driver, error)
+
+// Register defines an interface to register a driver with specified name.
+// All drivers should call this function to register itself to the driverFactory.
+func Register(name string, builder DriverBuilder) error {
+	name = strings.ToLower(name)
+	// plugin builder
+	var f = func(conf interface{}) (plugins.Plugin, error) {
+		cfg := &Config{}
+		if err := mapstructure.Decode(conf, cfg); err != nil {
+			return nil, fmt.Errorf("parse config: %v", err)
+		}
+		// prepare the base dir
+		if !filepath.IsAbs(cfg.BaseDir) {
+			return nil, fmt.Errorf("not absolute path: %s", cfg.BaseDir)
+		}
+		if err := fileutils.MkdirAll(cfg.BaseDir); err != nil {
+			return nil, fmt.Errorf("create baseDir %s: %v", cfg.BaseDir, err)
+		}
+
+		return newDriverPlugin(name, builder, cfg)
+	}
+	return plugins.RegisterPluginBuilder(plugins.StorageDriverPlugin, name, f)
+}
+
+// Get a store from manager with specified name.
+func Get(name string) (Driver, bool) {
+	v, ok := plugins.GetPlugin(plugins.StorageDriverPlugin, strings.ToLower(name))
+	if !ok {
+		return nil, false
+	}
+	return v.(*driverPlugin).instance, true
+}
 
 // Driver defines an interface to manage the data stored in the driver.
 //
@@ -43,7 +81,7 @@ type Driver interface {
 	// Otherwise, just return the data which starts from raw.offset and the length is raw.length.
 	Get(raw *Raw) (io.ReadCloser, error)
 
-	// Get data from the storage based on raw information.
+	// GetBytes data from the storage based on raw information.
 	// The data should be returned in bytes.
 	// If the length<=0, the storage driver should return all data from the raw.offset.
 	// Otherwise, just return the data which starts from raw.offset and the length is raw.length.
@@ -67,33 +105,33 @@ type Driver interface {
 	// If not, return the ErrFileNotExist.
 	Stat(raw *Raw) (*StorageInfo, error)
 
-	// GetFreeSpace returns the available disk space in B.
+	// GetFreeSpace returns the free disk space in B.
 	GetFreeSpace() (unit.Bytes, error)
 
-	// GetTotalAndFreeSpace
+	// GetTotalAndFreeSpace returns the total and free disk space in B.
 	GetTotalAndFreeSpace() (unit.Bytes, unit.Bytes, error)
 
-	// GetTotalSpace
+	// GetTotalSpace returns the total disk space in B.
 	GetTotalSpace() (unit.Bytes, error)
 
 	// Walk walks the file tree rooted at root which determined by raw.Bucket and raw.Key,
 	// calling walkFn for each file or directory in the tree, including root.
 	Walk(raw *Raw) error
 
-	// CreateBaseDir
+	// CreateBaseDir create base dir
 	CreateBaseDir() error
 
-	// GetPath
+	// GetPath get path of raw
 	GetPath(raw *Raw) string
 
-	// MoveFile
+	// MoveFile rename src to dst
 	MoveFile(src string, dst string) error
 
-	// Exits
+	// Exits check if raw exists
 	Exits(raw *Raw) bool
 
-	// GetHomePath
-	GetHomePath() string
+	// GetBaseDir returns base dir
+	GetBaseDir() string
 }
 
 type Config struct {
@@ -162,12 +200,10 @@ func (s *driverPlugin) Name() string {
 	return s.name
 }
 
-// GetTotalSpace
 func (s *driverPlugin) GetTotalSpace() (unit.Bytes, error) {
 	return s.instance.GetTotalSpace()
 }
 
-// CreateBaseDir
 func (s *driverPlugin) CreateBaseDir() error {
 	return s.instance.CreateBaseDir()
 }
@@ -258,8 +294,8 @@ func (s *driverPlugin) GetFreeSpace() (unit.Bytes, error) {
 	return s.instance.GetFreeSpace()
 }
 
-func (s *driverPlugin) GetHomePath() string {
-	return s.instance.GetHomePath()
+func (s *driverPlugin) GetBaseDir() string {
+	return s.instance.GetBaseDir()
 }
 
 func checkEmptyKey(raw *Raw) error {
