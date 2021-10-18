@@ -47,12 +47,12 @@ var tracer = otel.Tracer("cdn-server")
 
 type server struct {
 	*grpc.Server
-	taskMgr supervisor.SeedTaskMgr
+	taskMgr supervisor.SeedTaskManager
 	cfg     *config.Config
 }
 
 // New returns a new Manager Object.
-func New(cfg *config.Config, taskMgr supervisor.SeedTaskMgr, opts ...grpc.ServerOption) (*grpc.Server, error) {
+func New(cfg *config.Config, taskMgr supervisor.SeedTaskManager, opts ...grpc.ServerOption) (*grpc.Server, error) {
 	svr := &server{
 		taskMgr: taskMgr,
 		cfg:     cfg,
@@ -137,7 +137,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	task, err = css.taskMgr.Get(req.TaskId)
+	registerTask, err = css.taskMgr.Get(req.TaskId)
 	if err != nil {
 		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
@@ -157,10 +157,10 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 				PieceStyle:  base.PieceStyle(piece.PieceStyle),
 			},
 			Done:          false,
-			ContentLength: task.SourceFileLength,
+			ContentLength: registerTask.SourceFileLength,
 		}
 	}
-	if task.CdnStatus != types.TaskInfoCdnStatusSuccess {
+	if registerTask.CdnStatus != types.TaskInfoCdnStatusSuccess {
 		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status error , status: %s", req.TaskId, task.CdnStatus)
 		span.RecordError(err)
 		return err

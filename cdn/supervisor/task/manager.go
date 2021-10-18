@@ -40,13 +40,9 @@ import (
 var _ supervisor.SeedTaskManager = (*Manager)(nil)
 var _ gc.Executor = (*Manager)(nil)
 
-var tracer trace.Tracer
+var tracer = otel.Tracer("cdn-task-manager")
 
-func init() {
-	tracer = otel.Tracer("cdn-task-manager")
-}
-
-// Manager is an implementation of the interface of TaskMgr.
+// Manager is an implementation of the interface of supervisor.TaskManager.
 type Manager struct {
 	cfg                     *config.Config
 	taskStore               *syncmap.SyncMap

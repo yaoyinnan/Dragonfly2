@@ -145,6 +145,23 @@ func (task *SeedTask) GetSourceRequest() *source.Request {
 	}
 }
 
+// IsEqual check whether the two task provided are the same
+func (task *SeedTask) IsEqual(task1, task2 *SeedTask) bool {
+	if task1 == task2 {
+		return true
+	}
+
+	if task1.ID != task2.ID {
+		return false
+	}
+
+	if task1.TaskURL != task2.TaskURL {
+		return false
+	}
+
+	return reflect.DeepEqual(task1.UrlMeta, task2.UrlMeta)
+}
+
 const (
 
 	// TaskInfoCdnStatusWaiting captures enum value "WAITING"

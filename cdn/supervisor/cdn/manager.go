@@ -48,11 +48,7 @@ import (
 // Ensure that Manager implements the CDNManager interface
 var _ supervisor.CDNManager = (*Manager)(nil)
 
-var tracer trace.Tracer
-
-func init() {
-	tracer = otel.Tracer("cdn-server")
-}
+var tracer = otel.Tracer("cdn-server")
 
 // Manager is an implementation of the interface of CDNMgr.
 type Manager struct {
