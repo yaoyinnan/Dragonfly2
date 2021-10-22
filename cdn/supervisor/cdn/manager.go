@@ -56,7 +56,7 @@ type Manager struct {
 	cacheStore       storage.Manager
 	limiter          *ratelimiter.RateLimiter
 	cdnLocker        *synclock.LockerPool
-	cacheDataManager *cacheDataManager
+	cacheDataManager *metaDataManager
 	progressMgr      supervisor.SeedProgressManager
 	cdnReporter      *reporter
 	detector         *cacheDetector
@@ -85,20 +85,18 @@ func newManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supe
 	}, nil
 }
 
-func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTask *types.SeedTask, err error) {
+func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types.SeedTask, error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTriggerCDN)
 	defer span.End()
-	tempTask := *task
-	seedTask = &tempTask
 	// obtain taskId write lock
 	cm.cdnLocker.Lock(task.ID, false)
 	defer cm.cdnLocker.UnLock(task.ID, false)
 
 	var fileDigest = md5.New()
 	var digestType = digestutils.Md5Hash.String()
-	if !stringutils.IsBlank(task.RequestDigest) {
-		requestDigest := digestutils.Parse(task.RequestDigest)
+	if !stringutils.IsBlank(task.Digest) {
+		requestDigest := digestutils.Parse(task.Digest)
 		digestType = requestDigest[0]
 		fileDigest = digestutils.CreateHash(digestType)
 	}
@@ -122,7 +120,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTa
 			detectResult.fileMetaData.SourceFileLen, detectResult.fileMetaData.CdnFileLength)
 		return seedTask, nil
 	}
-	server.StatSeedStart(task.TaskID, task.URL)
+	server.StatSeedStart(task.ID, task.RawURL)
 	start := time.Now()
 	// third: start to download the source file
 	var downloadSpan trace.Span
@@ -132,7 +130,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTa
 	// download fail
 	if err != nil {
 		downloadSpan.RecordError(err)
-		server.StatSeedFinish(task.TaskID, task.URL, false, err, start, time.Now(), 0, 0)
+		server.StatSeedFinish(task.ID, task.RawURL, false, err, start, time.Now(), 0, 0)
 		seedTask.UpdateStatus(types.TaskInfoCdnStatusSourceError)
 		return seedTask, err
 	}
@@ -142,13 +140,13 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (seedTa
 	// forth: write to storage
 	downloadMetadata, err := cm.writer.startWriter(ctx, reader, task, detectResult)
 	if err != nil {
-		server.StatSeedFinish(task.TaskID, task.URL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
+		server.StatSeedFinish(task.ID, task.RawURL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
 			downloadMetadata.realSourceFileLength)
 		task.Log().Errorf("failed to write for task: %v", err)
 		seedTask.UpdateStatus(types.TaskInfoCdnStatusFailed)
 		return seedTask, err
 	}
-	server.StatSeedFinish(task.TaskID, task.URL, true, nil, start, time.Now(), downloadMetadata.backSourceLength,
+	server.StatSeedFinish(task.ID, task.RawURL, true, nil, start, time.Now(), downloadMetadata.backSourceLength,
 		downloadMetadata.realSourceFileLength)
 	sourceDigest := reader.Digest()
 	// fifth: handle CDN result
@@ -202,7 +200,7 @@ func (cm *Manager) handleCDNResult(task *types.SeedTask, sourceDigest string, do
 	if !isSuccess {
 		cdnFileLength = 0
 	}
-	if err := cm.cacheDataManager.updateStatusAndResult(task.TaskID, &storage.FileMetaData{
+	if err := cm.cacheDataManager.updateStatusAndResult(task.ID, &storage.FileMetaData{
 		Finish:           true,
 		Success:          isSuccess,
 		SourceRealDigest: sourceDigest,

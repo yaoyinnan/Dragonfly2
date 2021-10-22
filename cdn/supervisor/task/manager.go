@@ -134,13 +134,13 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 		if err != nil {
 			task.Log().Errorf("trigger cdn get error: %v", err)
 		}
+		updatedTask, err = tm.updateTask(task.ID, updateTaskInfo)
 		go func() {
 			if err := tm.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
 				task.Log().Errorf("failed to publish task: %v", err)
 			}
 
 		}()
-		updatedTask, err = tm.updateTask(task.ID, updateTaskInfo)
 		if err != nil {
 			task.Log().Errorf("failed to update task: %v", err)
 		}

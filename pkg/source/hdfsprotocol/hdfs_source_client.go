@@ -18,16 +18,15 @@ package hdfsprotocol
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/url"
 	"os/user"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
-
+	"d7y.io/dragonfly/v2/cdn/types"
 	"github.com/go-http-utils/headers"
 	"github.com/pkg/errors"
 
@@ -56,7 +55,7 @@ type hdfsSourceClient struct {
 	clientMap map[string]*hdfs.Client
 }
 
-// hdfsFileReaderClose is an combination object of the  io.LimitedReader and io.Closer
+// hdfsFileReaderClose is a combination object of the  io.LimitedReader and io.Closer
 type hdfsFileReaderClose struct {
 	limited io.Reader
 	c       io.Closer
@@ -73,29 +72,27 @@ func newHdfsFileReaderClose(r io.Reader, n int64, c io.Closer) io.ReadCloser {
 
 type HDFSSourceClientOption func(p *hdfsSourceClient)
 
-func (h *hdfsSourceClient) GetContentLength(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (int64, error) {
-	hdfsClient, path, err := h.getHDFSClientAndPath(url)
+func (h *hdfsSourceClient) GetContentLength(request *source.Request) (int64, error) {
+	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
-		return -1, err
+		return types.UnKnownSourceFileLen, err
 	}
 	info, err := hdfsClient.Stat(path)
 	if err != nil {
-		return -1, err
+		return types.UnKnownSourceFileLen, err
 	}
-
-	if rang != nil {
-
-		if int64(rang.EndIndex) <= info.Size() {
+	if request.Header.Get(source.Range) != "" {
+		rangeIndex := strings.Split(request.Header.Get(source.Range), "=")
+		if strconv.Atoi(rangeIndex[1]) <= info.Size() {
 			return int64(rang.EndIndex - rang.StartIndex), nil
 		}
 		return info.Size() - int64(rang.StartIndex), nil
 	}
-
 	return info.Size(), nil
 }
 
-func (h *hdfsSourceClient) IsSupportRange(ctx context.Context, url string, header source.RequestHeader) (bool, error) {
-	hdfsClient, path, err := h.getHDFSClientAndPath(url)
+func (h *hdfsSourceClient) IsSupportRange(request *source.Request) (bool, error) {
+	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
 		return false, err
 	}
@@ -106,7 +103,7 @@ func (h *hdfsSourceClient) IsSupportRange(ctx context.Context, url string, heade
 	return true, nil
 }
 
-func (h *hdfsSourceClient) IsExpired(ctx context.Context, url string, header source.RequestHeader, expireInfo map[string]string) (bool, error) {
+func (h *hdfsSourceClient) IsExpired(request *source.Request) (bool, error) {
 	lastModified := expireInfo[headers.LastModified]
 	//eTag := expireInfo[headers.ETag]
 	if lastModified == "" {
@@ -129,8 +126,8 @@ func (h *hdfsSourceClient) IsExpired(ctx context.Context, url string, header sou
 	return info.ModTime().Format(layout) != t.Format(layout), nil
 }
 
-func (h *hdfsSourceClient) Download(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (io.ReadCloser, error) {
-	hdfsClient, path, err := h.getHDFSClientAndPath(url)
+func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
+	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -154,16 +151,16 @@ func (h *hdfsSourceClient) Download(ctx context.Context, url string, header sour
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), nil
 }
 
-func (h *hdfsSourceClient) DownloadWithResponseHeader(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (io.ReadCloser, source.ResponseHeader, error) {
+func (h *hdfsSourceClient) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
 
-	hdfsClient, path, err := h.getHDFSClientAndPath(url)
+	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	hdfsFile, err := hdfsClient.Open(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	fileInfo := hdfsFile.Stat()
@@ -185,9 +182,13 @@ func (h *hdfsSourceClient) DownloadWithResponseHeader(ctx context.Context, url s
 	}, nil
 }
 
-func (h *hdfsSourceClient) GetLastModifiedMillis(ctx context.Context, url string, header source.RequestHeader) (int64, error) {
+func (h *hdfsSourceClient) Transform(header source.Header) source.Header {
+	panic("implement me")
+}
 
-	hdfsClient, path, err := h.getHDFSClientAndPath(url)
+func (h *hdfsSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
+
+	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
 		return -1, err
 	}
@@ -201,19 +202,10 @@ func (h *hdfsSourceClient) GetLastModifiedMillis(ctx context.Context, url string
 }
 
 // getHDFSClient return hdfs client
-func (h *hdfsSourceClient) getHDFSClient(rawurl string) (*hdfs.Client, error) {
-	if len(rawurl) < 4 {
-		return nil, errors.Errorf("hdfs url invalid: url is %s", rawurl)
-	}
-
-	parse, err := url.Parse(rawurl)
-	if err != nil {
-		return nil, err
-	}
-
+func (h *hdfsSourceClient) getHDFSClient(url *url.URL) (*hdfs.Client, error) {
 	// get client for map
 	h.RWMutex.RLock()
-	if client, ok := h.clientMap[parse.Host]; ok {
+	if client, ok := h.clientMap[url.Host]; ok {
 		h.RWMutex.RUnlock()
 		return client, nil
 	}
@@ -223,7 +215,7 @@ func (h *hdfsSourceClient) getHDFSClient(rawurl string) (*hdfs.Client, error) {
 	options := hdfs.ClientOptionsFromConf(map[string]string{
 		hdfsUseDataNodeHostName: hdfsUseDataNodeHostNameValue,
 	})
-	options.Addresses = strings.Split(parse.Host, ",")
+	options.Addresses = strings.Split(url.Host, ",")
 	u, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -237,31 +229,18 @@ func (h *hdfsSourceClient) getHDFSClient(rawurl string) (*hdfs.Client, error) {
 		h.RWMutex.Unlock()
 		return nil, err
 	}
-	h.clientMap[parse.Host] = client
+	h.clientMap[url.Host] = client
 	h.RWMutex.Unlock()
 	return client, err
 }
 
-// getHDFSPath return file path
-func (h *hdfsSourceClient) getHDFSPath(urls string) (string, error) {
-	parse, err := url.Parse(urls)
-	if err != nil {
-		return "", err
-	}
-	return parse.Path, nil
-}
-
 // getHDFSClientAndPath return client and path
-func (h *hdfsSourceClient) getHDFSClientAndPath(urls string) (*hdfs.Client, string, error) {
-	client, err := h.getHDFSClient(urls)
+func (h *hdfsSourceClient) getHDFSClientAndPath(url *url.URL) (*hdfs.Client, string, error) {
+	client, err := h.getHDFSClient(url)
 	if err != nil {
-		return nil, "", errors.Errorf("hdfs create client fail, url is %s", urls)
+		return nil, "", errors.Errorf("hdfs create client failed, url is %s", url)
 	}
-	path, err := h.getHDFSPath(urls)
-	if err != nil {
-		return client, "", errors.Errorf("hdfs url path parse fail, url is %s", urls)
-	}
-	return client, path, nil
+	return client, url.Path, nil
 }
 
 func NewHDFSSourceClient(opts ...HDFSSourceClientOption) source.ResourceClient {

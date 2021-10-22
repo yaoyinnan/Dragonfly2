@@ -24,118 +24,61 @@ import (
 	"sync"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"github.com/pkg/errors"
 )
 
-var _ ResourceClient = (*clientManager)(nil)
-var _ ClientManager = (*clientManager)(nil)
+var ErrUnExpectedStatusCode = errors.New("unexpected response status code")
+
+var ErrNoClientFound = errors.New("no source client found")
 
 // ResourceClient define apis that interact with the source.
 type ResourceClient interface {
 
 	// GetContentLength get length of resource content
-	// return -l if request fail
-	// return task.IllegalSourceFileLen if response status is not StatusOK and StatusPartialContent
-	GetContentLength(ctx context.Context, request *Request) (int64, error)
+	// return types.UnKnownSourceFileLen if response status is not StatusOK and StatusPartialContent
+	GetContentLength(request *Request) (int64, error)
 
 	// IsSupportRange checks if resource supports breakpoint continuation
-	IsSupportRange(ctx context.Context, request *Request) (bool, error)
+	IsSupportRange(request *Request) (bool, error)
 
 	// IsExpired checks if a resource received or stored is the same.
-	IsExpired(ctx context.Context, request *Request) (bool, error)
+	IsExpired(request *Request) (bool, error)
 
 	// Download downloads from source
-	Download(ctx context.Context, request *Request) (io.ReadCloser, error)
+	Download(request *Request) (io.ReadCloser, error)
 
 	// DownloadWithResponseHeader download from source with responseHeader
-	DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error)
+	DownloadWithResponseHeader(request *Request) (*Response, error)
 
 	// GetLastModifiedMillis gets last modified timestamp milliseconds of resource
-	// return -l if request fail
-	GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error)
+	GetLastModifiedMillis(request *Request) (int64, error)
+
+	// TransformToConcreteHeader source header tag to concrete source header tag
+	TransformToConcreteHeader(header Header) Header
 }
 
 type ClientManager interface {
-	ResourceClient
-	Register(schema string, resourceClient ResourceClient)
-	UnRegister(schema string)
+	// Register a source client with scheme
+	Register(scheme string, resourceClient ResourceClient)
+
+	// UnRegister a source client from manager
+	UnRegister(scheme string)
+
+	// GetClient a source client by scheme
+	GetClient(scheme string) (ResourceClient, bool)
 }
 
+// clientManager implements the interface ClientManager
 type clientManager struct {
-	sync.RWMutex
+	mu      sync.RWMutex
 	clients map[string]ResourceClient
 }
 
+var _ ClientManager = (*clientManager)(nil)
+
 var _defaultManager = NewManager()
-
-func (m *clientManager) GetContentLength(ctx context.Context, request *Request) (int64, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return -1, err
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-	}
-	return sourceClient.GetContentLength(ctx, request)
-}
-
-func (m *clientManager) IsSupportRange(ctx context.Context, request *Request) (bool, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return false, err
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-	}
-	return sourceClient.IsSupportRange(ctx, request)
-}
-
-func (m *clientManager) IsExpired(ctx context.Context, request *Request) (bool, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return false, err
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-	}
-	return sourceClient.IsExpired(ctx, request)
-}
-
-func (m *clientManager) Download(ctx context.Context, request *Request) (io.ReadCloser, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return nil, err
-	}
-	return sourceClient.Download(ctx, request)
-}
-
-func (m *clientManager) DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return nil, err
-	}
-	return sourceClient.DownloadWithResponseHeader(ctx, request)
-}
-
-func (m *clientManager) GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error) {
-	sourceClient, err := m.getSourceClient(request.URL.Scheme)
-	if err != nil {
-		return -1, err
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-	}
-	return sourceClient.GetLastModifiedMillis(ctx, request)
-}
 
 func NewManager() ClientManager {
 	return &clientManager{
@@ -143,77 +86,141 @@ func NewManager() ClientManager {
 	}
 }
 
-func (m *clientManager) Register(schema string, resourceClient ResourceClient) {
-	if client, ok := m.clients[strings.ToLower(schema)]; ok {
-		logger.Infof("replace client %#v with %#v for schema %s", client, resourceClient, schema)
+func (m *clientManager) Register(scheme string, resourceClient ResourceClient) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
+		logger.Infof("replace client %#v with %#v for scheme %s", client, resourceClient, scheme)
 	}
-	m.clients[strings.ToLower(schema)] = resourceClient
+	m.clients[strings.ToLower(scheme)] = resourceClient
 }
 
-func Register(schema string, resourceClient ResourceClient) {
-	_defaultManager.Register(schema, resourceClient)
-}
-
-func (m *clientManager) UnRegister(schema string) {
-	if client, ok := m.clients[strings.ToLower(schema)]; ok {
-		logger.Infof("remove client %#v for schema %s", client, schema)
+func (m *clientManager) UnRegister(scheme string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
+		logger.Infof("remove client %#v for scheme %s", client, scheme)
 	}
-	delete(m.clients, strings.ToLower(schema))
+	delete(m.clients, strings.ToLower(scheme))
 }
 
-func UnRegister(schema string) {
-	_defaultManager.UnRegister(schema)
+func (m *clientManager) GetClient(scheme string) (ResourceClient, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	client, ok := m.clients[strings.ToLower(scheme)]
+	return client, ok
 }
 
-func GetContentLength(ctx context.Context, request *Request) (int64, error) {
-	return _defaultManager.GetContentLength(ctx, request)
+func Register(scheme string, resourceClient ResourceClient) {
+	_defaultManager.Register(scheme, resourceClient)
 }
 
-func IsSupportRange(ctx context.Context, request *Request) (bool, error) {
-	return _defaultManager.IsSupportRange(ctx, request)
+func UnRegister(scheme string) {
+	_defaultManager.UnRegister(scheme)
 }
 
-func IsExpired(ctx context.Context, request *Request) (bool, error) {
-	return _defaultManager.IsExpired(ctx, request)
-}
-
-func Download(ctx context.Context, request *Request) (io.ReadCloser, error) {
-	return _defaultManager.Download(ctx, request)
-}
-
-func DownloadWithResponseHeader(ctx context.Context, request *Request) (*Response, error) {
-	return _defaultManager.DownloadWithResponseHeader(ctx, request)
-}
-
-func GetLastModifiedMillis(ctx context.Context, request *Request) (int64, error) {
-	return _defaultManager.GetLastModifiedMillis(ctx, request)
-}
-
-// getSourceClient get a source client from source manager with specified schema.
-func (m *clientManager) getSourceClient(schema string) (ResourceClient, error) {
-	logger.Debugf("current clients: %#v", m.clients)
-	m.RLock()
-	client, ok := m.clients[strings.ToLower(schema)]
-	m.RUnlock()
-	if !ok || client == nil {
-		return nil, errors.Errorf("can not find client supporting schema %s, clients:%v", schema, m.clients)
+func GetContentLength(request *Request) (int64, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return types.UnKnownSourceFileLen, ErrNoClientFound
 	}
-	return client, nil
+	if _, ok := request.Context().Deadline(); !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		request = request.WithContext(ctx)
+		defer cancel()
+	}
+	request.Header = client.TransformToConcreteHeader(request.Header)
+	return client.GetContentLength(request)
 }
 
-func (m *clientManager) loadSourcePlugin(schema string) (ResourceClient, error) {
-	m.Lock()
-	defer m.Unlock()
+func IsSupportRange(request *Request) (bool, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return false, ErrNoClientFound
+	}
+	if _, ok := request.Context().Deadline(); !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		request = request.WithContext(ctx)
+		defer cancel()
+	}
+	request.Header = client.TransformToConcreteHeader(request.Header)
+	if request.Header.get(Range) == "" {
+		request.Header.Add(Range, "0-0")
+	}
+	return client.IsSupportRange(request)
+}
+
+func IsExpired(request *Request) (bool, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return false, ErrNoClientFound
+	}
+	if _, ok := request.Context().Deadline(); !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		request = request.WithContext(ctx)
+		defer cancel()
+	}
+
+	//lastModified := timeutils.UnixMillis(expireInfo[source.LastModified])
+	//
+	//eTag := expireInfo[headers.ETag]
+	//if lastModified <= 0 && stringutils.IsBlank(eTag) {
+	//	return true, nil
+	//}
+	//
+	//if lastModified > 0 {
+	//	copied[headers.IfModifiedSince] = expireInfo[headers.LastModified]
+	//}
+	//if !stringutils.IsBlank(eTag) {
+	//	copied[headers.IfNoneMatch] = eTag
+	//}
+	return client.IsExpired(request)
+}
+
+func GetLastModifiedMillis(request *Request) (int64, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return -1, ErrNoClientFound
+	}
+	if _, ok := request.Context().Deadline(); !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		request = request.WithContext(ctx)
+		defer cancel()
+	}
+	return client.GetLastModifiedMillis(request)
+}
+
+func Download(request *Request) (io.ReadCloser, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return nil, ErrNoClientFound
+	}
+	request.Header = client.TransformToConcreteHeader(request.Header)
+	return client.Download(request)
+}
+
+func DownloadWithResponseHeader(request *Request) (*Response, error) {
+	client, ok := _defaultManager.GetClient(request.URL.Scheme)
+	if !ok {
+		return nil, ErrNoClientFound
+	}
+	request.Header = client.TransformToConcreteHeader(request.Header)
+	return client.DownloadWithResponseHeader(request)
+}
+
+func (m *clientManager) loadSourcePlugin(scheme string) (ResourceClient, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// double check
-	client, ok := m.clients[schema]
+	client, ok := m.clients[scheme]
 	if ok {
 		return client, nil
 	}
 
-	client, err := LoadPlugin(schema)
+	client, err := LoadPlugin(scheme)
 	if err != nil {
 		return nil, err
 	}
-	m.clients[schema] = client
+	m.clients[scheme] = client
 	return client, nil
 }

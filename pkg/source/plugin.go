@@ -23,17 +23,17 @@ import (
 )
 
 const (
-	pluginMetadataSchema = "schema"
+	pluginMetadataScheme = "scheme"
 )
 
-func LoadPlugin(schema string) (ResourceClient, error) {
+func LoadPlugin(scheme string) (ResourceClient, error) {
 	// TODO init option
-	client, meta, err := dfplugin.Load(dfplugin.PluginTypeResource, schema, map[string]string{})
+	client, meta, err := dfplugin.Load(dfplugin.PluginTypeResource, scheme, map[string]string{})
 	if err != nil {
 		return nil, err
 	}
-	if meta[pluginMetadataSchema] != schema {
-		return nil, errors.New("support schema not match")
+	if meta[pluginMetadataScheme] != scheme {
+		return nil, errors.New("support scheme not match")
 	}
 	if rc, ok := client.(ResourceClient); ok {
 		return rc, err

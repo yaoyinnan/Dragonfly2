@@ -136,7 +136,9 @@ func TestIsSupportRange_FileNotExist(t *testing.T) {
 
 	defer patch.Reset()
 
-	supportRange, err := sourceClient.IsSupportRange(context.Background(), hdfsNotExistFileURL, nil)
+	request, err := source.NewRequest(hdfsNotExistFileURL)
+	assert.Nil(t, err)
+	supportRange, err := sourceClient.IsSupportRange(request)
 	assert.Equal(t, false, supportRange)
 	assert.EqualError(t, err, "stat /user/root/input/f3.txt: file does not exist")
 }
@@ -144,7 +146,9 @@ func TestIsSupportRange_FileNotExist(t *testing.T) {
 //
 func TestIsExpired_NoHeader(t *testing.T) {
 	// header not have Last-Modified
-	expired, err := sourceClient.IsExpired(context.Background(), hdfsExistFileURL, nil, map[string]string{})
+	request, err := source.NewRequest(hdfsExistFileURL)
+	assert.Nil(t, err)
+	expired, err := sourceClient.IsExpired(request)
 	assert.Equal(t, true, expired)
 	assert.Nil(t, err)
 }
@@ -161,8 +165,10 @@ func TestIsExpired_LastModifiedExpired(t *testing.T) {
 
 	defer patch.Reset()
 
+	request, err := source.NewRequest(hdfsExistFileURL)
+	assert.Nil(t, err)
 	// header have Last-Modified
-	expired, err := sourceClient.IsExpired(context.Background(), hdfsExistFileURL, nil, map[string]string{
+	expired, err := sourceClient.IsExpired(request, map[string]string{
 		headers.LastModified: "2020-01-01 00:00:00",
 	})
 	assert.Equal(t, true, expired)

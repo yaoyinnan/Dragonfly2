@@ -19,6 +19,8 @@ package source
 import (
 	"context"
 	"net/url"
+
+	"github.com/pkg/errors"
 )
 
 type Request struct {
@@ -29,6 +31,34 @@ type Request struct {
 	// It is unexported to prevent people from using Context wrong
 	// and mutating the contexts held by callers of the same request.
 	ctx context.Context
+}
+
+func NewRequest(rawURL string) (*Request, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Request{
+		URL:    u,
+		Header: make(Header),
+		ctx:    context.Background(),
+	}, nil
+}
+
+func NewRequestWithContext(ctx context.Context, rawURL string) (*Request, error) {
+	if ctx == nil {
+		return nil, errors.New("nil Context")
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	req := &Request{
+		ctx:    ctx,
+		URL:    u,
+		Header: make(Header),
+	}
+	return req, nil
 }
 
 // Context returns the request's context. To change the context, use

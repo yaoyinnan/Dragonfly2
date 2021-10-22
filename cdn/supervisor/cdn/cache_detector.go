@@ -70,7 +70,7 @@ func (cd *cacheDetector) detectCache(ctx context.Context, task *types.SeedTask, 
 	}()
 	result, err = cd.doDetect(ctx, task, fileDigest)
 	if err != nil {
-		task.Log().Infof("failed to detect cache, reset cache: %v", err)
+		task.Log().Infof("detect cache failed, reset storage cache: %v", err)
 		metaData, err := cd.resetCache(task)
 		if err == nil {
 			result = &cacheResult{
@@ -92,14 +92,21 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	if err != nil {
 		return nil, errors.Wrapf(err, "read file meta data")
 	}
-	if err := checkSameFile(task, fileMetaData); err != nil {
+	if err := IsSameFile(task, fileMetaData); err != nil {
 		return nil, errors.Wrapf(err, "check same file")
 	}
-	ctx, expireCancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer expireCancel()
-	expired, err := source.IsExpired(ctx, task.RawURL, task.Header, fileMetaData.ExpireInfo)
+	request, err := source.NewRequest(task.RawURL)
 	if err != nil {
-		// 如果获取失败，则认为没有过期，防止打爆源
+		return nil, errors.Wrapf(err, "create request")
+	}
+	request.Header.Add(source.LastModified, fileMetaData.ExpireInfo[source.LastModified])
+	request.Header.Add(source.ETag, fileMetaData.ExpireInfo[source.ETag])
+	for k, v := range task.Header {
+		request.Header.Add(k, v)
+	}
+	expired, err := source.IsExpired(request)
+	if err != nil {
+		// If the check fails, the resource is regarded as not expired to prevent the source from being knocked down
 		task.Log().Warnf("failed to check whether the source is expired. To prevent the source from being suspended, "+
 			"assume that the source is not expired: %v", err)
 	}
@@ -109,14 +116,18 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	}
 	// not expired
 	if fileMetaData.Finish {
-		// quickly detect the cache situation through the meta data
+		// quickly detect the cache situation through the metadata
 		return cd.parseByReadMetaFile(task.ID, fileMetaData)
 	}
 	// check if the resource supports range request. if so,
 	// detect the cache situation by reading piece meta and data file
 	ctx, rangeCancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer rangeCancel()
-	supportRange, err := source.IsSupportRange(ctx, task.RawURL, task.Header)
+	request, err := source.NewRequest(task.RawURL)
+	if err != nil {
+		return nil, err
+	}
+	supportRange, err := source.IsSupportRange(request)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if support range")
 	}
@@ -162,7 +173,7 @@ func (cd *cacheDetector) parseByReadMetaFile(taskID string, fileMetaData *storag
 func (cd *cacheDetector) parseByReadFile(taskID string, metaData *storage.FileMetaData, fileDigest hash.Hash) (*cacheResult, error) {
 	reader, err := cd.metaDataManager.readDownloadFile(taskID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "read data file")
+		return nil, errors.Wrapf(err, "read download data file")
 	}
 	defer reader.Close()
 	tempRecords, err := cd.metaDataManager.readPieceMetaRecords(taskID)
@@ -224,25 +235,38 @@ func (cd *cacheDetector) resetCache(task *types.SeedTask) (*storage.FileMetaData
 /*
    helper functions
 */
-// checkSameFile check whether meta file is modified
-func checkSameFile(task *types.SeedTask, metaData *storage.FileMetaData) error {
-	if task == nil || metaData == nil {
-		return errors.Errorf("task or metaData is nil, task: %v, metaData: %v", task, metaData)
-	}
+// IsSameFile check whether meta file is modified
+func IsSameFile(task *types.SeedTask, metaData *storage.FileMetaData) bool {
 
-	if metaData.PieceSize != task.PieceSize {
-		return errors.Errorf("meta piece size(%d) is not equals with task piece size(%d)", metaData.PieceSize,
-			task.PieceSize)
+	if task == nil || metaData == nil {
+		task.Log().Warnf("task or metaData is nil, task: %v, metaData: %v", task, metaData)
+		return false
 	}
 
 	if metaData.TaskID != task.ID {
-		return errors.Errorf("meta task TaskId(%s) is not equals with task TaskId(%s)", metaData.TaskID, task.ID)
+		task.Log().Warnf("meta task TaskId(%s) is not equals with task TaskId(%s)", metaData.TaskID, task.ID)
+		return false
 	}
 
 	if metaData.TaskURL != task.TaskURL {
-		return errors.Errorf("meta task taskUrl(%s) is not equals with task taskUrl(%s)", metaData.TaskURL, task.TaskURL)
+		task.Log().Warnf("meta task taskUrl(%s) is not equals with task taskUrl(%s)", metaData.TaskURL, task.TaskURL)
+		return false
 	}
-	if !stringutils.IsBlank(metaData.SourceRealDigest) && !stringutils.IsBlank(task.RequestDigest) &&
+
+	if metaData.PieceSize != task.PieceSize {
+		task.Log().Warnf("meta piece size(%d) is not equals with task piece size(%d)", metaData.PieceSize,
+			task.PieceSize)
+		return false
+	}
+
+	if stringutils.IsEmpty(task.Digest) && task.Digest != metaData.SourceRealDigest {
+
+	}
+
+	if stringutils.IsEmpty(task.Tag) && task.Tag != metaData.TaskURL {
+
+	}
+	if !stringutils.IsBlank(metaData.SourceRealDigest) && !stringutils.IsBlank(task.Digest) &&
 		metaData.SourceRealDigest != task.RequestDigest {
 		return errors.Errorf("meta task source digest(%s) is not equals with task request digest(%s)",
 			metaData.SourceRealDigest, task.RequestDigest)

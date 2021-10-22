@@ -17,14 +17,11 @@
 package types
 
 import (
-	"net/url"
 	"strings"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
-	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
-	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 
 type SeedTask struct {
@@ -49,9 +46,6 @@ type SeedTask struct {
 	// PieceSize is the size of pieces in bytes
 	PieceSize int32 `json:"pieceSize,omitempty"`
 
-	// UrlMeta is meta info of downloading request url
-	UrlMeta *base.UrlMeta `json:"header,omitempty"`
-
 	// CdnStatus is the status of the created task related to CDN functionality.
 	//
 	// Enum: [WAITING RUNNING FAILED SUCCESS SOURCE_ERROR]
@@ -59,9 +53,6 @@ type SeedTask struct {
 
 	// PieceTotal is the total count of all pieces
 	PieceTotal int32 `json:"pieceTotal,omitempty"`
-
-	// RequestDigest is the digest of request which is provided by dfget cli
-	RequestDigest string `json:"requestDigest,omitempty"`
 
 	// SourceRealDigest when CDN finishes downloading file/image from the source location,
 	// the md5 sum of the source file will be calculated as the value of the SourceRealDigest.
@@ -71,7 +62,25 @@ type SeedTask struct {
 	// PieceMd5Sign Is the SHA256 signature of all pieces md5 signature
 	PieceMd5Sign string `json:"pieceMd5Sign,omitempty"`
 
+	// Digest checks integrity of url content, for example md5:xxx or sha256:yyy
+	Digest string `json:"digest"`
+
+	// Tag identifies different task for same url, conflict with digest
+	Tag string `json:"tag"`
+
+	// Range content range for url
+	Range string `json:"range"`
+
+	// Filter url used to generate task id
+	Filter string `json:"filter"`
+
+	// Header other url header infos
+	Header map[string]string `json:"header"`
+
 	logger *logger.SugaredLoggerOnWith
+}
+
+type UrlMeta struct {
 }
 
 const (
@@ -79,19 +88,20 @@ const (
 )
 
 func NewSeedTask(taskID string, rawURL string, urlMeta *base.UrlMeta) *SeedTask {
-	taskURL := rawURL
-	if urlMeta != nil && !stringutils.IsEmpty(urlMeta.Filter) {
-		taskURL = urlutils.FilterURLParam(rawURL, strings.Split(urlMeta.Filter, "&"))
+	if urlMeta == nil {
+		urlMeta = &base.UrlMeta{}
 	}
 	return &SeedTask{
-		ID:            taskID,
-		RawURL:        rawURL,
-		TaskURL:       taskURL,
-		UrlMeta:       urlMeta,
-		RequestDigest: urlMeta.Digest,
-
-		CdnStatus:        TaskInfoCdnStatusWaiting,
+		ID:               taskID,
+		RawURL:           rawURL,
+		TaskURL:          urlutils.FilterURLParam(rawURL, strings.Split(urlMeta.Filter, "&")),
 		SourceFileLength: UnKnownSourceFileLen,
+		CdnStatus:        TaskInfoCdnStatusWaiting,
+		Digest:           urlMeta.Digest,
+		Tag:              urlMeta.Tag,
+		Range:            urlMeta.Range,
+		Filter:           urlMeta.Filter,
+		Header:           urlMeta.Header,
 		logger:           logger.WithTaskID(taskID),
 	}
 }
@@ -103,7 +113,9 @@ func (task *SeedTask) IsSuccess() bool {
 
 // IsFrozen if task status is frozen
 func (task *SeedTask) IsFrozen() bool {
-	return task.CdnStatus == TaskInfoCdnStatusFailed || task.CdnStatus == TaskInfoCdnStatusWaiting || task.CdnStatus == TaskInfoCdnStatusSourceError
+	return task.CdnStatus == TaskInfoCdnStatusFailed ||
+		task.CdnStatus == TaskInfoCdnStatusWaiting ||
+		task.CdnStatus == TaskInfoCdnStatusSourceError
 }
 
 // IsWait if task status is wait
@@ -136,17 +148,8 @@ func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
 	return task.logger
 }
 
-func (task *SeedTask) GetSourceRequest() *source.Request {
-	return &source.Request{
-		URL: url.Parse(task.RawURL),
-		Header: source.RequestHeader{
-			Header: nil,
-		},
-	}
-}
-
 // IsEqual check whether the two task provided are the same
-func (task *SeedTask) IsEqual(task1, task2 *SeedTask) bool {
+func IsEqual(task1, task2 *SeedTask) bool {
 	if task1 == task2 {
 		return true
 	}
@@ -159,7 +162,7 @@ func (task *SeedTask) IsEqual(task1, task2 *SeedTask) bool {
 		return false
 	}
 
-	return reflect.DeepEqual(task1.UrlMeta, task2.UrlMeta)
+	return true
 }
 
 const (

@@ -185,11 +185,7 @@ func (mm *metaDataManager) getPieceMd5Sign(taskID string) (string, []*storage.Pi
 }
 
 func (mm *metaDataManager) readFileMetaData(taskID string) (*storage.FileMetaData, error) {
-	fileMeta, err := mm.storage.ReadFileMetaData(taskID)
-	if err != nil {
-		return nil, err
-	}
-	return fileMeta, nil
+	return mm.storage.ReadFileMetaData(taskID)
 }
 
 func (mm *metaDataManager) statDownloadFile(taskID string) (*storedriver.StorageInfo, error) {

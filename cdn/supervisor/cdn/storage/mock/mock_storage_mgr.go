@@ -81,7 +81,7 @@ func (mr *MockManagerMockRecorder) DeleteTask(arg0 interface{}) *gomock.Call {
 }
 
 // Initialize mocks base method.
-func (m *MockManager) Initialize(arg0 supervisor.SeedTaskMgr) {
+func (m *MockManager) Initialize(arg0 supervisor.SeedTaskManager) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Initialize", arg0)
 }

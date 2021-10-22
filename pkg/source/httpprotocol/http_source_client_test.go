@@ -51,12 +51,12 @@ func (suite *HTTPSourceClientTestSuite) TearDownSuite() {
 }
 
 var (
-	timeoutURL               = "http://timeout.com"
-	normalURL                = "http://normal.com"
-	errorURL                 = "http://error.com"
-	forbiddenURL             = "http://forbidden.com"
-	notfoundURL              = "http://notfound.com"
-	normalNotSupportRangeURL = "http://notsuppertrange.com"
+	timeoutURL, _               = url.Parse("http://timeout.com")
+	normalURL, _                = url.Parse("http://normal.com")
+	errorURL, _                 = url.Parse("http://error.com")
+	forbiddenURL, _             = url.Parse("http://forbidden.com")
+	notfoundURL, _              = url.Parse("http://notfound.com")
+	normalNotSupportRangeURL, _ = url.Parse("http://notsuppertrange.com")
 )
 
 var (
@@ -68,13 +68,13 @@ var (
 
 func (suite *HTTPSourceClientTestSuite) SetupTest() {
 	httpmock.Reset()
-	httpmock.RegisterResponder(http.MethodGet, timeoutURL, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder(http.MethodGet, timeoutURL.String(), func(request *http.Request) (*http.Response, error) {
 		// To simulate the timeout
 		time.Sleep(5 * time.Second)
 		return httpmock.NewStringResponse(http.StatusOK, "ok"), nil
 	})
 
-	httpmock.RegisterResponder(http.MethodGet, normalURL, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder(http.MethodGet, normalURL.String(), func(request *http.Request) (*http.Response, error) {
 		if rang := request.Header.Get(headers.Range); rang != "" {
 			r, _ := rangeutils.ParseRange(rang[6:])
 			res := &http.Response{
@@ -112,10 +112,10 @@ func (suite *HTTPSourceClientTestSuite) SetupTest() {
 		return res, nil
 	})
 
-	httpmock.RegisterResponder(http.MethodGet, forbiddenURL, httpmock.NewStringResponder(http.StatusForbidden, "forbidden"))
-	httpmock.RegisterResponder(http.MethodGet, notfoundURL, httpmock.NewStringResponder(http.StatusNotFound, "not found"))
-	httpmock.RegisterResponder(http.MethodGet, normalNotSupportRangeURL, httpmock.NewStringResponder(http.StatusOK, testContent))
-	httpmock.RegisterResponder(http.MethodGet, errorURL, httpmock.NewErrorResponder(fmt.Errorf("error")))
+	httpmock.RegisterResponder(http.MethodGet, forbiddenURL.String(), httpmock.NewStringResponder(http.StatusForbidden, "forbidden"))
+	httpmock.RegisterResponder(http.MethodGet, notfoundURL.String(), httpmock.NewStringResponder(http.StatusNotFound, "not found"))
+	httpmock.RegisterResponder(http.MethodGet, normalNotSupportRangeURL.String(), httpmock.NewStringResponder(http.StatusOK, testContent))
+	httpmock.RegisterResponder(http.MethodGet, errorURL.String(), httpmock.NewErrorResponder(fmt.Errorf("error")))
 }
 
 func (suite *HTTPSourceClientTestSuite) TestNewHTTPSourceClient() {
@@ -132,47 +132,38 @@ func (suite *HTTPSourceClientTestSuite) TestNewHTTPSourceClient() {
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponseHeader() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	response, err := suite.DownloadWithResponseHeader(ctx, &source.Request{
-		URL:    timeoutURL,
-		Header: source.RequestHeader{}}
-	})
+	request, err := source.NewRequestWithContext(ctx, timeoutURL.String())
+	suite.Nil(err)
+	response, err := suite.DownloadWithResponseHeader(request)
 	cancel()
 	suite.NotNil(err)
 	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
-	suite.Nil(reader)
-	suite.Nil(responseHeader)
+	suite.Nil(response)
 
-	type args struct {
-		ctx    context.Context
-		url    string
-		header source.RequestHeader
-	}
 	tests := []struct {
 		name       string
-		args       args
+		request    *source.Request
 		content    string
-		expireInfo source.ResponseHeader
+		expireInfo source.Header
 		wantErr    error
 	}{
 		{
 			name: "normal download",
-			args: args{
-				ctx:    context.Background(),
-				url:    normalURL,
-				header: nil,
+			request: &source.Request{
+				URL:    normalURL,
+				Header: nil,
 			},
 			content: testContent,
-			expireInfo: source.ResponseHeader{
-				source.LastModified: lastModified,
-				source.ETag:         etag,
+			expireInfo: source.Header{
+				source.LastModified: []string{lastModified},
+				source.ETag:         []string{etag},
 			},
 			wantErr: nil,
 		}, {
 			name: "range download",
-			args: args{
-				ctx:    context.Background(),
-				url:    normalURL,
-				header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s", "0-3")},
+			request: &source.Request{
+				URL:    normalURL,
+				Header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s", "0-3")},
 			},
 			content: testContent[0:3],
 			expireInfo: source.ResponseHeader{
@@ -182,54 +173,45 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 			wantErr: nil,
 		}, {
 			name: "not found download",
-			args: args{
-				ctx:    context.Background(),
-				url:    notfoundURL,
-				header: nil,
+			request: &source.Request{
+				URL: notfoundURL,
 			},
 			content:    "",
 			expireInfo: nil,
 			wantErr:    fmt.Errorf("unexpected status code: %d", http.StatusNotFound),
 		}, {
 			name: "error download",
-			args: args{
-				ctx:    context.Background(),
-				url:    errorURL,
-				header: nil,
+			request: &source.Request{
+				URL:    errorURL,
 			},
 			content:    "",
 			expireInfo: nil,
 			wantErr: &url.Error{
 				Op:  "Get",
-				URL: errorURL,
+				URL: errorURL.String(),
 				Err: fmt.Errorf("error"),
 			},
 		},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			reader, responseHeader, err := suite.DownloadWithResponseHeader(tt.args.ctx, tt.args.url, tt.args.header, nil)
+			response, err := suite.DownloadWithResponseHeader(tt.request)
 			suite.Equal(tt.wantErr, err)
 			if err != nil {
 				return
 			}
-			bytes, err := ioutil.ReadAll(reader)
+			bytes, err := ioutil.ReadAll(response.Body)
 			suite.Nil(err)
 			suite.Equal(tt.content, string(bytes))
-			suite.Equal(tt.expireInfo, responseHeader)
+			suite.Equal(tt.expireInfo, response.Header)
 		})
 	}
 }
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
-	type args struct {
-		ctx    context.Context
-		url    string
-		header source.RequestHeader
-	}
 	tests := []struct {
 		name    string
-		args    args
+		request *source.Request
 		want    int64
 		wantErr error
 	}{
@@ -241,7 +223,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.GetContentLength(tt.args.ctx, tt.args.url, tt.args.header, nil)
+			got, err := suite.GetContentLength(tt.request)
 			suite.Equal(tt.wantErr, err)
 			suite.Equal(tt.want, got)
 		})
@@ -249,15 +231,9 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
 }
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsExpired() {
-	type args struct {
-		ctx        context.Context
-		url        string
-		header     source.RequestHeader
-		expireInfo map[string]string
-	}
 	tests := []struct {
 		name    string
-		args    args
+		request *source.Request
 		want    bool
 		wantErr bool
 	}{
@@ -269,7 +245,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsExpired() {
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.IsExpired(tt.args.ctx, tt.args.url, tt.args.header, tt.args.expireInfo)
+			got, err := suite.IsExpired(tt.request)
 			suite.Equal(tt.want, got)
 			suite.Equal(tt.wantErr, err != nil)
 		})
@@ -283,7 +259,9 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	})
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 1*time.Second)
-	support, err := suite.IsSupportRange(ctx, timeoutURL, nil)
+	request, err := source.NewRequestWithContext(ctx, timeoutURL)
+	suite.Nil(err)
+	support, err := suite.IsSupportRange(request)
 	cancel()
 	suite.NotNil(err)
 	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
@@ -291,25 +269,26 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	httpmock.RegisterResponder(http.MethodGet, normalURL, httpmock.NewStringResponder(http.StatusPartialContent, ""))
 	httpmock.RegisterResponder(http.MethodGet, "http://notSupportRange.com", httpmock.NewStringResponder(http.StatusOK, ""))
 	httpmock.RegisterResponder(http.MethodGet, "http://error.com", httpmock.NewErrorResponder(fmt.Errorf("xxx")))
-	type args struct {
-		ctx    context.Context
-		url    string
-		header map[string]string
-	}
+
+	supportRequest, err := source.NewRequest(normalURL)
+	supportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
+	suite.Nil(err)
+	notSupportRequest, err := source.NewRequest(normalNotSupportRangeURL)
+	supportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3")
+	suite.Nil(err)
 	tests := []struct {
 		name    string
-		args    args
+		request *source.Request
 		want    bool
 		wantErr bool
 	}{
-		{name: "support", args: args{ctx: context.Background(), url: normalURL, header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s",
-			"0-3")}}, want: true, wantErr: false},
-		{name: "notSupport", args: args{ctx: context.Background(), url: normalNotSupportRangeURL, header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s",
-			"0-3")}}, want: false, wantErr: false},
+		{name: "support", request: supportRequest, want: true, wantErr: false},
+		{name: "notSupport", request: notSupportRequest, want: false, wantErr: false},
 	}
+
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.IsSupportRange(tt.args.ctx, tt.args.url, tt.args.header)
+			got, err := suite.IsSupportRange(tt.request)
 			suite.Equal(tt.wantErr, err != nil)
 			suite.Equal(tt.want, got)
 		})

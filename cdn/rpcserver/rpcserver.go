@@ -109,15 +109,15 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	defer span.End()
 	span.SetAttributes(config.AttributeObtainSeedsRequest.String(req.String()))
 	span.SetAttributes(config.AttributeTaskID.String(req.TaskId))
+	logger.Infof("obtain seeds request: %+v", req)
 	defer func() {
 		if r := recover(); r != nil {
 			err = dferrors.Newf(dfcodes.UnknownError, "obtain task(%s) seeds encounter an panic: %v", req.TaskId, r)
 			span.RecordError(err)
 			logger.WithTaskID(req.TaskId).Errorf("%v", err)
 		}
+		logger.Infof("seeds task %s result success: %t", req.TaskId, err == nil)
 	}()
-	logger.Infof("obtain seeds request: %+v", req)
-
 	if err := checkSeedRequestParams(req); err != nil {
 		err = dferrors.Newf(dfcodes.BadRequest, "bad seed request for task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
@@ -137,12 +137,6 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	registerTask, err = css.taskMgr.Get(req.TaskId)
-	if err != nil {
-		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
-		span.RecordError(err)
-		return err
-	}
 	peerID := cdnutil.GenCDNPeerID(req.TaskId)
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
@@ -156,11 +150,16 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 				PieceOffset: piece.OriginRange.StartIndex,
 				PieceStyle:  base.PieceStyle(piece.PieceStyle),
 			},
-			Done:          false,
-			ContentLength: registerTask.SourceFileLength,
+			Done: false,
 		}
 	}
-	if registerTask.CdnStatus != types.TaskInfoCdnStatusSuccess {
+	task, err := css.taskMgr.Get(req.TaskId)
+	if err != nil {
+		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
+		span.RecordError(err)
+		return err
+	}
+	if !task.IsSuccess() {
 		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status error , status: %s", req.TaskId, task.CdnStatus)
 		span.RecordError(err)
 		return err
@@ -175,37 +174,23 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	return nil
 }
 
-func constructRegisterTask(req *cdnsystem.SeedRequest) *types.SeedTask {
-	taskURL := req.Url
-	if req.UrlMeta != nil && !stringutils.IsEmpty(req.UrlMeta.Filter) {
-		taskURL = urlutils.FilterURLParam(req.Url, strings.Split(req.UrlMeta.Filter, "&"))
-	}
-	return types.NewSeedTask(req.TaskId, req.UrlMeta){
-		TaskID:           req.TaskId,
-		URL:              req.Url,
-		TaskURL:          taskURL,
-		Header:           req.UrlMeta,
-		CdnStatus:        types.TaskInfoCdnStatusWaiting,
-		SourceFileLength: types.IllegalSourceFileLen,
-	}
-}
-
 func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest) (piecePacket *base.PiecePacket, err error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanGetPieceTasks, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 	span.SetAttributes(config.AttributeGetPieceTasksRequest.String(req.String()))
 	span.SetAttributes(config.AttributeTaskID.String(req.TaskId))
+	logger.Infof("get piece tasks: %+v", req)
 	defer func() {
 		if r := recover(); r != nil {
 			err = dferrors.Newf(dfcodes.UnknownError, "get task(%s) piece tasks encounter an panic: %v", req.TaskId, r)
 			span.RecordError(err)
 			logger.WithTaskID(req.TaskId).Errorf("%v", err)
 		}
+		logger.Infof("get piece tasks of task %s result success: %t", req.TaskId, err == nil)
 	}()
-	logger.Infof("get piece tasks: %+v", req)
 	if err := checkPieceTasksRequestParams(req); err != nil {
-		err = dferrors.Newf(dfcodes.BadRequest, "failed to validate seed request for task(%s): %v", req.TaskId, err)
+		err = dferrors.Newf(dfcodes.BadRequest, "bad request for task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return nil, err
 	}
@@ -221,13 +206,13 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		return nil, err
 	}
 	if task.IsError() {
-		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "fail to download task(%s), cdnStatus: %s", task.TaskID, task.CdnStatus)
+		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "fail to download task(%s), cdnStatus: %s", task.ID, task.CdnStatus)
 		span.RecordError(err)
 		return nil, err
 	}
 	pieces, err := css.taskMgr.GetPieces(ctx, req.TaskId)
 	if err != nil {
-		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s) from cdn: %v", task.TaskID, err)
+		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s) from cdn: %v", task.ID, err)
 		span.RecordError(err)
 		return nil, err
 	}
@@ -262,10 +247,10 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 
 func checkPieceTasksRequestParams(req *base.PieceTaskRequest) error {
 	if stringutils.IsBlank(req.TaskId) {
-		return errors.Wrap(cdnerrors.ErrInvalidValue, "taskId is nil")
+		return errors.Wrap(cdnerrors.ErrInvalidValue, "taskID is empty")
 	}
 	if stringutils.IsBlank(req.SrcPid) {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "src peer id is nil")
+		return errors.Wrapf(cdnerrors.ErrInvalidValue, "src peerID is empty")
 	}
 	if req.StartNum < 0 {
 		return errors.Wrapf(cdnerrors.ErrInvalidValue, "invalid starNum %d", req.StartNum)

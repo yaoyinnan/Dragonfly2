@@ -19,7 +19,6 @@ package task
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
@@ -40,10 +39,9 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	ctx, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
 	defer span.End()
 	taskID := registerTask.ID
-	synclock.Lock(taskID, true)
-	defer synclock.UnLock(taskID, true)
-	if key, err := tm.taskURLUnReachableStore.Get(taskID); err == nil {
-		if unReachableStartTime, ok := key.(time.Time); ok && time.Since(unReachableStartTime) < tm.cfg.FailAccessInterval {
+	if key, err := tm.taskURLUnReachableStore.GetAsTime(taskID); err == nil {
+		if time.Since(key) < tm.cfg.FailAccessInterval {
+			// TODO 校验Header
 			span.AddEvent(config.EventHitUnReachableURL)
 			return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: registerTask.RawURL}, "hit unReachable cache and interval less than %d", tm.cfg.FailAccessInterval)
 		}
@@ -51,12 +49,13 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		tm.taskURLUnReachableStore.Delete(taskID)
 		logger.Debugf("delete taskID: %s from url unReachable store", taskID)
 	}
-
+	synclock.Lock(taskID, false)
+	defer synclock.UnLock(taskID, false)
 	// using the existing task if it already exists corresponding to taskID
 	if v, err := tm.taskStore.Get(taskID); err == nil {
 		span.SetAttributes(config.AttributeIfReuseTask.Bool(true))
 		existTask := v.(*types.SeedTask)
-		if !isSameTask(existTask, registerTask) {
+		if !types.IsEqual(existTask, registerTask) {
 			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask))
 			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask)}
 		}
@@ -76,6 +75,8 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 	span.AddEvent(config.EventRequestSourceFileLength)
+	request, err := source.NewRequest(registerTask.RawURL)
+	registerTask.Header
 	sourceFileLength, err := source.GetContentLength(ctx, registerTask.GetSourceRequest())
 	if err != nil {
 		task.Log().Errorf("failed to get url (%s) content length: %v", task.RawURL, err)
@@ -97,9 +98,9 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		}
 	}
 
-	// if success to get the information successfully with the req.Header then update the task.Header to req.Header.
-	if registerTask.Header != nil {
-		task.Header = createTask.Header
+	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
+	if registerTask.UrlMeta != nil {
+		task.UrlMeta = registerTask.UrlMeta
 	}
 
 	// calculate piece size and update the PieceSize and PieceTotal
@@ -109,7 +110,6 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	}
 	tm.taskStore.Add(task.ID, task)
 	task.Log().Debugf("success add task: %+v into taskStore", task)
-
 	return task, nil
 }
 

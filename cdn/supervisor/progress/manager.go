@@ -60,18 +60,6 @@ func NewManager() (supervisor.SeedProgressManager, error) {
 func (pm *Manager) InitSeedProgress(ctx context.Context, taskID string) {
 	span := trace.SpanFromContext(ctx)
 	span.AddEvent(config.EventInitSeedProgress)
-	pm.mu.Lock(taskID, true)
-	if _, ok := pm.seedSubscribers.Load(taskID); ok {
-		logger.WithTaskID(taskID).Debugf("the task seedSubscribers already exist")
-		if _, ok := pm.taskPieceMetaRecords.Load(taskID); ok {
-			logger.WithTaskID(taskID).Debugf("the task taskPieceMetaRecords already exist")
-			pm.mu.UnLock(taskID, true)
-			return
-		}
-	}
-	pm.mu.UnLock(taskID, true)
-	pm.mu.Lock(taskID, false)
-	defer pm.mu.UnLock(taskID, false)
 	if _, loaded := pm.seedSubscribers.LoadOrStore(taskID, list.New()); loaded {
 		logger.WithTaskID(taskID).Info("the task seedSubscribers already exist")
 	}
@@ -120,7 +108,7 @@ func (pm *Manager) PublishPiece(ctx context.Context, taskID string, record *type
 	logger.Debugf("seed piece meta record %+v", record)
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
-	err := pm.setPieceMetaRecord(taskID, record)
+	err := pm.addPieceMetaRecord(taskID, record)
 	if err != nil {
 		return fmt.Errorf("set piece meta record: %v", err)
 	}
@@ -200,13 +188,11 @@ func (pm *Manager) Clear(taskID string) error {
 }
 
 func (pm *Manager) GetPieces(ctx context.Context, taskID string) (records []*types.SeedPiece, err error) {
-	pm.mu.Lock(taskID, true)
-	defer pm.mu.UnLock(taskID, true)
 	return pm.getPieceMetaRecordsByTaskID(taskID)
 }
 
-// setPieceMetaRecord
-func (pm *Manager) setPieceMetaRecord(taskID string, record *types.SeedPiece) error {
+// addPieceMetaRecord
+func (pm *Manager) addPieceMetaRecord(taskID string, record *types.SeedPiece) error {
 	pieceRecords, err := pm.taskPieceMetaRecords.GetAsMap(taskID)
 	if err != nil {
 		return err

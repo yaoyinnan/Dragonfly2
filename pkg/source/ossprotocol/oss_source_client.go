@@ -17,15 +17,12 @@
 package ossprotocol
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
-
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 
 	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -70,16 +67,20 @@ type ossSourceClient struct {
 	accessMap sync.Map
 }
 
-func (osc *ossSourceClient) Download(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (io.ReadCloser, error) {
+func (osc *ossSourceClient) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
 	panic("implement me")
 }
 
-func (osc *ossSourceClient) GetLastModifiedMillis(ctx context.Context, url string, header source.RequestHeader) (int64, error) {
+func (osc *ossSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
 	panic("implement me")
 }
 
-func (osc *ossSourceClient) GetContentLength(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (int64, error) {
-	resHeader, err := osc.getMeta(ctx, url, header)
+func (osc *ossSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
+	panic("implement me")
+}
+
+func (osc *ossSourceClient) GetContentLength(request *source.Request) (int64, error) {
+	resHeader, err := osc.getMeta(request)
 	if err != nil {
 		return -1, err
 	}
@@ -92,22 +93,22 @@ func (osc *ossSourceClient) GetContentLength(ctx context.Context, url string, he
 	return contentLen, nil
 }
 
-func (osc *ossSourceClient) IsSupportRange(ctx context.Context, url string, header source.RequestHeader) (bool, error) {
-	_, err := osc.getMeta(ctx, url, header)
+func (osc *ossSourceClient) IsSupportRange(request *source.Request) (bool, error) {
+	_, err := osc.getMeta(request)
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (osc *ossSourceClient) IsExpired(ctx context.Context, url string, header source.RequestHeader, expireInfo map[string]string) (bool, error) {
+func (osc *ossSourceClient) IsExpired(request *source.Request) (bool, error) {
 	lastModified := expireInfo[oss.HTTPHeaderLastModified]
 	eTag := expireInfo[oss.HTTPHeaderEtag]
 	if stringutils.IsBlank(lastModified) && stringutils.IsBlank(eTag) {
 		return true, nil
 	}
 
-	resHeader, err := osc.getMeta(ctx, url, header)
+	resHeader, err := osc.getMeta(url, header)
 	if err != nil {
 		return false, err
 	}
@@ -115,7 +116,7 @@ func (osc *ossSourceClient) IsExpired(ctx context.Context, url string, header so
 		HTTPHeaderEtag], nil
 }
 
-func (osc *ossSourceClient) DownloadWithResponseHeader(ctx context.Context, url string, header source.RequestHeader, rang *rangeutils.Range) (io.ReadCloser, source.ResponseHeader, error) {
+func (osc *ossSourceClient) DownloadWithResponseHeader(request *source.Request) (source.Response, error) {
 	ossObject, err := parseOssObject(url)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "parse oss object from url: %s", url)
@@ -142,6 +143,20 @@ func (osc *ossSourceClient) DownloadWithResponseHeader(ctx context.Context, url 
 	}
 	resp.Body.Close()
 	return nil, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+}
+
+func (osc *ossSourceClient) Transform(header source.Header) source.Header {
+	clonedHeader := header.Clone()
+	if clonedHeader.Get(source.Range) != "" {
+		clonedHeader.Set(headers.Range, fmt.Sprintf("bytes=%s", clonedHeader.Get(source.Range)))
+	}
+	if clonedHeader.Get(source.LastModified) != "" {
+		clonedHeader.Set(headers.LastModified, clonedHeader.Get(source.LastModified))
+	}
+	if clonedHeader.Get(source.ETag) != "" {
+		clonedHeader.Set(headers.ETag, clonedHeader.Get(source.ETag))
+	}
+	return clonedHeader
 }
 
 func (osc *ossSourceClient) getClient(header map[string]string) (*oss.Client, error) {
@@ -173,7 +188,7 @@ func genClientKey(endpoint, accessKeyID, accessKeySecret string) string {
 	return fmt.Sprintf("%s_%s_%s", endpoint, accessKeyID, accessKeySecret)
 }
 
-func (osc *ossSourceClient) getMeta(ctx context.Context, url string, header map[string]string) (http.Header, error) {
+func (osc *ossSourceClient) getMeta(url string, header map[string]string) (http.Header, error) {
 	client, err := osc.getClient(header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get oss client")

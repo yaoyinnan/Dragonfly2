@@ -86,11 +86,14 @@ type FileMetaData struct {
 	Interval         int64             `json:"interval"`
 	CdnFileLength    int64             `json:"cdnFileLength"`
 	SourceRealDigest string            `json:"sourceRealDigest"`
+	Tag              string            `json:"tag"`
 	ExpireInfo       map[string]string `json:"expireInfo"`
 	Finish           bool              `json:"finish"`
 	Success          bool              `json:"success"`
 	TotalPieceCount  int32             `json:"totalPieceCount"`
 	PieceMd5Sign     string            `json:"pieceMd5Sign"`
+	Range            string            `json:"range"`
+	Filter           string            `json:"filter"`
 }
 
 // PieceMetaRecord meta data of piece
