@@ -125,14 +125,16 @@ func (mr *MockResourceClientMockRecorder) IsSupportRange(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSupportRange", reflect.TypeOf((*MockResourceClient)(nil).IsSupportRange), arg0)
 }
 
-// Transform mocks base method.
-func (m *MockResourceClient) Transform(arg0 source.Header) {
+// TransformToConcreteHeader mocks base method.
+func (m *MockResourceClient) TransformToConcreteHeader(arg0 source.Header) source.Header {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Transform", arg0)
+	ret := m.ctrl.Call(m, "TransformToConcreteHeader", arg0)
+	ret0, _ := ret[0].(source.Header)
+	return ret0
 }
 
-// Transform indicates an expected call of Transform.
-func (mr *MockResourceClientMockRecorder) Transform(arg0 interface{}) *gomock.Call {
+// TransformToConcreteHeader indicates an expected call of TransformToConcreteHeader.
+func (mr *MockResourceClientMockRecorder) TransformToConcreteHeader(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Transform", reflect.TypeOf((*MockResourceClient)(nil).Transform), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransformToConcreteHeader", reflect.TypeOf((*MockResourceClient)(nil).TransformToConcreteHeader), arg0)
 }

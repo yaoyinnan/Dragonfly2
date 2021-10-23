@@ -105,7 +105,7 @@ func (mr *MockSeedProgressManagerMockRecorder) PublishTask(arg0, arg1, arg2 inte
 }
 
 // WatchSeedProgress mocks base method.
-func (m *MockSeedProgressManager) WatchSeedProgress(arg0 context.Context, arg1 string) (<-chan *types.SeedPiece, error) {
+func (m *MockSeedProgressManager) WatchSeedProgress(arg0 context.Context, arg1 *types.SeedTask) (<-chan *types.SeedPiece, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchSeedProgress", arg0, arg1)
 	ret0, _ := ret[0].(<-chan *types.SeedPiece)

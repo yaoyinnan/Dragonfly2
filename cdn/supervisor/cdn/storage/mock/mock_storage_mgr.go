@@ -11,7 +11,6 @@ import (
 	storedriver "d7y.io/dragonfly/v2/cdn/storedriver"
 	supervisor "d7y.io/dragonfly/v2/cdn/supervisor"
 	storage "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	types "d7y.io/dragonfly/v2/cdn/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -50,20 +49,6 @@ func (m *MockManager) AppendPieceMetadata(arg0 string, arg1 *storage.PieceMetaRe
 func (mr *MockManagerMockRecorder) AppendPieceMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendPieceMetadata", reflect.TypeOf((*MockManager)(nil).AppendPieceMetadata), arg0, arg1)
-}
-
-// CreateUploadLink mocks base method.
-func (m *MockManager) CreateUploadLink(arg0 string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateUploadLink", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateUploadLink indicates an expected call of CreateUploadLink.
-func (mr *MockManagerMockRecorder) CreateUploadLink(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUploadLink", reflect.TypeOf((*MockManager)(nil).CreateUploadLink), arg0)
 }
 
 // DeleteTask mocks base method.
@@ -138,7 +123,7 @@ func (mr *MockManagerMockRecorder) ReadPieceMetaRecords(arg0 interface{}) *gomoc
 }
 
 // ResetRepo mocks base method.
-func (m *MockManager) ResetRepo(arg0 *types.SeedTask) error {
+func (m *MockManager) ResetRepo(arg0 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetRepo", arg0)
 	ret0, _ := ret[0].(error)

@@ -43,7 +43,6 @@ func (suite *TaskManagerTestSuite) TestRegister() {
 	ctrl := gomock.NewController(suite.T())
 	cdnMgr := mock.NewMockCDNManager(ctrl)
 	progressMgr := mock.NewMockSeedProgressManager(ctrl)
-	progressMgr.EXPECT().SetTaskMgr(gomock.Any()).Times(1)
 	tm, err := NewManager(config.New(), cdnMgr, progressMgr)
 	suite.Nil(err)
 	suite.NotNil(tm)

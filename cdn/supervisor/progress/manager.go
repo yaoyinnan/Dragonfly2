@@ -68,17 +68,17 @@ func (pm *Manager) InitSeedProgress(ctx context.Context, taskID string) {
 	}
 }
 
-func (pm *Manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan *types.SeedPiece, error) {
+func (pm *Manager) WatchSeedProgress(ctx context.Context, task *types.SeedTask) (<-chan *types.SeedPiece, error) {
 	span := trace.SpanFromContext(ctx)
 	span.AddEvent(config.EventWatchSeedProgress)
-	logger.Debugf("watch seed progress begin for taskID: %s", taskID)
-	pm.mu.Lock(taskID, true)
-	defer pm.mu.UnLock(taskID, true)
-	chanList, err := pm.seedSubscribers.GetAsList(taskID)
+	logger.Debugf("watch seed progress begin for taskID: %s", task.ID)
+	pm.mu.Lock(task.ID, true)
+	defer pm.mu.UnLock(task.ID, true)
+	chanList, err := pm.seedSubscribers.GetAsList(task.ID)
 	if err != nil {
 		return nil, fmt.Errorf("get seed subscribers: %v", err)
 	}
-	pieceMetadataRecords, err := pm.getPieceMetaRecordsByTaskID(taskID)
+	pieceMetadataRecords, err := pm.getPieceMetaRecordsByTaskID(task.ID)
 	if err != nil {
 		return nil, fmt.Errorf("get piece meta records by taskID: %v", err)
 	}
@@ -92,7 +92,7 @@ func (pm *Manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 			case <-time.After(pm.timeout):
 			}
 		}
-		if task, err := pm.taskMgr.Get(taskID); err == nil && task.IsDone() {
+		if task.IsDone() {
 			chanList.Remove(ele)
 			close(seedCh)
 		}

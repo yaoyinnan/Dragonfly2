@@ -62,7 +62,6 @@ func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr su
 		cdnMgr:                  cdnMgr,
 		progressMgr:             progressMgr,
 	}
-	progressMgr.SetTaskMgr(taskMgr)
 	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, taskMgr)
 	return taskMgr, nil
 }
@@ -93,7 +92,7 @@ func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (
 	}
 	task.Log().Infof("successfully trigger cdn sync action")
 	// watch seed progress
-	return tm.progressMgr.WatchSeedProgress(ctx, task.ID)
+	return tm.progressMgr.WatchSeedProgress(ctx, task)
 }
 
 // triggerCdnSyncAction

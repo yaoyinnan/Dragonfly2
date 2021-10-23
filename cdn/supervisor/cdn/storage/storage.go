@@ -171,7 +171,7 @@ func (m *storeManagerPlugin) Name() string {
 }
 
 func (m *storeManagerPlugin) ResetRepo(task *types.SeedTask) error {
-	return m.instance.ResetRepo(task)
+	return m.instance.ResetRepo(task.ID)
 }
 
 func (m *storeManagerPlugin) StatDownloadFile(path string) (*storedriver.StorageInfo, error) {

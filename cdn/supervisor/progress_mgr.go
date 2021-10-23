@@ -30,7 +30,7 @@ type SeedProgressManager interface {
 	InitSeedProgress(ctx context.Context, taskID string)
 
 	// WatchSeedProgress watch task seed progress
-	WatchSeedProgress(ctx context.Context, taskID string) (<-chan *types.SeedPiece, error)
+	WatchSeedProgress(ctx context.Context, task *types.SeedTask) (<-chan *types.SeedPiece, error)
 
 	// PublishPiece publish piece seed
 	PublishPiece(ctx context.Context, taskID string, piece *types.SeedPiece) error
