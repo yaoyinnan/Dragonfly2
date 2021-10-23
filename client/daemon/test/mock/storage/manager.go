@@ -54,7 +54,7 @@ func (mr *MockTaskStorageDriverMockRecorder) GetPieces(ctx, req interface{}) *go
 }
 
 // ReadAllPieces mocks base method.
-func (m *MockTaskStorageDriver) ReadAllPieces(ctx context.Context, req *storage.PeerTaskMetaData) (io.ReadCloser, error) {
+func (m *MockTaskStorageDriver) ReadAllPieces(ctx context.Context, req *storage.PeerTaskMetadata) (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadAllPieces", ctx, req)
 	ret0, _ := ret[0].(io.ReadCloser)
@@ -281,7 +281,7 @@ func (mr *MockManagerMockRecorder) Keep() *gomock.Call {
 }
 
 // ReadAllPieces mocks base method.
-func (m *MockManager) ReadAllPieces(ctx context.Context, req *storage.PeerTaskMetaData) (io.ReadCloser, error) {
+func (m *MockManager) ReadAllPieces(ctx context.Context, req *storage.PeerTaskMetadata) (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadAllPieces", ctx, req)
 	ret0, _ := ret[0].(io.ReadCloser)

@@ -28,7 +28,7 @@ import (
 )
 
 type reporter struct {
-	progress supervisor.SeedProgressMgr
+	progressManager supervisor.SeedProgressManager
 }
 
 const (
@@ -36,14 +36,14 @@ const (
 	DownloaderReport = "download"
 )
 
-func newReporter(publisher supervisor.SeedProgressMgr) *reporter {
+func newReporter(publisher supervisor.SeedProgressManager) *reporter {
 	return &reporter{
-		progress: publisher,
+		progressManager: publisher,
 	}
 }
 
-// report cache result
-func (re *reporter) reportCache(ctx context.Context, taskID string, detectResult *cacheResult) error {
+// report detect cache result
+func (re *reporter) reportDetectResult(ctx context.Context, taskID string, detectResult *cacheResult) error {
 	// report cache pieces status
 	if detectResult != nil && detectResult.pieceMetaRecords != nil {
 		for _, record := range detectResult.pieceMetaRecords {
@@ -57,14 +57,13 @@ func (re *reporter) reportCache(ctx context.Context, taskID string, detectResult
 }
 
 // reportPieceMetaRecord
-func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, record *storage.PieceMetaRecord,
-	from string) error {
+func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, record *storage.PieceMetaRecord, from string) error {
 	// report cache pieces status
 	logger.DownloaderLogger.Info(taskID,
 		zap.Int32("pieceNum", record.PieceNum),
 		zap.String("md5", record.Md5),
 		zap.String("from", from))
-	return re.progress.PublishPiece(ctx, taskID, convertPieceMeta2SeedPiece(record))
+	return re.progressManager.PublishPiece(ctx, taskID, convertPieceMeta2SeedPiece(record))
 }
 
 /*

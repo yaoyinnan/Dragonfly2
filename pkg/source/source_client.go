@@ -59,6 +59,7 @@ type ResourceClient interface {
 	IsSupportRange(request *Request) (bool, error)
 
 	// IsExpired checks if a resource received or stored is the same.
+	// If it fails to get the result, it is considered that the source has not expired, return false and non-nil err to prevent the source from exploding
 	IsExpired(request *Request) (bool, error)
 
 	// Download downloads from source

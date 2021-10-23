@@ -23,23 +23,19 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/structure/maputils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"github.com/pkg/errors"
 )
 
-const RangeHeaderName = "Range"
-
-func (cm *Manager) download(ctx context.Context, task *types.SeedTask, detectResult *cacheResult) (io.ReadCloser, error) {
-	headers := maputils.DeepCopyMap(nil, task.Header)
-	if detectResult.breakPoint > 0 {
-		breakRange, err := getBreakRange(detectResult.breakPoint, task.SourceFileLength)
+func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoint int64) (io.ReadCloser, error) {
+	if breakPoint > 0 {
+		breakRange, err := getBreakRange(breakPoint, task.SourceFileLength)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to calculate the breakRange")
+			return nil, errors.Wrapf(err, "calculate the breakRange")
 		}
 	}
-	task.Log().Infof("start download url %s at range: %d-%d: with header: %+v", task.RawURL, detectResult.breakPoint,
-		task.SourceFileLength, task.Header)
+	task.Log().Infof("start download url %s at range: %d-%d: with header: %+v", task.RawURL, breakPoint,
+		task.SourceFileLength, task.Range)
 	reader, responseHeader, err := source.DownloadWithResponseHeader(ctx, task.RawURL, headers)
 	// update Expire info
 	if err == nil {

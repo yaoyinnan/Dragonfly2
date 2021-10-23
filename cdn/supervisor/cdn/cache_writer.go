@@ -29,6 +29,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"go.opentelemetry.io/otel/trace"
@@ -45,32 +46,30 @@ type downloadMetadata struct {
 	backSourceLength     int64 // back to source download file length
 	realCdnFileLength    int64 // the actual length of the stored file
 	realSourceFileLength int64 // actually read the length of the source
-	pieceTotalCount      int32 // piece total count
+	totalPieceCount      int32 // piece total count
 	pieceMd5Sign         string
+	sourceRealDigest     string
 }
 
 type cacheWriter struct {
-	cdnReporter      *reporter
-	cacheDataManager *cacheDataManager
+	cdnReporter *reporter
+	cacheStore  storage.Manager
 }
 
-func newCacheWriter(cdnReporter *reporter, cacheDataManager *cacheDataManager) *cacheWriter {
+func newCacheWriter(cdnReporter *reporter, cacheStore storage.Manager) *cacheWriter {
 	return &cacheWriter{
-		cdnReporter:      cdnReporter,
-		cacheDataManager: cacheDataManager,
+		cdnReporter: cdnReporter,
+		cacheStore:  cacheStore,
 	}
 }
 
 // startWriter writes the stream data from the reader to the underlying storage.
-func (cw *cacheWriter) startWriter(ctx context.Context, reader io.Reader, task *types.SeedTask, detectResult *cacheResult) (*downloadMetadata, error) {
+func (cw *cacheWriter) startWriter(ctx context.Context, reader *limitreader.LimitReader, task *types.SeedTask, breakPoint int64) (*downloadMetadata, error) {
 	var writeSpan trace.Span
 	ctx, writeSpan = tracer.Start(ctx, config.SpanWriteData)
 	defer writeSpan.End()
-	if detectResult == nil {
-		detectResult = &cacheResult{}
-	}
 	// currentSourceFileLength is used to calculate the source file Length dynamically
-	currentSourceFileLength := detectResult.breakPoint
+	currentSourceFileLength := breakPoint
 	// the pieceNum currently have been processed
 	curPieceNum := len(detectResult.pieceMetaRecords)
 	routineCount := calculateRoutineCount(task.SourceFileLength-currentSourceFileLength, task.PieceSize)
@@ -80,14 +79,14 @@ func (cw *cacheWriter) startWriter(ctx context.Context, reader io.Reader, task *
 	if err != nil {
 		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("write data: %v", err)
 	}
-	storageInfo, err := cw.cacheDataManager.statDownloadFile(task.TaskID)
+	storageInfo, err := cw.cacheStore.statDownloadFile(task.ID)
 	if err != nil {
 		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("stat cdn download file: %v", err)
 	}
 	storageInfoBytes, _ := json.Marshal(storageInfo)
 	writeSpan.SetAttributes(config.AttributeDownloadFileInfo.String(string(storageInfoBytes)))
 	// TODO Try getting it from the ProgressManager first
-	pieceMd5Sign, _, err := cw.cacheDataManager.getPieceMd5Sign(task.TaskID)
+	pieceMd5Sign, _, err := cw.cacheDataManager.getPieceMd5Sign(task.ID)
 	if err != nil {
 		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("get piece md5 sign: %v", err)
 	}
@@ -95,11 +94,13 @@ func (cw *cacheWriter) startWriter(ctx context.Context, reader io.Reader, task *
 		backSourceLength:     backSourceLength,
 		realCdnFileLength:    storageInfo.Size,
 		realSourceFileLength: currentSourceFileLength + backSourceLength,
-		pieceTotalCount:      int32(totalPieceCount),
+		totalPieceCount:      int32(totalPieceCount),
 		pieceMd5Sign:         pieceMd5Sign,
+		sourceRealDigest:     reader.Digest(),
 	}, nil
 }
 
+// doWrite do actual write data to storage
 func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *types.SeedTask, routineCount int, curPieceNum int) (n int64, totalPiece int,
 	err error) {
 	var bufPool = &sync.Pool{
@@ -119,7 +120,7 @@ func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *type
 		n, err = io.CopyBuffer(bb, limitReader, buf)
 		if err != nil {
 			close(jobCh)
-			return backSourceLength, 0, fmt.Errorf("read source taskID %s pieceNum %d piece: %v", task.TaskID, curPieceNum, err)
+			return backSourceLength, 0, fmt.Errorf("read source taskID %s pieceNum %d piece: %v", task.ID, curPieceNum, err)
 		}
 		if n == 0 {
 			break
@@ -127,7 +128,7 @@ func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *type
 		backSourceLength += n
 
 		jobCh <- &piece{
-			taskID:       task.TaskID,
+			taskID:       task.ID,
 			pieceNum:     int32(curPieceNum),
 			pieceSize:    task.PieceSize,
 			pieceContent: bb,
@@ -180,7 +181,7 @@ func (cw *cacheWriter) writerPool(ctx context.Context, wg *sync.WaitGroup, routi
 					PieceStyle: pieceStyle,
 				}
 				// write piece meta to storage
-				if err = cw.cacheDataManager.appendPieceMetaData(p.taskID, pieceRecord); err != nil {
+				if err = cw.cacheDataManager.appendPieceMetadata(p.taskID, pieceRecord); err != nil {
 					logger.Errorf("write piece meta file: %v", err)
 					continue
 				}
@@ -197,9 +198,10 @@ func (cw *cacheWriter) writerPool(ctx context.Context, wg *sync.WaitGroup, routi
 }
 
 /*
- 	helper functions
-	max goroutine count is CDNWriterRoutineLimit
+	helper functions
 */
+
+// calculateRoutineCount max goroutine count is CDNWriterRoutineLimit
 func calculateRoutineCount(remainingFileLength int64, pieceSize int32) int {
 	routineSize := config.CDNWriterRoutineLimit
 	if remainingFileLength < 0 || pieceSize <= 0 {

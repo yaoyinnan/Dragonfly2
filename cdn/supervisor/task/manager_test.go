@@ -41,8 +41,8 @@ type TaskManagerTestSuite struct {
 func (suite *TaskManagerTestSuite) TestRegister() {
 	dragonflyURL := "http://dragonfly.io.com?a=a&b=b&c=c"
 	ctrl := gomock.NewController(suite.T())
-	cdnMgr := mock.NewMockCDNMgr(ctrl)
-	progressMgr := mock.NewMockSeedProgressMgr(ctrl)
+	cdnMgr := mock.NewMockCDNManager(ctrl)
+	progressMgr := mock.NewMockSeedProgressManager(ctrl)
 	progressMgr.EXPECT().SetTaskMgr(gomock.Any()).Times(1)
 	tm, err := NewManager(config.New(), cdnMgr, progressMgr)
 	suite.Nil(err)

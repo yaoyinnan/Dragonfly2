@@ -169,7 +169,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		HostUuid:        idgen.CDN(iputils.HostName, int32(css.cfg.ListenPort)),
 		Done:            true,
 		ContentLength:   task.SourceFileLength,
-		TotalPieceCount: task.PieceTotal,
+		TotalPieceCount: task.TotalPieceCount,
 	}
 	return nil
 }
@@ -237,7 +237,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		DstPid:        fmt.Sprintf("%s-%s_%s", iputils.HostName, req.TaskId, "CDN"),
 		DstAddr:       fmt.Sprintf("%s:%d", css.cfg.AdvertiseIP, css.cfg.DownloadPort),
 		PieceInfos:    pieceInfos,
-		TotalPiece:    task.PieceTotal,
+		TotalPiece:    task.TotalPieceCount,
 		ContentLength: task.SourceFileLength,
 		PieceMd5Sign:  task.PieceMd5Sign,
 	}

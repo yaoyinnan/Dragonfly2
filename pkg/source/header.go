@@ -19,9 +19,11 @@ package source
 import "net/textproto"
 
 const (
-	LastModified = "X-Dragonfly-Last-Modified"
-	ETag         = "X-Dragonfly-ETag"
-	Range        = "X-Dragonfly-Range"
+	LastModified    = "X-Dragonfly-Last-Modified"
+	IfModifiedSince = "X-Dragonfly-If-Modified-Since"
+	ETag            = "X-Dragonfly-ETag"
+	IfNoneMatch     = "X-Dragonfly-If-None-Match"
+	Range           = "X-Dragonfly-Range"
 )
 
 // A Header represents the key-value pairs in a Dragonfly source header.

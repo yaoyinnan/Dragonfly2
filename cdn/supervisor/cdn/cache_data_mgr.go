@@ -17,7 +17,6 @@
 package cdn
 
 import (
-	"fmt"
 	"io"
 	"sort"
 
@@ -32,144 +31,141 @@ import (
 	"github.com/pkg/errors"
 )
 
-// metaDataManager manages the meta file and piece meta file of each TaskID.
-type metaDataManager struct {
+// metadataManager manages the meta file and piece meta file of each TaskID.
+type metadataManager struct {
 	storage     storage.Manager
 	cacheLocker *synclock.LockerPool
 }
 
-func newCacheDataManager(storeMgr storage.Manager) *metaDataManager {
-	return &metaDataManager{
+func newMetadataManager(storeMgr storage.Manager) *metadataManager {
+	return &metadataManager{
 		storeMgr,
 		synclock.NewLockerPool(),
 	}
 }
 
-// writeFileMetaDataByTask stores the metadata of task by task to storage.
-func (mm *metaDataManager) writeFileMetaDataByTask(task *types.SeedTask) (*storage.FileMetaData, error) {
+// writeFileMetadataByTask stores metadata of task
+func (mm *metadataManager) writeFileMetadataByTask(task *types.SeedTask) (*storage.FileMetadata, error) {
 	mm.cacheLocker.Lock(task.ID, false)
 	defer mm.cacheLocker.UnLock(task.ID, false)
-	metaData := &storage.FileMetaData{
+	metadata := &storage.FileMetadata{
 		TaskID:          task.ID,
 		TaskURL:         task.TaskURL,
 		PieceSize:       task.PieceSize,
 		SourceFileLen:   task.SourceFileLength,
 		AccessTime:      getCurrentTimeMillisFunc(),
 		CdnFileLength:   task.CdnFileLength,
-		Finish:          false,
-		Success:         false,
+		Digest:          task.Digest,
+		Tag:             task.Tag,
 		TotalPieceCount: task.PieceTotal,
+		Range:           task.Range,
+		Filter:          task.Filter,
 	}
 
-	if err := mm.storage.WriteFileMetaData(task.ID, metaData); err != nil {
+	if err := mm.storage.WriteFileMetadata(task.ID, metadata); err != nil {
 		return nil, errors.Wrapf(err, "write task metadata file")
 	}
 
-	return metaData, nil
+	return metadata, nil
 }
 
 // updateAccessTime update access and interval
-func (mm *metaDataManager) updateAccessTime(taskID string, accessTime int64) error {
+func (mm *metadataManager) updateAccessTime(taskID string, accessTime int64) error {
 	mm.cacheLocker.Lock(taskID, false)
 	defer mm.cacheLocker.UnLock(taskID, false)
 
-	originMetaData, err := mm.readFileMetaData(taskID)
+	originMetadata, err := mm.readFileMetadata(taskID)
 	if err != nil {
 		return err
 	}
 	// access interval
-	interval := accessTime - originMetaData.AccessTime
-	originMetaData.Interval = interval
+	interval := accessTime - originMetadata.AccessTime
+	originMetadata.Interval = interval
 	if interval <= 0 {
 		logger.WithTaskID(taskID).Warnf("file hit interval: %d, accessTime: %s", interval, timeutils.MillisUnixTime(accessTime))
-		originMetaData.Interval = 0
+		originMetadata.Interval = 0
 	}
 
-	originMetaData.AccessTime = accessTime
+	originMetadata.AccessTime = accessTime
 
-	return mm.storage.WriteFileMetaData(taskID, originMetaData)
+	return mm.storage.WriteFileMetadata(taskID, originMetadata)
 }
 
-func (mm *metaDataManager) updateExpireInfo(taskID string, expireInfo map[string]string) error {
+func (mm *metadataManager) updateExpireInfo(taskID string, expireInfo map[string]string) error {
 	mm.cacheLocker.Lock(taskID, false)
 	defer mm.cacheLocker.UnLock(taskID, false)
 
-	originMetaData, err := mm.readFileMetaData(taskID)
+	originMetadata, err := mm.readFileMetadata(taskID)
 	if err != nil {
 		return err
 	}
 
-	originMetaData.ExpireInfo = expireInfo
+	originMetadata.ExpireInfo = expireInfo
 
-	return mm.storage.WriteFileMetaData(taskID, originMetaData)
+	return mm.storage.WriteFileMetadata(taskID, originMetadata)
 }
 
-func (mm *metaDataManager) updateStatusAndResult(taskID string, metaData *storage.FileMetaData) error {
+func (mm *metadataManager) updateStatusAndResult(taskID string, metadata *storage.FileMetadata) error {
 	mm.cacheLocker.Lock(taskID, false)
 	defer mm.cacheLocker.UnLock(taskID, false)
 
-	originMetaData, err := mm.readFileMetaData(taskID)
+	originMetadata, err := mm.readFileMetadata(taskID)
 	if err != nil {
 		return err
 	}
 
-	originMetaData.Finish = metaData.Finish
-	originMetaData.Success = metaData.Success
-	if originMetaData.Success {
-		originMetaData.CdnFileLength = metaData.CdnFileLength
-		originMetaData.SourceFileLen = metaData.SourceFileLen
-		if metaData.TotalPieceCount > 0 {
-			originMetaData.TotalPieceCount = metaData.TotalPieceCount
+	originMetadata.Finish = metadata.Finish
+	originMetadata.Success = metadata.Success
+	if originMetadata.Success {
+		originMetadata.CdnFileLength = metadata.CdnFileLength
+		originMetadata.SourceFileLen = metadata.SourceFileLen
+		if metadata.TotalPieceCount > 0 {
+			originMetadata.TotalPieceCount = metadata.TotalPieceCount
 		}
-		if !stringutils.IsBlank(metaData.SourceRealDigest) {
-			originMetaData.SourceRealDigest = metaData.SourceRealDigest
+		if !stringutils.IsBlank(metadata.SourceRealDigest) {
+			originMetadata.SourceRealDigest = metadata.SourceRealDigest
 		}
-		if !stringutils.IsBlank(metaData.PieceMd5Sign) {
-			originMetaData.PieceMd5Sign = metaData.PieceMd5Sign
+		if !stringutils.IsBlank(metadata.PieceMd5Sign) {
+			originMetadata.PieceMd5Sign = metadata.PieceMd5Sign
 		}
 	}
-	return mm.storage.WriteFileMetaData(taskID, originMetaData)
+	return mm.storage.WriteFileMetadata(taskID, originMetadata)
 }
 
-// appendPieceMetaData append piece meta info to storage
-func (mm *metaDataManager) appendPieceMetaData(taskID string, record *storage.PieceMetaRecord) error {
+// appendPieceMetadata append piece meta info to storage
+func (mm *metadataManager) appendPieceMetadata(taskID string, record *storage.PieceMetaRecord) error {
 	mm.cacheLocker.Lock(taskID, false)
 	defer mm.cacheLocker.UnLock(taskID, false)
 	// write to the storage
-	return mm.storage.AppendPieceMetaData(taskID, record)
+	return mm.storage.AppendPieceMetadata(taskID, record)
 }
 
-// appendPieceMetaData append piece meta info to storage
-func (mm *metaDataManager) writePieceMetaRecords(taskID string, records []*storage.PieceMetaRecord) error {
+// appendPieceMetadata append piece meta info to storage
+func (mm *metadataManager) writePieceMetaRecords(taskID string, records []*storage.PieceMetaRecord) error {
 	mm.cacheLocker.Lock(taskID, false)
 	defer mm.cacheLocker.UnLock(taskID, false)
 	// write to the storage
 	return mm.storage.WritePieceMetaRecords(taskID, records)
 }
 
-// readAndCheckPieceMetaRecords reads pieceMetaRecords from storage and check data integrity by the md5 file of the TaskId
-func (mm *metaDataManager) readAndCheckPieceMetaRecords(taskID, pieceMd5Sign string) ([]*storage.PieceMetaRecord, error) {
+// readPieceMetaRecords reads pieceMetaRecords from storage and without check data integrity
+func (mm *metadataManager) readPieceMetaRecords(taskID string) ([]*storage.PieceMetaRecord, error) {
 	mm.cacheLocker.Lock(taskID, true)
 	defer mm.cacheLocker.UnLock(taskID, true)
-	md5Sign, pieceMetaRecords, err := mm.getPieceMd5Sign(taskID)
+	pieceMetaRecords, err := mm.storage.ReadPieceMetaRecords(taskID)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "read piece meta file")
 	}
-	if md5Sign != pieceMd5Sign {
-		return nil, fmt.Errorf("check piece meta data integrity fail, expectMd5Sign: %s, actualMd5Sign: %s",
-			pieceMd5Sign, md5Sign)
-	}
+	// sort piece meta records by pieceNum
+	sort.Slice(pieceMetaRecords, func(i, j int) bool {
+		return pieceMetaRecords[i].PieceNum < pieceMetaRecords[j].PieceNum
+	})
 	return pieceMetaRecords, nil
 }
 
-// readPieceMetaRecords reads pieceMetaRecords from storage and without check data integrity
-func (mm *metaDataManager) readPieceMetaRecords(taskID string) ([]*storage.PieceMetaRecord, error) {
+func (mm *metadataManager) getPieceMd5Sign(taskID string) (string, []*storage.PieceMetaRecord, error) {
 	mm.cacheLocker.Lock(taskID, true)
 	defer mm.cacheLocker.UnLock(taskID, true)
-	return mm.storage.ReadPieceMetaRecords(taskID)
-}
-
-func (mm *metaDataManager) getPieceMd5Sign(taskID string) (string, []*storage.PieceMetaRecord, error) {
 	pieceMetaRecords, err := mm.storage.ReadPieceMetaRecords(taskID)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "read piece meta file")
@@ -184,24 +180,24 @@ func (mm *metaDataManager) getPieceMd5Sign(taskID string) (string, []*storage.Pi
 	return digestutils.Sha256(pieceMd5...), pieceMetaRecords, nil
 }
 
-func (mm *metaDataManager) readFileMetaData(taskID string) (*storage.FileMetaData, error) {
-	return mm.storage.ReadFileMetaData(taskID)
+func (mm *metadataManager) readFileMetadata(taskID string) (*storage.FileMetadata, error) {
+	return mm.storage.ReadFileMetadata(taskID)
 }
 
-func (mm *metaDataManager) statDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
+func (mm *metadataManager) statDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
 	return mm.storage.StatDownloadFile(taskID)
 }
 
-func (mm *metaDataManager) readDownloadFile(taskID string) (io.ReadCloser, error) {
+func (mm *metadataManager) readDownloadFile(taskID string) (io.ReadCloser, error) {
 	return mm.storage.ReadDownloadFile(taskID)
 }
 
-func (mm *metaDataManager) resetRepo(task *types.SeedTask) error {
+func (mm *metadataManager) resetRepo(task *types.SeedTask) error {
 	mm.cacheLocker.Lock(task.ID, false)
 	defer mm.cacheLocker.UnLock(task.ID, false)
-	return mm.storage.ResetRepo(task)
+	return mm.storage.ResetRepo(task.ID)
 }
 
-func (mm *metaDataManager) writeDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
+func (mm *metadataManager) writeDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
 	return mm.storage.WriteDownloadFile(taskID, offset, len, data)
 }

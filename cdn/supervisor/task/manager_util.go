@@ -99,8 +99,8 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	}
 
 	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
-	if registerTask.UrlMeta != nil {
-		task.UrlMeta = registerTask.UrlMeta
+	if registerTask.Header != nil {
+		task.Header = registerTask.Header
 	}
 
 	// calculate piece size and update the PieceSize and PieceTotal

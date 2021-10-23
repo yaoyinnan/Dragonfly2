@@ -54,13 +54,13 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
 	source.Register("http", sourceClient)
 	storageMgr := storageMock.NewMockManager(ctrl)
-	cacheDataManager := newCacheDataManager(storageMgr)
+	cacheDataManager := newMetadataManager(storageMgr)
 	suite.detector = newCacheDetector(cacheDataManager)
-	storageMgr.EXPECT().ReadFileMetaData(fullExpiredCache.taskID).Return(fullExpiredCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetaData(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetaData(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetaData(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetaData(noCache.taskID).Return(noCache.fileMeta, cdnerrors.ErrFileNotExist{}).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(fullExpiredCache.taskID).Return(fullExpiredCache.fileMeta, nil).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.fileMeta, nil).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(noCache.taskID).Return(noCache.fileMeta, cdnerrors.ErrFileNotExist{}).AnyTimes()
 	storageMgr.EXPECT().ReadDownloadFile(fullNoExpiredCache.taskID).DoAndReturn(
 		func(taskID string) (io.ReadCloser, error) {
 			content, err := ioutil.ReadFile("../../testdata/cdn/go.html")
@@ -113,7 +113,7 @@ var expiredAndSupportURL, expiredAndNotSupportURL, noExpiredAndSupportURL, noExp
 type mockData struct {
 	taskID   string
 	pieces   []*storage.PieceMetaRecord
-	fileMeta *storage.FileMetaData
+	fileMeta *storage.FileMetadata
 	reader   io.ReadCloser
 }
 
@@ -217,8 +217,8 @@ var fullPieceMetaRecords = append(partialPieceMetaRecords, &storage.PieceMetaRec
 	PieceStyle: 1,
 })
 
-func newCompletedFileMeta(taskID string, URL string, success bool) *storage.FileMetaData {
-	return &storage.FileMetaData{
+func newCompletedFileMeta(taskID string, URL string, success bool) *storage.FileMetadata {
+	return &storage.FileMetadata{
 		TaskID:           taskID,
 		TaskURL:          URL,
 		PieceSize:        2000,
@@ -235,8 +235,8 @@ func newCompletedFileMeta(taskID string, URL string, success bool) *storage.File
 	}
 }
 
-func newPartialFileMeta(taskID string, URL string) *storage.FileMetaData {
-	return &storage.FileMetaData{
+func newPartialFileMeta(taskID string, URL string) *storage.FileMetadata {
+	return &storage.FileMetadata{
 		TaskID:           taskID,
 		TaskURL:          URL,
 		PieceSize:        2000,
@@ -267,8 +267,8 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			name: "no cache",
 			args: args{
 				task: &types.SeedTask{
-					TaskID:  noCacheTask,
-					URL:     noExpiredAndSupportURL,
+					ID:      noCacheTask,
+					RawURL:  noExpiredAndSupportURL,
 					TaskURL: noExpiredAndSupportURL,
 				},
 			},
@@ -279,8 +279,8 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			name: "partial cache and support range",
 			args: args{
 				task: &types.SeedTask{
-					TaskID:           partialAndSupportCacheTask,
-					URL:              noExpiredAndSupportURL,
+					ID:               partialAndSupportCacheTask,
+					RawURL:           noExpiredAndSupportURL,
 					TaskURL:          noExpiredAndSupportURL,
 					SourceFileLength: 9789,
 					PieceSize:        2000,
@@ -289,7 +289,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			want: &cacheResult{
 				breakPoint:       4000,
 				pieceMetaRecords: partialPieceMetaRecords,
-				fileMetaData:     newPartialFileMeta(partialAndSupportCacheTask, noExpiredAndSupportURL),
+				fileMetadata:     newPartialFileMeta(partialAndSupportCacheTask, noExpiredAndSupportURL),
 			},
 			wantErr: false,
 		},
@@ -297,8 +297,8 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			name: "partial cache and not support range",
 			args: args{
 				task: &types.SeedTask{
-					TaskID:           partialAndNotSupportCacheTask,
-					URL:              noExpiredAndNotSupportURL,
+					ID:               partialAndNotSupportCacheTask,
+					RawURL:           noExpiredAndNotSupportURL,
 					TaskURL:          noExpiredAndNotSupportURL,
 					SourceFileLength: 9789,
 					PieceSize:        2000,
@@ -311,8 +311,8 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			name: "full cache and not expire",
 			args: args{
 				task: &types.SeedTask{
-					TaskID:           fullCacheNotExpiredTask,
-					URL:              noExpiredAndNotSupportURL,
+					ID:               fullCacheNotExpiredTask,
+					RawURL:           noExpiredAndNotSupportURL,
 					TaskURL:          noExpiredAndNotSupportURL,
 					SourceFileLength: 9789,
 					PieceSize:        2000,
@@ -321,7 +321,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			want: &cacheResult{
 				breakPoint:       -1,
 				pieceMetaRecords: fullPieceMetaRecords,
-				fileMetaData:     newCompletedFileMeta(fullCacheNotExpiredTask, noExpiredAndNotSupportURL, true),
+				fileMetadata:     newCompletedFileMeta(fullCacheNotExpiredTask, noExpiredAndNotSupportURL, true),
 			},
 			wantErr: false,
 		},
@@ -329,8 +329,8 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 			name: "full cache and expired",
 			args: args{
 				task: &types.SeedTask{
-					TaskID:  fullCacheExpiredTask,
-					URL:     expiredAndSupportURL,
+					ID:      fullCacheExpiredTask,
+					RawURL:  expiredAndSupportURL,
 					TaskURL: expiredAndNotSupportURL,
 				},
 			},
@@ -351,7 +351,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 func (suite *CacheDetectorTestSuite) TestParseByReadFile() {
 	type args struct {
 		taskID   string
-		metaData *storage.FileMetaData
+		metadata *storage.FileMetadata
 	}
 	tests := []struct {
 		name    string
@@ -363,19 +363,19 @@ func (suite *CacheDetectorTestSuite) TestParseByReadFile() {
 			name: "partial And SupportCacheTask",
 			args: args{
 				taskID:   partialSupportRangeCache.taskID,
-				metaData: partialSupportRangeCache.fileMeta,
+				metadata: partialSupportRangeCache.fileMeta,
 			},
 			want: &cacheResult{
 				breakPoint:       4000,
 				pieceMetaRecords: partialSupportRangeCache.pieces,
-				fileMetaData:     partialSupportRangeCache.fileMeta,
+				fileMetadata:     partialSupportRangeCache.fileMeta,
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.detector.parseByReadFile(tt.args.taskID, tt.args.metaData, md5.New())
+			got, err := suite.detector.detectByReadFile(tt.args.taskID, tt.args.metadata, md5.New())
 			suite.Equal(tt.want, got)
 			suite.Equal(tt.wantErr, err != nil)
 		})
@@ -385,7 +385,7 @@ func (suite *CacheDetectorTestSuite) TestParseByReadFile() {
 func (suite *CacheDetectorTestSuite) TestParseByReadMetaFile() {
 	type args struct {
 		taskID       string
-		fileMetaData *storage.FileMetaData
+		fileMetadata *storage.FileMetadata
 	}
 	tests := []struct {
 		name    string
@@ -397,19 +397,19 @@ func (suite *CacheDetectorTestSuite) TestParseByReadMetaFile() {
 			name: "parse full cache file meta",
 			args: args{
 				taskID:       fullNoExpiredCache.taskID,
-				fileMetaData: fullNoExpiredCache.fileMeta,
+				fileMetadata: fullNoExpiredCache.fileMeta,
 			},
 			want: &cacheResult{
 				breakPoint:       -1,
 				pieceMetaRecords: fullNoExpiredCache.pieces,
-				fileMetaData:     fullNoExpiredCache.fileMeta,
+				fileMetadata:     fullNoExpiredCache.fileMeta,
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			got, err := suite.detector.parseByReadMetaFile(tt.args.taskID, tt.args.fileMetaData)
+			got, err := suite.detector.detectByReadMetaFile(tt.args.taskID, tt.args.fileMetadata)
 			suite.Equal(tt.wantErr, err != nil)
 			suite.Equal(tt.want, got)
 		})

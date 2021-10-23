@@ -131,11 +131,11 @@ func (pm *pieceManager) DownloadPiece(ctx context.Context, pt Task, request *Dow
 	// 2. save to storage
 	var n int64
 	n, err = pm.storageManager.WritePiece(ctx, &storage.WritePieceRequest{
-		PeerTaskMetaData: storage.PeerTaskMetaData{
+		PeerTaskMetadata: storage.PeerTaskMetadata{
 			PeerID: pt.GetPeerID(),
 			TaskID: pt.GetTaskID(),
 		},
-		PieceMetaData: storage.PieceMetaData{
+		PieceMetadata: storage.PieceMetadata{
 			Num:    request.piece.PieceNum,
 			Md5:    request.piece.PieceMd5,
 			Offset: request.piece.PieceOffset,
@@ -263,11 +263,11 @@ func (pm *pieceManager) processPieceFromSource(pt Task,
 		pt.Context(),
 		&storage.WritePieceRequest{
 			UnknownLength: unknownLength,
-			PeerTaskMetaData: storage.PeerTaskMetaData{
+			PeerTaskMetadata: storage.PeerTaskMetadata{
 				PeerID: pt.GetPeerID(),
 				TaskID: pt.GetTaskID(),
 			},
-			PieceMetaData: storage.PieceMetaData{
+			PieceMetadata: storage.PieceMetadata{
 				Num: pieceNum,
 				// storage manager will get digest from DigestReader, keep empty here is ok
 				Md5:    "",
@@ -317,7 +317,7 @@ func (pm *pieceManager) DownloadSource(ctx context.Context, pt Task, request *sc
 	} else {
 		err = pm.storageManager.UpdateTask(ctx,
 			&storage.UpdateTaskRequest{
-				PeerTaskMetaData: storage.PeerTaskMetaData{
+				PeerTaskMetadata: storage.PeerTaskMetadata{
 					PeerID: pt.GetPeerID(),
 					TaskID: pt.GetTaskID(),
 				},
@@ -360,7 +360,7 @@ func (pm *pieceManager) DownloadSource(ctx context.Context, pt Task, request *sc
 				contentLength = int64(pieceNum*pieceSize) + n
 				pm.storageManager.UpdateTask(ctx,
 					&storage.UpdateTaskRequest{
-						PeerTaskMetaData: storage.PeerTaskMetaData{
+						PeerTaskMetadata: storage.PeerTaskMetadata{
 							PeerID: pt.GetPeerID(),
 							TaskID: pt.GetTaskID(),
 						},

@@ -70,7 +70,7 @@ func init() {
 	_defaultHTTPClient = &http.Client{
 		Transport: transport,
 	}
-	sc := NewHTTPSourceClient()
+	sc := newHTTPSourceClient()
 	source.Register(HTTPClient, sc)
 	source.Register(HTTPSClient, sc)
 }
@@ -81,7 +81,7 @@ type httpSourceClient struct {
 }
 
 // NewHTTPSourceClient returns a new HTTPSourceClientOption.
-func NewHTTPSourceClient(opts ...HTTPSourceClientOption) source.ResourceClient {
+func newHTTPSourceClient(opts ...HTTPSourceClientOption) source.ResourceClient {
 	client := &httpSourceClient{
 		httpClient: _defaultHTTPClient,
 	}
@@ -126,7 +126,6 @@ func (client *httpSourceClient) IsExpired(request *source.Request) (bool, error)
 	resp, err := client.doRequest(http.MethodGet, request)
 	// send request
 	if err != nil {
-		// If it fails to get the result, it is considered that the source has not expired, to prevent the source from exploding
 		return false, err
 	}
 	defer resp.Body.Close()

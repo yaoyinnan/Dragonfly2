@@ -430,11 +430,11 @@ func (s *streamPeerTask) SetTotalPieces(i int32) {
 
 func (s *streamPeerTask) writeTo(w io.Writer, pieceNum int32) (int64, error) {
 	pr, pc, err := s.pieceManager.ReadPiece(s.ctx, &storage.ReadPieceRequest{
-		PeerTaskMetaData: storage.PeerTaskMetaData{
+		PeerTaskMetadata: storage.PeerTaskMetadata{
 			PeerID: s.peerID,
 			TaskID: s.taskID,
 		},
-		PieceMetaData: storage.PieceMetaData{
+		PieceMetadata: storage.PieceMetadata{
 			Num: pieceNum,
 		},
 	})

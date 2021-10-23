@@ -51,8 +51,8 @@ type SeedTask struct {
 	// Enum: [WAITING RUNNING FAILED SUCCESS SOURCE_ERROR]
 	CdnStatus string `json:"cdnStatus,omitempty"`
 
-	// PieceTotal is the total count of all pieces
-	PieceTotal int32 `json:"pieceTotal,omitempty"`
+	// TotalPieceCount is the total number of pieces
+	TotalPieceCount int32 `json:"totalPieceCount,omitempty"`
 
 	// SourceRealDigest when CDN finishes downloading file/image from the source location,
 	// the md5 sum of the source file will be calculated as the value of the SourceRealDigest.
@@ -78,9 +78,6 @@ type SeedTask struct {
 	Header map[string]string `json:"header"`
 
 	logger *logger.SugaredLoggerOnWith
-}
-
-type UrlMeta struct {
 }
 
 const (

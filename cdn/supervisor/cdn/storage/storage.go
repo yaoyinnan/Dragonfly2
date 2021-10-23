@@ -51,20 +51,17 @@ type Manager interface {
 	// ReadDownloadFile return reader of download file
 	ReadDownloadFile(taskID string) (io.ReadCloser, error)
 
-	// CreateUploadLink create a upload link to download file
-	CreateUploadLink(taskID string) error
+	// ReadFileMetadata return meta data of download file
+	ReadFileMetadata(taskID string) (*FileMetadata, error)
 
-	// ReadFileMetaData return meta data of download file
-	ReadFileMetaData(taskID string) (*FileMetaData, error)
-
-	// WriteFileMetaData write file meta to storage
-	WriteFileMetaData(taskID string, meta *FileMetaData) error
+	// WriteFileMetadata write file meta to storage
+	WriteFileMetadata(taskID string, meta *FileMetadata) error
 
 	// WritePieceMetaRecords write piece meta records to storage
 	WritePieceMetaRecords(taskID string, metaRecords []*PieceMetaRecord) error
 
-	// AppendPieceMetaData append piece meta data to storage
-	AppendPieceMetaData(taskID string, metaRecord *PieceMetaRecord) error
+	// AppendPieceMetadata append piece meta data to storage
+	AppendPieceMetadata(taskID string, metaRecord *PieceMetaRecord) error
 
 	// ReadPieceMetaRecords read piece meta records from storage
 	ReadPieceMetaRecords(taskID string) ([]*PieceMetaRecord, error)
@@ -76,8 +73,8 @@ type Manager interface {
 	TryFreeSpace(fileLength int64) (bool, error)
 }
 
-// FileMetaData meta data of task
-type FileMetaData struct {
+// FileMetadata meta data of task
+type FileMetadata struct {
 	TaskID           string            `json:"taskID"`
 	TaskURL          string            `json:"taskURL"`
 	PieceSize        int32             `json:"pieceSize"`
@@ -85,6 +82,7 @@ type FileMetaData struct {
 	AccessTime       int64             `json:"accessTime"`
 	Interval         int64             `json:"interval"`
 	CdnFileLength    int64             `json:"cdnFileLength"`
+	Digest           string            `json:"digest"`
 	SourceRealDigest string            `json:"sourceRealDigest"`
 	Tag              string            `json:"tag"`
 	ExpireInfo       map[string]string `json:"expireInfo"`
@@ -188,24 +186,20 @@ func (m *storeManagerPlugin) ReadDownloadFile(taskID string) (io.ReadCloser, err
 	return m.instance.ReadDownloadFile(taskID)
 }
 
-func (m *storeManagerPlugin) CreateUploadLink(taskID string) error {
-	return m.instance.CreateUploadLink(taskID)
+func (m *storeManagerPlugin) ReadFileMetadata(taskID string) (*FileMetadata, error) {
+	return m.instance.ReadFileMetadata(taskID)
 }
 
-func (m *storeManagerPlugin) ReadFileMetaData(taskID string) (*FileMetaData, error) {
-	return m.instance.ReadFileMetaData(taskID)
-}
-
-func (m *storeManagerPlugin) WriteFileMetaData(taskID string, data *FileMetaData) error {
-	return m.instance.WriteFileMetaData(taskID, data)
+func (m *storeManagerPlugin) WriteFileMetadata(taskID string, data *FileMetadata) error {
+	return m.instance.WriteFileMetadata(taskID, data)
 }
 
 func (m *storeManagerPlugin) WritePieceMetaRecords(taskID string, records []*PieceMetaRecord) error {
 	return m.instance.WritePieceMetaRecords(taskID, records)
 }
 
-func (m *storeManagerPlugin) AppendPieceMetaData(taskID string, record *PieceMetaRecord) error {
-	return m.instance.AppendPieceMetaData(taskID, record)
+func (m *storeManagerPlugin) AppendPieceMetadata(taskID string, record *PieceMetaRecord) error {
+	return m.instance.AppendPieceMetadata(taskID, record)
 }
 
 func (m *storeManagerPlugin) ReadPieceMetaRecords(taskID string) ([]*PieceMetaRecord, error) {

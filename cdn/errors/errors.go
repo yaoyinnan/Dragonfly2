@@ -47,7 +47,7 @@ type ErrInconsistentValues struct {
 }
 
 func (e ErrInconsistentValues) Error() string {
-	return fmt.Sprintf("inconsistent number of pieces, expected %s, actual: %s", e.Expected, e.Actual)
+	return fmt.Sprintf("inconsistent values, expected %s, actual: %s", e.Expected, e.Actual)
 }
 
 // ErrResourceExpired represents the downloaded resource has expired
@@ -56,7 +56,7 @@ type ErrResourceExpired struct {
 }
 
 func (e ErrResourceExpired) Error() string {
-	return fmt.Sprintf("url %s expired", e.URL)
+	return fmt.Sprintf("url %s has expired", e.URL)
 }
 
 // ErrResourceNotSupportRangeRequest represents the downloaded resource does not support Range downloads

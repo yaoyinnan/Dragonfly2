@@ -114,9 +114,9 @@ func (t *localTaskStore) WritePiece(ctx context.Context, req *WritePieceRequest)
 		}
 	}
 	// when Md5 is empty, try to get md5 from reader
-	if req.PieceMetaData.Md5 == "" {
+	if req.PieceMetadata.Md5 == "" {
 		if get, ok := req.Reader.(digestutils.DigestReader); ok {
-			req.PieceMetaData.Md5 = get.Digest()
+			req.PieceMetadata.Md5 = get.Digest()
 		}
 	}
 	t.Debugf("wrote %d bytes to file %s, piece %d, start %d, length: %d",
@@ -127,7 +127,7 @@ func (t *localTaskStore) WritePiece(ctx context.Context, req *WritePieceRequest)
 	if _, ok := t.Pieces[req.Num]; ok {
 		return n, nil
 	}
-	t.Pieces[req.Num] = req.PieceMetaData
+	t.Pieces[req.Num] = req.PieceMetadata
 	return n, nil
 }
 
@@ -173,7 +173,7 @@ func (t *localTaskStore) ReadPiece(ctx context.Context, req *ReadPieceRequest) (
 	return io.LimitReader(file, req.Range.Length), file, nil
 }
 
-func (t *localTaskStore) ReadAllPieces(ctx context.Context, req *PeerTaskMetaData) (io.ReadCloser, error) {
+func (t *localTaskStore) ReadAllPieces(ctx context.Context, req *PeerTaskMetadata) (io.ReadCloser, error) {
 	t.touch()
 	file, err := os.Open(t.DataFilePath)
 	if err != nil {

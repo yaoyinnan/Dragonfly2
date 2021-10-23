@@ -45,6 +45,17 @@ func NewRequest(rawURL string) (*Request, error) {
 	}, nil
 }
 
+func NewRequestWithTaskHeader(rawURL string, header map[string]string) (*Request, error) {
+	request, err := NewRequest(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range header {
+		request.Header.Add(k, v)
+	}
+	return request, nil
+}
+
 func NewRequestWithContext(ctx context.Context, rawURL string) (*Request, error) {
 	if ctx == nil {
 		return nil, errors.New("nil Context")
