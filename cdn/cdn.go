@@ -61,7 +61,7 @@ type Server struct {
 	managerClient managerclient.Client
 }
 
-// New creates a brand new server instance.
+// New creates a brand-new server instance.
 func New(cfg *config.Config) (*Server, error) {
 	s := &Server{config: cfg}
 

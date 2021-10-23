@@ -181,7 +181,7 @@ type BaseProperties struct {
 	// default: 3min
 	TaskExpireTime time.Duration `yaml:"taskExpireTime" mapstructure:"taskExpireTime"`
 
-	// StorageMode disk/hybrid/memory
+	// StorageMode disk/hybrid
 	StorageMode string `yaml:"storageMode" mapstructure:"storageMode"`
 
 	// Manager configuration

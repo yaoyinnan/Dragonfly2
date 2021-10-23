@@ -40,7 +40,7 @@ type Manager interface {
 	Initialize(taskMgr supervisor.SeedTaskManager)
 
 	// ResetRepo reset the storage of task
-	ResetRepo(*types.SeedTask) error
+	ResetRepo(taskID string) error
 
 	// StatDownloadFile stat download file info
 	StatDownloadFile(taskID string) (*storedriver.StorageInfo, error)

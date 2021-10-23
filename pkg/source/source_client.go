@@ -19,6 +19,7 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -29,7 +30,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-var ErrUnExpectedStatusCode = errors.New("unexpected response status code")
+// ErrUnExpectedResponse represents the response is not expected
+type ErrUnExpectedResponse struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *ErrUnExpectedResponse) Error() string {
+	return fmt.Sprintf("Status: %s, StatusCode: %d", e.Status, e.StatusCode)
+}
+
+func IsUnExpectedResponse(err error) bool {
+	err = errors.Cause(err)
+	_, ok := err.(*ErrUnExpectedResponse)
+	return ok
+}
 
 var ErrNoClientFound = errors.New("no source client found")
 
@@ -147,6 +162,7 @@ func IsSupportRange(request *Request) (bool, error) {
 	if request.Header.get(Range) == "" {
 		request.Header.Add(Range, "0-0")
 	}
+	request.Header = client.TransformToConcreteHeader(request.Header)
 	return client.IsSupportRange(request)
 }
 

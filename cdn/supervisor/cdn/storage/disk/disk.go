@@ -33,7 +33,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
@@ -74,7 +73,6 @@ type diskStorageMgr struct {
 	cfg        *storage.Config
 	diskDriver storedriver.Driver
 	cleaner    *storage.Cleaner
-	taskMgr    supervisor.SeedTaskManager
 }
 
 func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
@@ -95,7 +93,6 @@ func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
 }
 
 func (s *diskStorageMgr) Initialize(taskMgr supervisor.SeedTaskManager) {
-	s.taskMgr = taskMgr
 	diskGcConfig := s.cfg.DriverConfigs[local.DiskDriverName].GCConfig
 	if diskGcConfig == nil {
 		diskGcConfig = s.getDefaultGcConfig()
@@ -231,8 +228,8 @@ func (s *diskStorageMgr) DeleteTask(taskID string) error {
 	return nil
 }
 
-func (s *diskStorageMgr) ResetRepo(task *types.SeedTask) error {
-	return s.DeleteTask(task.ID)
+func (s *diskStorageMgr) ResetRepo(taskID string) error {
+	return s.DeleteTask(taskID)
 }
 
 func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {

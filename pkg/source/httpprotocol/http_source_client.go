@@ -107,7 +107,7 @@ func (client *httpSourceClient) GetContentLength(request *source.Request) (int64
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		//similar to proposing another error type to indicate that this  error can interact with the URL, but the status code does not meet expectations
-		return types.UnKnownSourceFileLen, errors.Wrapf(source.ErrUnExpectedStatusCode, "unexpected status code: %d", resp.StatusCode)
+		return types.UnKnownSourceFileLen, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 	return resp.ContentLength, nil
 }
@@ -142,7 +142,7 @@ func (client *httpSourceClient) Download(request *source.Request) (io.ReadCloser
 		return resp.Body, nil
 	}
 	defer resp.Body.Close()
-	return nil, errors.Wrapf(source.ErrUnExpectedStatusCode, "unexpected status code: %d", resp.StatusCode)
+	return nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 }
 
 func (client *httpSourceClient) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
@@ -161,11 +161,11 @@ func (client *httpSourceClient) DownloadWithResponseHeader(request *source.Reque
 		return response, nil
 	}
 	defer resp.Body.Close()
-	return nil, errors.Wrapf(source.ErrUnExpectedStatusCode, "unexpected status code: %d", resp.StatusCode)
+	return nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
-	req, err := http.NewRequestWithContext(request.Context(), http.MethodGet, request.URL.RawPath, nil)
+	req, err := http.NewRequestWithContext(request.Context(), http.MethodGet, request.URL.String(), nil)
 	if err != nil {
 		return -1, err
 	}
@@ -214,14 +214,18 @@ func transformToSourceHeader(httpHeader http.Header) source.Header {
 }
 
 func (client *httpSourceClient) doRequest(method string, request *source.Request) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(request.Context(), method, request.URL.RawPath, nil)
+	req, err := http.NewRequestWithContext(request.Context(), method, request.URL.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "new request")
 	}
 	for key, values := range request.Header {
 		for i := range values {
 			req.Header.Add(key, values[i])
 		}
 	}
-	return client.httpClient.Do(req)
+	resp, err := client.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "request source resource")
+	}
+	return resp, nil
 }
