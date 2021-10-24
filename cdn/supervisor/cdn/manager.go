@@ -80,7 +80,7 @@ func newManager(cfg *config.Config, cacheStore storage.Manager, progressManage s
 		cdnReporter:     cdnReporter,
 		progressMgr:     progressManage,
 		detector:        newCacheDetector(metadataManager),
-		writer:          newCacheWriter(cdnReporter, cacheStore),
+		writer:          newCacheWriter(cdnReporter, metadataManager, cacheStore),
 	}, nil
 }
 
