@@ -36,7 +36,11 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoin
 	}
 	task.Log().Infof("start download url %s at range: %d-%d: with header: %+v", task.RawURL, breakPoint,
 		task.SourceFileLength, task.Range)
-	reader, responseHeader, err := source.DownloadWithResponseHeader(ctx, task.RawURL, headers)
+	downloadRequest, err := source.NewRequestWithHeader(task.RawURL, task.Header)
+	if err != nil {
+		return nil, errors.Wrap(err, "create download request")
+	}
+	resp, err := source.DownloadWithResponseHeader(downloadRequest)
 	// update Expire info
 	if err == nil {
 		expireInfo := map[string]string{
@@ -45,15 +49,18 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoin
 		}
 		cm.updateExpireInfo(task.ID, expireInfo)
 	}
-	return reader, err
+	return resp.Body, err
 }
 
 func getBreakRange(breakPoint int64, sourceFileLength int64) (*rangeutils.Range, error) {
 	if breakPoint <= 0 {
-		return nil, fmt.Errorf("breakPoint is illegal for value: %d", breakPoint)
+		return nil, errors.Errorf("breakPoint is illegal, breakPoint: %d", breakPoint)
 	}
-	if sourceFileLength <= 0 {
-		return nil, fmt.Errorf("sourceFileLength is illegal for value: %d", sourceFileLength)
+	if sourceFileLength < 0 {
+		return &rangeutils.Range{
+			StartIndex: breakPoint,
+			EndIndex:   ,
+		}, fmt.Errorf("sourceFileLength is illegal for value: %d", sourceFileLength)
 	}
 	end := sourceFileLength - 1
 	if breakPoint > end {
@@ -62,6 +69,6 @@ func getBreakRange(breakPoint int64, sourceFileLength int64) (*rangeutils.Range,
 	}
 	return &rangeutils.Range{
 		StartIndex: uint64(breakPoint),
-		EndIndex:   uint64(end),
+		EndIndex:   uint64(breakPoint+sourceFileLength),
 	}, nil
 }

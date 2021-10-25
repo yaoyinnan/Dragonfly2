@@ -28,29 +28,17 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/distribution/distribution/v3/uuid"
-	"github.com/stretchr/testify/suite"
-
 	// Register oss client
 	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"
 )
 
-func TestRpcServerTestSuite(t *testing.T) {
-	suite.Run(t, new(RpcServerTestSuite))
-}
-
-type RpcServerTestSuite struct {
-	suite.Suite
-	mgr Manager
-}
-
 func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 	type fields struct {
-		taskMgr supervisor.SeedTaskMgr
+		taskMgr supervisor.SeedTaskManager
 		cfg     *config.Config
 	}
 	type args struct {
@@ -112,7 +100,7 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 		t.Fatal(err, "create task manager")
 	}
 	type fields struct {
-		taskMgr supervisor.SeedTaskMgr
+		taskMgr supervisor.SeedTaskManager
 		cfg     *config.Config
 	}
 	type args struct {
@@ -170,98 +158,5 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 
 			})
 		}
-	}
-}
-
-func TestNewCdnSeedServer(t *testing.T) {
-	type args struct {
-		cfg     *config.Config
-		taskMgr supervisor.SeedTaskMgr
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *server
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.args.cfg, tt.args.taskMgr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewCdnSeedServer() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewCdnSeedServer() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_checkPieceTasksRequestParams(t *testing.T) {
-	type args struct {
-		req *base.PieceTaskRequest
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := checkPieceTasksRequestParams(tt.args.req); (err != nil) != tt.wantErr {
-				t.Errorf("checkPieceTasksRequestParams() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_checkSeedRequestParams(t *testing.T) {
-	type args struct {
-		req *cdnsystem.SeedRequest
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := checkSeedRequestParams(tt.args.req); (err != nil) != tt.wantErr {
-				t.Errorf("checkSeedRequestParams() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_constructRegisterRequest(t *testing.T) {
-	type args struct {
-		req *cdnsystem.SeedRequest
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *types.TaskRegisterRequest
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := constructRegisterRequest(tt.args.req)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("constructRegisterRequest() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("constructRegisterRequest() got = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }

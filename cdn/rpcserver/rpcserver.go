@@ -19,7 +19,6 @@ package rpcserver
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/config"
@@ -33,7 +32,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	cdnserver "d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/server"
-	"d7y.io/dragonfly/v2/pkg/util/digestutils"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
@@ -62,43 +60,13 @@ func New(cfg *config.Config, taskMgr supervisor.SeedTaskManager, opts ...grpc.Se
 	return svr.Server, nil
 }
 
-func constructRegisterRequest(req *cdnsystem.SeedRequest) (*types.TaskRegisterRequest, error) {
-	if err := checkSeedRequestParams(req); err != nil {
-		return nil, err
-	}
-	meta := req.UrlMeta
-	header := make(map[string]string)
-	if meta != nil {
-		if !stringutils.IsBlank(meta.Digest) {
-			digest := digestutils.Parse(meta.Digest)
-			if _, ok := digestutils.Algorithms[digest[0]]; !ok {
-				return nil, errors.Errorf("unsupported digest algorithm")
-			}
-			header["digest"] = meta.Digest
-		}
-		if !stringutils.IsBlank(meta.Range) {
-			header["range"] = meta.Range
-		}
-		for k, v := range meta.Header {
-			header[k] = v
-		}
-	}
-	return &types.TaskRegisterRequest{
-		Header: header,
-		URL:    req.Url,
-		Digest: header["digest"],
-		TaskID: req.TaskId,
-		Filter: strings.Split(req.UrlMeta.Filter, "&"),
-	}, nil
-}
-
 // checkSeedRequestParams check the params of SeedRequest.
 func checkSeedRequestParams(req *cdnsystem.SeedRequest) error {
-	if !urlutils.IsValidURL(req.Url) {
-		return errors.Errorf("resource url: %s is invalid", req.Url)
-	}
 	if stringutils.IsBlank(req.TaskId) {
 		return errors.New("taskId is empty")
+	}
+	if !urlutils.IsValidURL(req.Url) {
+		return errors.Errorf("resource url: %s is invalid", req.Url)
 	}
 	return nil
 }
@@ -124,6 +92,11 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		return err
 	}
 	registerTask := types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta)
+	// todo
+	pieceChan, err := css.seedTask.register()
+	if err != nil {
+
+	}
 	// register task
 	pieceChan, err := css.taskMgr.Register(ctx, registerTask)
 
@@ -185,9 +158,9 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		if r := recover(); r != nil {
 			err = dferrors.Newf(dfcodes.UnknownError, "get task(%s) piece tasks encounter an panic: %v", req.TaskId, r)
 			span.RecordError(err)
-			logger.WithTaskID(req.TaskId).Errorf("%v", err)
+			logger.WithTaskID(req.TaskId).Errorf("get piece tasks failed: %v", err)
 		}
-		logger.Infof("get piece tasks of task %s result success: %t", req.TaskId, err == nil)
+		logger.WithTaskID(req.TaskId).Infof("get piece tasks result success: %t", err == nil)
 	}()
 	if err := checkPieceTasksRequestParams(req); err != nil {
 		err = dferrors.Newf(dfcodes.BadRequest, "bad request for task(%s): %v", req.TaskId, err)
@@ -206,7 +179,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		return nil, err
 	}
 	if task.IsError() {
-		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "fail to download task(%s), cdnStatus: %s", task.ID, task.CdnStatus)
+		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status is FAIL, cdnStatus: %s", task.ID, task.CdnStatus)
 		span.RecordError(err)
 		return nil, err
 	}
@@ -247,16 +220,16 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 
 func checkPieceTasksRequestParams(req *base.PieceTaskRequest) error {
 	if stringutils.IsBlank(req.TaskId) {
-		return errors.Wrap(cdnerrors.ErrInvalidValue, "taskID is empty")
+		return errors.Errorf("taskID is empty")
 	}
 	if stringutils.IsBlank(req.SrcPid) {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "src peerID is empty")
+		return errors.Errorf("src peerID is empty")
 	}
 	if req.StartNum < 0 {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "invalid starNum %d", req.StartNum)
+		return errors.Errorf("invalid starNum %d", req.StartNum)
 	}
 	if req.Limit < 0 {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "invalid limit %d", req.Limit)
+		return errors.Errorf("invalid limit %d", req.Limit)
 	}
 	return nil
 }

@@ -36,7 +36,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Ensure that Manager implements the SeedTaskMgr and gcExecutor interfaces
+// Ensure that Manager implements the SeedTaskManager and gcExecutor interfaces
 var _ supervisor.SeedTaskManager = (*Manager)(nil)
 var _ gc.Executor = (*Manager)(nil)
 
@@ -53,7 +53,7 @@ type Manager struct {
 }
 
 // NewManager returns a new Manager Object.
-func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr supervisor.SeedProgressManager) (*Manager, error) {
+func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr supervisor.SeedProgressManager) (supervisor.SeedTaskManager, error) {
 	taskMgr := &Manager{
 		cfg:                     cfg,
 		taskStore:               syncmap.NewSyncMap(),
@@ -121,7 +121,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 		tm.progressMgr.InitSeedProgress(ctx, task.ID)
 		task.Log().Infof("successfully init seed progress for task")
 	}
-	updatedTask, err := tm.updateTask(task.ID, &types.SeedTask{
+	err := tm.updateTask(task.ID, &types.SeedTask{
 		CdnStatus: types.TaskInfoCdnStatusRunning,
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 		if err != nil {
 			task.Log().Errorf("trigger cdn get error: %v", err)
 		}
-		updatedTask, err = tm.updateTask(task.ID, updateTaskInfo)
+		err = tm.updateTask(task.ID, updateTaskInfo)
 		go func() {
 			if err := tm.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
 				task.Log().Errorf("failed to publish task: %v", err)
@@ -174,6 +174,14 @@ func (tm Manager) Get(taskID string) (*types.SeedTask, error) {
 		logger.WithTaskID(taskID).Warnf("failed to update accessTime: %v", err)
 	}
 	return task, err
+}
+
+// Update the info of task.
+func (tm *Manager) Update(taskID string, taskInfo *types.SeedTask) error {
+	synclock.Lock(taskID, false)
+	defer synclock.UnLock(taskID, false)
+
+	return tm.updateTask(taskID, taskInfo)
 }
 
 func (tm Manager) Exist(taskID string) (*types.SeedTask, bool) {

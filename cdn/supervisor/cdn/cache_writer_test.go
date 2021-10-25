@@ -20,7 +20,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -35,6 +34,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/types"
+	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"github.com/stretchr/testify/suite"
 )
@@ -89,10 +89,10 @@ func (suite *CacheWriterTestSuite) SetupSuite() {
 	if !ok {
 		suite.Failf("failed to get storage mode %s", config.DefaultStorageMode)
 	}
-	cacheDataManager := newCacheDataManager(storeMgr)
+	cacheDataManager := newMetadataManager(storeMgr)
 	progressMgr, _ := progress.NewManager()
 	cdnReporter := newReporter(progressMgr)
-	suite.writer = newCacheWriter(cdnReporter, cacheDataManager)
+	suite.writer = newCacheWriter(cdnReporter, cacheDataManager, storeMgr)
 }
 
 func (suite *CacheWriterTestSuite) TearDownSuite() {
@@ -108,9 +108,9 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 	suite.Nil(err)
 	contentLen := int64(len(content))
 	type args struct {
-		reader       io.Reader
-		task         *types.SeedTask
-		detectResult *cacheResult
+		reader     *limitreader.LimitReader
+		task       *types.SeedTask
+		breakPoint int64
 	}
 
 	tests := []struct {
@@ -122,9 +122,9 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 		{
 			name: "write with nil detectResult",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader(string(content))),
+				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
 				task: &types.SeedTask{
-					TaskID:    "5806501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
+					ID:        "5806501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
 					PieceSize: 50,
 				},
 			},
@@ -132,67 +132,57 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 				backSourceLength:     contentLen,
 				realCdnFileLength:    contentLen,
 				realSourceFileLength: contentLen,
-				pieceTotalCount:      int32((contentLen + 49) / 50),
+				totalPieceCount:      int32((contentLen + 49) / 50),
 				pieceMd5Sign:         "3f4585787609b0d7d4c9fc800db61655a74494f83507c8acd2818d0461d9cdc5",
 			},
 		}, {
 			name: "write with non nil detectResult",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader(string(content))),
+				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
 				task: &types.SeedTask{
-					TaskID:    "5816501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
+					ID:        "5816501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
 					PieceSize: 50,
-				},
-				detectResult: &cacheResult{
-					breakPoint:       0,
-					pieceMetaRecords: nil,
-					fileMetadata:     nil,
 				},
 			},
 			result: &downloadMetadata{
 				backSourceLength:     contentLen,
 				realCdnFileLength:    contentLen,
 				realSourceFileLength: contentLen,
-				pieceTotalCount:      int32((contentLen + 49) / 50),
+				totalPieceCount:      int32((contentLen + 49) / 50),
 				pieceMd5Sign:         "3f4585787609b0d7d4c9fc800db61655a74494f83507c8acd2818d0461d9cdc5",
 			},
 		}, {
 			name: "write with task length",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader(string(content))),
+				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
 				task: &types.SeedTask{
-					TaskID:           "5826501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e93",
+					ID:               "5826501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e93",
 					PieceSize:        50,
 					SourceFileLength: contentLen,
-				},
-				detectResult: &cacheResult{
-					breakPoint:       0,
-					pieceMetaRecords: nil,
-					fileMetadata:     nil,
 				},
 			},
 			result: &downloadMetadata{
 				backSourceLength:     contentLen,
 				realCdnFileLength:    contentLen,
 				realSourceFileLength: contentLen,
-				pieceTotalCount:      int32((contentLen + 49) / 50),
+				totalPieceCount:      int32((contentLen + 49) / 50),
 				pieceMd5Sign:         "3f4585787609b0d7d4c9fc800db61655a74494f83507c8acd2818d0461d9cdc5",
 			},
 		},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			suite.writer.cdnReporter.progress.InitSeedProgress(context.Background(), tt.args.task.TaskID)
-			downloadMetadata, err := suite.writer.startWriter(context.Background(), tt.args.reader, tt.args.task, tt.args.detectResult)
+			suite.writer.cdnReporter.progressManager.InitSeedProgress(context.Background(), tt.args.task.ID)
+			downloadMetadata, err := suite.writer.startWriter(context.Background(), tt.args.reader, tt.args.task, tt.args.breakPoint)
 			suite.Equal(tt.wantErr, err != nil)
 			suite.Equal(tt.result, downloadMetadata)
-			suite.checkFileSize(suite.writer.cacheDataManager, tt.args.task.TaskID, contentLen)
+			suite.checkFileSize(suite.writer.cacheStore, tt.args.task.ID, contentLen)
 		})
 	}
 }
 
-func (suite *CacheWriterTestSuite) checkFileSize(cacheDataMgr *cacheDataManager, taskID string, expectedSize int64) {
-	storageInfo, err := cacheDataMgr.statDownloadFile(taskID)
+func (suite *CacheWriterTestSuite) checkFileSize(cacheStore storage.Manager, taskID string, expectedSize int64) {
+	storageInfo, err := cacheStore.StatDownloadFile(taskID)
 	suite.Nil(err)
 	suite.Equal(expectedSize, storageInfo.Size)
 }

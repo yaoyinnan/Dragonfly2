@@ -91,7 +91,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	if ok, cause := checkMetadata(task, fileMetadata); !ok {
 		return nil, errors.Errorf("fileMetadata has been modified: %s", cause)
 	}
-	checkExpiredRequest, err := source.NewRequestWithTaskHeader(task.RawURL, task.Header)
+	checkExpiredRequest, err := source.NewRequestWithHeader(task.RawURL, task.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create request")
 	}
@@ -114,7 +114,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	}
 	// check if the resource supports range request. if so,
 	// detect the cache situation by reading piece meta and data file
-	checkSupportRangeRequest, err := source.NewRequestWithTaskHeader(task.RawURL, task.Header)
+	checkSupportRangeRequest, err := source.NewRequestWithHeader(task.RawURL, task.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create check support range request")
 	}

@@ -93,7 +93,12 @@ func NewSeedTask(taskID string, rawURL string, urlMeta *base.UrlMeta) *SeedTask 
 		RawURL:           rawURL,
 		TaskURL:          urlutils.FilterURLParam(rawURL, strings.Split(urlMeta.Filter, "&")),
 		SourceFileLength: UnKnownSourceFileLen,
+		CdnFileLength:    0,
+		PieceSize:        0,
 		CdnStatus:        TaskInfoCdnStatusWaiting,
+		TotalPieceCount:  0,
+		SourceRealDigest: "",
+		PieceMd5Sign:     "",
 		Digest:           urlMeta.Digest,
 		Tag:              urlMeta.Tag,
 		Range:            urlMeta.Range,
@@ -142,24 +147,10 @@ func (task *SeedTask) UpdateTaskInfo(cdnStatus, realDigest, pieceMd5Sign string,
 }
 
 func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
+	if task.logger != nil {
+		task.logger = logger.WithTaskID(task.ID)
+	}
 	return task.logger
-}
-
-// IsEqual check whether the two task provided are the same
-func IsEqual(task1, task2 *SeedTask) bool {
-	if task1 == task2 {
-		return true
-	}
-
-	if task1.ID != task2.ID {
-		return false
-	}
-
-	if task1.TaskURL != task2.TaskURL {
-		return false
-	}
-
-	return true
 }
 
 const (

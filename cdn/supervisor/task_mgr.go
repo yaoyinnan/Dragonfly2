@@ -34,6 +34,9 @@ type SeedTaskManager interface {
 	// Get the task Info with specified taskID.
 	Get(taskID string) (*types.SeedTask, error)
 
+	// Update the task info with specified taskID and updateTask
+	Update(taskID string, updateTask *types.SeedTask) error
+
 	// Exist check task existence with specified taskID.
 	Exist(taskID string) (*types.SeedTask, bool)
 

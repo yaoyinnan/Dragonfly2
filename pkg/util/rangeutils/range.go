@@ -62,7 +62,7 @@ func ParseRange(rangeStr string) (r *Range, err error) {
 	}, nil
 }
 
-// ParseRange parses Range according to range string.
+// ParseHTTPRange parses Range according to range string.
 // rangeStr: "bytes=start-end"
 func ParseHTTPRange(rangeStr string) (r *Range, err error) {
 	prefix := "bytes="

@@ -134,7 +134,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	reader := limitreader.NewLimitReaderWithLimiterAndDigest(respBody, cm.limiter, fileDigest, digestutils.Algorithms[digestType])
 
 	// forth: write to storage
-	downloadMetadata, err := cm.writer.startWriter(ctx, reader, task, detectResult)
+	downloadMetadata, err := cm.writer.startWriter(ctx, reader, task, detectResult.breakPoint)
 	if err != nil {
 		server.StatSeedFinish(task.ID, task.RawURL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
 			downloadMetadata.realSourceFileLength)
@@ -210,7 +210,7 @@ func (cm *Manager) updateExpireInfo(taskID string, expireInfo map[string]string)
 var getCurrentTimeMillisFunc = timeutils.CurrentTimeMillis
 
 func getUpdateTaskInfoWithStatusOnly(cdnStatus string) *types.SeedTask {
-	return getUpdateTaskInfo(cdnStatus, "", 0, 0, 0, 0)
+	return getUpdateTaskInfo(cdnStatus, "", "", 0, 0, 0)
 }
 
 func getUpdateTaskInfo(cdnStatus, realMD5, pieceMd5Sign string, sourceFileLength, cdnFileLength int64, totalPieceCount int32) *types.SeedTask {

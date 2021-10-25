@@ -27,14 +27,13 @@ import (
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // addOrUpdateTask add a new task or update exist task
-func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) (task *types.SeedTask, err error) {
+func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) error {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
 	defer span.End()
@@ -43,113 +42,89 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		if time.Since(key) < tm.cfg.FailAccessInterval {
 			// TODO 校验Header
 			span.AddEvent(config.EventHitUnReachableURL)
-			return nil, errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: registerTask.RawURL}, "hit unReachable cache and interval less than %d", tm.cfg.FailAccessInterval)
+			return errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: registerTask.RawURL}, "hit unReachable cache and interval less than %d", tm.cfg.FailAccessInterval)
 		}
 		span.AddEvent(config.EventDeleteUnReachableTask)
 		tm.taskURLUnReachableStore.Delete(taskID)
-		logger.Debugf("delete taskID: %s from url unReachable store", taskID)
+		logger.Debugf("delete taskID: %s from unreachable url list", taskID)
 	}
-	synclock.Lock(taskID, false)
-	defer synclock.UnLock(taskID, false)
 	// using the existing task if it already exists corresponding to taskID
-	if v, err := tm.taskStore.Get(taskID); err == nil {
-		span.SetAttributes(config.AttributeIfReuseTask.Bool(true))
-		existTask := v.(*types.SeedTask)
-		if !types.IsEqual(existTask, registerTask) {
-			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask))
-			return nil, cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask)}
-		}
-		task = existTask
-		logger.Debugf("get exist task for taskID: %s", taskID)
-	} else {
-		span.SetAttributes(config.AttributeIfReuseTask.Bool(false))
-		logger.Debugf("get new task for taskID: %s", taskID)
-		task = registerTask
+	actualTask, loaded := tm.taskStore.LoadOrStore(taskID, registerTask)
+	task := actualTask.(*types.SeedTask)
+	if loaded && !checkSame(task, registerTask) {
+		span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, task))
+		return cdnerrors.ErrTaskIDDuplicate{TaskID: taskID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, task)}
 	}
-
 	if task.SourceFileLength != types.UnKnownSourceFileLen {
-		return task, nil
+		return nil
 	}
-
 	// get sourceContentLength with req.Header
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	defer cancel()
 	span.AddEvent(config.EventRequestSourceFileLength)
-	request, err := source.NewRequest(registerTask.RawURL)
-	registerTask.Header
-	sourceFileLength, err := source.GetContentLength(ctx, registerTask.GetSourceRequest())
+	contentLengthRequest, err := source.NewRequestWithHeader(registerTask.RawURL, registerTask.Header)
+	if registerTask.Range != "" {
+		contentLengthRequest.Header.Add(source.Range, registerTask.Range)
+	}
+	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
 	if err != nil {
-		task.Log().Errorf("failed to get url (%s) content length: %v", task.RawURL, err)
+		registerTask.Log().Errorf("get url (%s) content length failed: %v", registerTask.RawURL, err)
 		if cdnerrors.IsURLNotReachable(err) {
 			tm.taskURLUnReachableStore.Add(taskID, time.Now())
-			return nil, err
+			return err
 		}
 	}
 	// if not support file length header request ,return -1
-	task.SourceFileLength = sourceFileLength
-	task.Log().Debugf("get file content length: %d", sourceFileLength)
-	if task.SourceFileLength > 0 {
-		ok, err := tm.cdnMgr.TryFreeSpace(task.SourceFileLength)
+	registerTask.SourceFileLength = sourceFileLength
+	registerTask.Log().Debugf("success get file content length: %d", sourceFileLength)
+	if registerTask.SourceFileLength > 0 {
+		ok, err := tm.cdnMgr.TryFreeSpace(registerTask.SourceFileLength)
 		if err != nil {
-			task.Log().Errorf("failed to try free space: %v", err)
+			registerTask.Log().Errorf("failed to try free space: %v", err)
 		}
 		if !ok {
-			return nil, cdnerrors.ErrResourcesLacked
+			return cdnerrors.ErrResourcesLacked
 		}
 	}
 
 	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
 	if registerTask.Header != nil {
-		task.Header = registerTask.Header
+		registerTask.Header = registerTask.Header
 	}
 
 	// calculate piece size and update the PieceSize and PieceTotal
-	if task.PieceSize <= 0 {
-		pieceSize := cdnutil.ComputePieceSize(task.SourceFileLength)
-		task.PieceSize = pieceSize
+	if registerTask.PieceSize <= 0 {
+		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
+		registerTask.PieceSize = pieceSize
 	}
-	tm.taskStore.Add(task.ID, task)
-	task.Log().Debugf("success add task: %+v into taskStore", task)
-	return task, nil
+	tm.taskStore.Add(registerTask.ID, registerTask)
+	registerTask.Log().Debugf("success add task: %+v", registerTask)
+	return nil
 }
 
-// updateTask
-func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) (*types.SeedTask, error) {
-	if stringutils.IsBlank(taskID) {
-		return nil, errors.Wrap(cdnerrors.ErrInvalidValue, "taskID is empty")
-	}
-
+// updateTask update task
+func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) error {
 	if updateTaskInfo == nil {
-		return nil, errors.Wrap(cdnerrors.ErrInvalidValue, "updateTaskInfo is nil")
+		return errors.Wrap(cdnerrors.ErrInvalidValue, "updateTaskInfo is nil")
 	}
 
 	if stringutils.IsBlank(updateTaskInfo.CdnStatus) {
-		return nil, errors.Wrap(cdnerrors.ErrInvalidValue, "status of task is empty")
+		return errors.Wrap(cdnerrors.ErrInvalidValue, "status of task is empty")
 	}
 	// get origin task
 	task, err := tm.getTask(taskID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if !updateTaskInfo.IsSuccess() {
-		// when the origin CDNStatus equals success, do not update it to unsuccessful
-		if task.IsSuccess() {
-			return task, nil
-		}
-
-		// only update the task CdnStatus when the new task CDNStatus and
-		// the origin CDNStatus both not equals success
-		task.CdnStatus = updateTaskInfo.CdnStatus
-		return task, nil
+	if task.IsSuccess() && !updateTaskInfo.IsSuccess() {
+		task.Log().Warnf("origin task status is success, but update task status is %s, return origin task", task.CdnStatus)
+		return nil
 	}
 
 	// only update the task info when the new CDNStatus equals success
 	// and the origin CDNStatus not equals success.
-	if updateTaskInfo.CdnFileLength != 0 {
+	if updateTaskInfo.CdnFileLength > 0 {
 		task.CdnFileLength = updateTaskInfo.CdnFileLength
 	}
-
 	if !stringutils.IsBlank(updateTaskInfo.SourceRealDigest) {
 		task.SourceRealDigest = updateTaskInfo.SourceRealDigest
 	}
@@ -157,14 +132,37 @@ func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) (*t
 	if !stringutils.IsBlank(updateTaskInfo.PieceMd5Sign) {
 		task.PieceMd5Sign = updateTaskInfo.PieceMd5Sign
 	}
-	var totalPieceCount int32
-	if updateTaskInfo.SourceFileLength > 0 {
-		totalPieceCount = int32((updateTaskInfo.SourceFileLength + int64(task.PieceSize-1)) / int64(task.PieceSize))
+	if updateTaskInfo.SourceFileLength >= 0 {
+		task.TotalPieceCount = updateTaskInfo.TotalPieceCount
 		task.SourceFileLength = updateTaskInfo.SourceFileLength
 	}
-	if totalPieceCount != 0 {
-		task.TotalPieceCount = totalPieceCount
-	}
 	task.CdnStatus = updateTaskInfo.CdnStatus
-	return task, nil
+	return nil
+}
+
+func checkSame(task1, task2 *types.SeedTask) bool {
+	if task1 == task2 {
+		return true
+	}
+
+	if task1.ID != task2.ID {
+		return false
+	}
+
+	if task1.TaskURL != task2.TaskURL {
+		return false
+	}
+
+	if task1.Range != task2.Range {
+		return false
+	}
+
+	if task1.Tag != task2.Tag {
+		return false
+	}
+
+	if task1.Filter != task2.Filter {
+		return false
+	}
+	return true
 }

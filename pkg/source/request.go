@@ -45,7 +45,7 @@ func NewRequest(rawURL string) (*Request, error) {
 	}, nil
 }
 
-func NewRequestWithTaskHeader(rawURL string, header map[string]string) (*Request, error) {
+func NewRequestWithHeader(rawURL string, header map[string]string) (*Request, error) {
 	request, err := NewRequest(rawURL)
 	if err != nil {
 		return nil, err

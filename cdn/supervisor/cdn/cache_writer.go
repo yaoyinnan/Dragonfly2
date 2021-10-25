@@ -21,14 +21,12 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
-	"fmt"
 	"io"
 	"sync"
 
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
-	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
@@ -74,39 +72,39 @@ func (cw *cacheWriter) startWriter(ctx context.Context, reader *limitreader.Limi
 	defer writeSpan.End()
 	// currentSourceFileLength is used to calculate the source file Length dynamically
 	currentSourceFileLength := breakPoint
-	// the pieceNum currently have been processed
-	curPieceNum := len(detectResult.pieceMetaRecords)
 	routineCount := calculateRoutineCount(task.SourceFileLength-currentSourceFileLength, task.PieceSize)
 	writeSpan.SetAttributes(config.AttributeWriteGoroutineCount.Int(routineCount))
 	// start writer pool
-	backSourceLength, totalPieceCount, err := cw.doWrite(ctx, reader, task, routineCount, curPieceNum)
+	backSourceLength, totalPieceCount, err := cw.doWrite(ctx, reader, task, routineCount, breakPoint)
 	if err != nil {
-		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("write data: %v", err)
+		return &downloadMetadata{backSourceLength: backSourceLength}, errors.Wrap(err, "do write data action")
 	}
 	storageInfo, err := cw.cacheStore.StatDownloadFile(task.ID)
 	if err != nil {
-		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("stat cdn download file: %v", err)
+		return &downloadMetadata{backSourceLength: backSourceLength}, errors.Wrap(err, "stat cdn download file")
 	}
 	storageInfoBytes, _ := json.Marshal(storageInfo)
 	writeSpan.SetAttributes(config.AttributeDownloadFileInfo.String(string(storageInfoBytes)))
 	// TODO Try getting it from the ProgressManager first
 	pieceMd5Sign, _, err := cw.metadataManager.getPieceMd5Sign(task.ID)
 	if err != nil {
-		return &downloadMetadata{backSourceLength: backSourceLength}, fmt.Errorf("get piece md5 sign: %v", err)
+		return &downloadMetadata{backSourceLength: backSourceLength}, errors.Wrap(err, "get piece md5 sign")
 	}
 	return &downloadMetadata{
 		backSourceLength:     backSourceLength,
 		realCdnFileLength:    storageInfo.Size,
 		realSourceFileLength: currentSourceFileLength + backSourceLength,
-		totalPieceCount:      int32(totalPieceCount),
+		totalPieceCount:      totalPieceCount,
 		pieceMd5Sign:         pieceMd5Sign,
 		sourceRealDigest:     reader.Digest(),
 	}, nil
 }
 
 // doWrite do actual write data to storage
-func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *types.SeedTask, routineCount int, curPieceNum int) (n int64, totalPiece int,
+func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *types.SeedTask, routineCount int, breakPoint int64) (n int64, totalPiece int32,
 	err error) {
+	// the pieceNum currently have been processed
+	curPieceNum := int32(breakPoint / int64(task.PieceSize))
 	var bufPool = &sync.Pool{
 		New: func() interface{} {
 			return new(bytes.Buffer)
@@ -117,10 +115,11 @@ func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *type
 	jobCh := make(chan *piece)
 	var g, writeCtx = errgroup.WithContext(ctx)
 	cw.writerPool(writeCtx, g, routineCount, jobCh, bufPool)
+loop:
 	for {
 		select {
 		case <-writeCtx.Done():
-			break
+			break loop
 		default:
 			var bb = bufPool.Get().(*bytes.Buffer)
 			bb.Reset()
@@ -128,28 +127,28 @@ func (cw *cacheWriter) doWrite(ctx context.Context, reader io.Reader, task *type
 			n, err = io.CopyBuffer(bb, limitReader, buf)
 			if err != nil {
 				close(jobCh)
-				return backSourceLength, 0, errors.Errorf("read source taskID %s pieceNum %d piece failed: %v", task.ID, curPieceNum, err)
+				return backSourceLength, 0, errors.Errorf("read taskID %s pieceNum %d piece from source failed: %v", task.ID, curPieceNum, err)
 			}
 			if n == 0 {
-				break
+				break loop
 			}
 			backSourceLength += n
 
 			jobCh <- &piece{
 				taskID:       task.ID,
-				pieceNum:     int32(curPieceNum),
+				pieceNum:     curPieceNum,
 				pieceSize:    task.PieceSize,
 				pieceContent: bb,
 			}
 			curPieceNum++
 			if n < int64(task.PieceSize) {
-				break
+				break loop
 			}
 		}
 	}
 	close(jobCh)
 	if err := g.Wait(); err != nil {
-
+		return backSourceLength, 0, errors.Wrapf(err, "write pool")
 	}
 	return backSourceLength, curPieceNum, nil
 }
@@ -160,7 +159,7 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 			for p := range pieceCh {
 				select {
 				case <-ctx.Done():
-					return nil
+					return ctx.Err()
 				default:
 					// TODO Subsequent compression and other features are implemented through waitToWriteContent and pieceStyle
 					waitToWriteContent := p.pieceContent
@@ -171,11 +170,11 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 					err := cw.cacheStore.WriteDownloadFile(
 						p.taskID, int64(p.pieceNum)*int64(p.pieceSize), int64(waitToWriteContent.Len()),
 						io.TeeReader(io.LimitReader(p.pieceContent, int64(waitToWriteContent.Len())), pieceMd5))
+					if err != nil {
+						return errors.Errorf("write taskID %s pieceNum %d to download file failed: %v", p.taskID, p.pieceNum, err)
+					}
 					// Recycle Buffer
 					bufPool.Put(waitToWriteContent)
-					if err != nil {
-						return errors.Errorf("write taskID %s pieceNum %d file failed: %v", p.taskID, p.pieceNum, err)
-					}
 					start := uint64(p.pieceNum) * uint64(p.pieceSize)
 					end := start + uint64(pieceLen) - 1
 					pieceRecord := &storage.PieceMetaRecord{
@@ -194,18 +193,16 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 					}
 					// write piece meta to storage
 					if err = cw.metadataManager.appendPieceMetadata(p.taskID, pieceRecord); err != nil {
-						return errors.Errorf("write piece meta file failed: %v", err)
+						return errors.Errorf("write piece meta to piece meta file failed: %v", err)
 					}
-
-					if cw.cdnReporter != nil {
-						if err = cw.cdnReporter.reportPieceMetaRecord(ctx, p.taskID, pieceRecord, DownloaderReport); err != nil {
-							// NOTE: should we do this job again?
-							logger.Errorf("report piece status, pieceNum %d pieceMetaRecord %s: %v", p.pieceNum, pieceRecord, err)
-						}
+					// report piece info
+					if err = cw.cdnReporter.reportPieceMetaRecord(ctx, p.taskID, pieceRecord, DownloaderReport); err != nil {
+						// NOTE: should we do this job again?
+						return errors.Errorf("report piece status, pieceNum %d pieceMetaRecord %s: %v", p.pieceNum, pieceRecord, err)
 					}
 				}
-				return nil
 			}
+			return nil
 		})
 	}
 }
