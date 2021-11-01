@@ -41,7 +41,7 @@ type SeedTaskManager interface {
 	Exist(taskID string) (*types.SeedTask, bool)
 
 	// Delete a task with specified taskID.
-	Delete(taskID string) error
+	Delete(taskID string)
 
 	// GetPieces gets the pieces which has been downloaded from source.
 	GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error)

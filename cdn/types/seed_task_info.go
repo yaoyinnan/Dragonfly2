@@ -18,6 +18,7 @@ package types
 
 import (
 	"strings"
+	"time"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
@@ -63,19 +64,22 @@ type SeedTask struct {
 	PieceMd5Sign string `json:"pieceMd5Sign,omitempty"`
 
 	// Digest checks integrity of url content, for example md5:xxx or sha256:yyy
-	Digest string `json:"digest"`
+	Digest string `json:"digest,omitempty"`
 
 	// Tag identifies different task for same url, conflict with digest
-	Tag string `json:"tag"`
+	Tag string `json:"tag,omitempty"`
+
+	// AccessTime is last access time of task
+	AccessTime time.Time `json:"accessTime,omitempty"`
 
 	// Range content range for url
-	Range string `json:"range"`
+	Range string `json:"range,omitempty"`
 
 	// Filter url used to generate task id
-	Filter string `json:"filter"`
+	Filter string `json:"filter,omitempty"`
 
 	// Header other url header infos
-	Header map[string]string `json:"header"`
+	Header map[string]string `json:"header,omitempty"`
 
 	logger *logger.SugaredLoggerOnWith
 }
@@ -106,6 +110,17 @@ func NewSeedTask(taskID string, rawURL string, urlMeta *base.UrlMeta) *SeedTask 
 		Header:           urlMeta.Header,
 		logger:           logger.WithTaskID(taskID),
 	}
+}
+
+func (task *SeedTask) Clone() *SeedTask {
+	cloneTask := new(SeedTask)
+	*cloneTask = *task
+	if task.Header != nil {
+		for key, value := range task.Header {
+			cloneTask.Header[key] = value
+		}
+	}
+	return cloneTask
 }
 
 // IsSuccess determines that whether the CDNStatus is success.

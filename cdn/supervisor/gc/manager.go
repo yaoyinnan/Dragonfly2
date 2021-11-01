@@ -57,7 +57,7 @@ func StartGC(ctx context.Context) error {
 		// start a goroutine to gc
 		go func(name string, wrapper *ExecutorWrapper) {
 			logger.Debugf("start the %s gc task", name)
-			// delay to execute GC after initialDelay
+			// delay executing GC after initialDelay
 			time.Sleep(wrapper.gcInitialDelay)
 			wg.Done()
 			// execute the GC by fixed delay

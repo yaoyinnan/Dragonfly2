@@ -99,7 +99,7 @@ func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) 
 		}
 		walkTaskIds[taskID] = true
 
-		// we should return directly when we success to get info which means it is being used
+		// we should return directly when success to get info which means it is being used
 		if _, exist := cleaner.taskMgr.Exist(taskID); exist {
 			return nil
 		}
@@ -116,7 +116,7 @@ func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) 
 			gcTaskIDs = append(gcTaskIDs, taskID)
 			return nil
 		}
-		// put taskId into gapTasks or intervalTasks which will sort by some rules
+		// put taskID into gapTasks or intervalTasks which will sort by some rules
 		if err := cleaner.sortInert(gapTasks, intervalTasks, metadata); err != nil {
 			logger.GcLogger.With("type", storagePattern).Errorf("failed to parse inert metadata(%+v): %v", metadata, err)
 		}

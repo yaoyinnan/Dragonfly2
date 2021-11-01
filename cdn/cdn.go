@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package cdnsystem cdn server
+// Package cdn server
 package cdn
 
 import (

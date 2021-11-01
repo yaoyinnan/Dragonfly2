@@ -57,7 +57,7 @@ func (mm *metadataManager) writeFileMetadataByTask(task *types.SeedTask) (*stora
 		CdnFileLength:   task.CdnFileLength,
 		Digest:          task.Digest,
 		Tag:             task.Tag,
-		TotalPieceCount: task.PieceTotal,
+		TotalPieceCount: task.TotalPieceCount,
 		Range:           task.Range,
 		Filter:          task.Filter,
 	}
@@ -192,10 +192,10 @@ func (mm *metadataManager) readDownloadFile(taskID string) (io.ReadCloser, error
 	return mm.storage.ReadDownloadFile(taskID)
 }
 
-func (mm *metadataManager) resetRepo(task *types.SeedTask) error {
-	mm.cacheLocker.Lock(task.ID, false)
-	defer mm.cacheLocker.UnLock(task.ID, false)
-	return mm.storage.ResetRepo(task.ID)
+func (mm *metadataManager) resetRepo(taskID string) error {
+	mm.cacheLocker.Lock(taskID, false)
+	defer mm.cacheLocker.UnLock(taskID, false)
+	return mm.storage.ResetRepo(taskID)
 }
 
 func (mm *metadataManager) writeDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {

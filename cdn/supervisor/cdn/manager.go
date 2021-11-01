@@ -88,7 +88,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTriggerCDN)
 	defer span.End()
-	// obtain taskId write lock
+	// obtain task write lock
 	cm.cdnLocker.Lock(task.ID, false)
 	defer cm.cdnLocker.UnLock(task.ID, false)
 
@@ -143,7 +143,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	server.StatSeedFinish(task.ID, task.RawURL, true, nil, start, time.Now(), downloadMetadata.backSourceLength,
 		downloadMetadata.realSourceFileLength)
 	// fifth: handle CDN result
-	err = cm.handleCDNResult(task, downloadMetadata)
+	err = cm.handleCDNResult(&task, downloadMetadata)
 	if err != nil {
 		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusFailed), err
 	}

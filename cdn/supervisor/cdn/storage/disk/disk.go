@@ -20,12 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path"
 	"strings"
 	"time"
-
-	"go.uber.org/atomic"
 
 	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
@@ -240,41 +236,13 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 	if freeSpace > 100*unit.GB && freeSpace.ToNumber() > fileLength {
 		return true, nil
 	}
-
-	remainder := atomic.NewInt64(0)
-	r := &storedriver.Raw{
-		WalkFn: func(filePath string, info os.FileInfo, err error) error {
-			if fileutils.IsRegular(filePath) {
-				taskID := strings.Split(path.Base(filePath), ".")[0]
-				task, exist := s.taskMgr.Exist(taskID)
-				if exist {
-					var totalLen int64 = 0
-					if task.CdnFileLength > 0 {
-						totalLen = task.CdnFileLength
-					} else {
-						totalLen = task.SourceFileLength
-					}
-					if totalLen > 0 {
-						remainder.Add(totalLen - info.Size())
-					}
-				}
-			}
-			return nil
-		},
+	// if not enough, gc first
+	s.cleaner.GC("disk", true)
+	freeSpace, err = s.diskDriver.GetFreeSpace()
+	if err != nil {
+		return false, err
 	}
-	s.diskDriver.Walk(r)
-
-	enoughSpace := freeSpace.ToNumber()-remainder.Load() > fileLength
-	if !enoughSpace {
-		s.cleaner.GC("disk", true)
-		remainder.Store(0)
-		s.diskDriver.Walk(r)
-		freeSpace, err = s.diskDriver.GetFreeSpace()
-		if err != nil {
-			return false, err
-		}
-		enoughSpace = freeSpace.ToNumber()-remainder.Load() > fileLength
-	}
+	enoughSpace = freeSpace.ToNumber()-remainder.Load() > fileLength
 	if !enoughSpace {
 		return false, nil
 	}

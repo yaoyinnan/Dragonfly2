@@ -19,21 +19,19 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	"d7y.io/dragonfly/v2/cdn/types"
-	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"d7y.io/dragonfly/v2/pkg/structure/syncmap"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/atomic"
 )
 
 // Ensure that Manager implements the SeedTaskManager and gcExecutor interfaces
@@ -45,9 +43,9 @@ var tracer = otel.Tracer("cdn-task-manager")
 // Manager is an implementation of the interface of supervisor.TaskManager.
 type Manager struct {
 	cfg                     *config.Config
-	taskStore               *syncmap.SyncMap
-	accessTimeMap           *syncmap.SyncMap
-	taskURLUnReachableStore *syncmap.SyncMap
+	taskStore               sync.Map
+	accessTimeMap           sync.Map
+	taskURLUnreachableStore sync.Map
 	cdnMgr                  supervisor.CDNManager
 	progressMgr             supervisor.SeedProgressManager
 }
@@ -55,12 +53,9 @@ type Manager struct {
 // NewManager returns a new Manager Object.
 func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr supervisor.SeedProgressManager) (supervisor.SeedTaskManager, error) {
 	taskMgr := &Manager{
-		cfg:                     cfg,
-		taskStore:               syncmap.NewSyncMap(),
-		accessTimeMap:           syncmap.NewSyncMap(),
-		taskURLUnReachableStore: syncmap.NewSyncMap(),
-		cdnMgr:                  cdnMgr,
-		progressMgr:             progressMgr,
+		cfg:         cfg,
+		cdnMgr:      cdnMgr,
+		progressMgr: progressMgr,
 	}
 	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, taskMgr)
 	return taskMgr, nil
@@ -71,20 +66,17 @@ func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (
 	ctx, span = tracer.Start(ctx, config.SpanTaskRegister)
 	defer span.End()
 	// add a new task or update a exist task
-	task, err := tm.addOrUpdateTask(ctx, registerTask)
+	err = tm.addOrUpdateTask(ctx, registerTask)
 	if err != nil {
 		span.RecordError(err)
-		task.Log().Infof("failed to add or update task with req: %+v: %v", registerTask, err)
-		return nil, err
+		return nil, errors.Wrap(err, "add or update seed task")
 	}
 	taskBytes, _ := json.Marshal(task)
 	span.SetAttributes(config.AttributeTaskInfo.String(string(taskBytes)))
 	task.Log().Debugf("success get task info: %+v", task)
 
 	// update accessTime for taskId
-	if err := tm.accessTimeMap.Add(task.ID, time.Now()); err != nil {
-		task.Log().Warnf("failed to update accessTime: %v", err)
-	}
+	tm.accessTimeMap.Store(registerTask.ID, time.Now())
 
 	// trigger CDN
 	if err := tm.triggerCdnSyncAction(ctx, task); err != nil {
@@ -103,7 +95,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 	synclock.Lock(task.ID, true)
 	if !task.IsFrozen() {
 		span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
-		task.Log().Infof("seedTask is running or has been downloaded successfully, status: %s", task.CdnStatus)
+		task.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", task.CdnStatus)
 		synclock.UnLock(task.ID, true)
 		return nil
 	}
@@ -114,7 +106,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 	// reconfirm
 	span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
 	if !task.IsFrozen() {
-		task.Log().Infof("reconfirm find seedTask is running or has been downloaded successfully, status: %s", task.CdnStatus)
+		task.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", task.CdnStatus)
 		return nil
 	}
 	if task.IsWait() {
@@ -129,7 +121,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 	}
 	// triggerCDN goroutine
 	go func() {
-		updateTaskInfo, err := tm.cdnMgr.TriggerCDN(ctx, task)
+		updateTaskInfo, err := tm.cdnMgr.TriggerCDN(ctx, task.Clone())
 		if err != nil {
 			task.Log().Errorf("trigger cdn get error: %v", err)
 		}
@@ -143,37 +135,19 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 		if err != nil {
 			task.Log().Errorf("failed to update task: %v", err)
 		}
-		task.Log().Infof("successfully update task cdn updatedTask: %+v", updatedTask)
+		task.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
 	}()
 	return nil
 }
 
-func (tm *Manager) getTask(taskID string) (*types.SeedTask, error) {
-	if stringutils.IsBlank(taskID) {
-		return nil, errors.Wrap(cdnerrors.ErrInvalidValue, "taskID is empty")
+func (tm Manager) Get(taskID string) (*types.SeedTask, bool) {
+	task, ok := tm.taskStore.Load(taskID)
+	if !ok {
+		return nil, ok
 	}
-
-	v, err := tm.taskStore.Get(taskID)
-	if err != nil {
-		if errors.Cause(err) == dferrors.ErrDataNotFound {
-			return nil, errors.Wrapf(cdnerrors.ErrDataNotFound, "task not found")
-		}
-		return nil, err
-	}
-	// type assertion
-	if info, ok := v.(*types.SeedTask); ok {
-		return info, nil
-	}
-	return nil, errors.Wrapf(cdnerrors.ErrConvertFailed, "origin object: %+v", v)
-}
-
-func (tm Manager) Get(taskID string) (*types.SeedTask, error) {
-	task, err := tm.getTask(taskID)
 	// update accessTime for taskID
-	if err := tm.accessTimeMap.Add(taskID, time.Now()); err != nil {
-		logger.WithTaskID(taskID).Warnf("failed to update accessTime: %v", err)
-	}
-	return task, err
+	tm.accessTimeMap.Store(taskID, time.Now())
+	return task.(*types.SeedTask), true
 }
 
 // Update the info of task.
@@ -185,16 +159,17 @@ func (tm *Manager) Update(taskID string, taskInfo *types.SeedTask) error {
 }
 
 func (tm Manager) Exist(taskID string) (*types.SeedTask, bool) {
-	task, err := tm.getTask(taskID)
-	return task, err == nil
+	task, ok := tm.taskStore.Load(taskID)
+	return task.(*types.SeedTask), ok
 }
 
-func (tm Manager) Delete(taskID string) error {
+func (tm Manager) Delete(taskID string) {
+	synclock.Lock(taskID, false)
+	defer synclock.UnLock(taskID, false)
 	tm.accessTimeMap.Delete(taskID)
-	tm.taskURLUnReachableStore.Delete(taskID)
+	tm.taskURLUnreachableStore.Delete(taskID)
 	tm.taskStore.Delete(taskID)
 	tm.progressMgr.Clear(taskID)
-	return nil
 }
 
 func (tm *Manager) GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error) {
@@ -211,33 +186,30 @@ const (
 
 func (tm *Manager) GC() error {
 	logger.Debugf("start the task meta gc job")
-	var removedTaskCount int
 	startTime := time.Now()
-	// get all taskIDs and the corresponding accessTime
-	taskAccessMap := tm.accessTimeMap
 
-	// range all tasks and determine whether they are expired
-	taskIDs := taskAccessMap.ListKeyAsStringSlice()
-	totalTaskNums := len(taskIDs)
-	for _, taskID := range taskIDs {
-		atime, err := taskAccessMap.GetAsTime(taskID)
-		if err != nil {
-			logger.GcLogger.With("type", "meta").Errorf("gc tasks: failed to get access time taskID(%s): %v", taskID, err)
-			continue
-		}
+	totalTaskNums := atomic.NewInt32(0)
+	removedTaskCount := atomic.NewInt32(0)
+	tm.accessTimeMap.Range(func(key, value interface{}) bool {
+		totalTaskNums.Inc()
+		taskID := key.(string)
+		atime := value.(time.Time)
 		if time.Since(atime) < tm.cfg.TaskExpireTime {
-			continue
+			return true
 		}
+
 		// gc task memory data
 		logger.GcLogger.With("type", "meta").Infof("gc task: start to deal with task: %s", taskID)
 		tm.Delete(taskID)
-		removedTaskCount++
-	}
+		removedTaskCount.Inc()
+		return true
+	})
 
 	// slow GC detected, report it with a log warning
 	if timeDuring := time.Since(startTime); timeDuring > gcTasksTimeout {
-		logger.GcLogger.With("type", "meta").Warnf("gc tasks: %d cost: %.3f", removedTaskCount, timeDuring.Seconds())
+		logger.GcLogger.With("type", "meta").Warnf("gc tasks: %d cost: %.3f", removedTaskCount.Load(), timeDuring.Seconds())
 	}
-	logger.GcLogger.With("type", "meta").Infof("gc tasks: successfully full gc task count(%d), remainder count(%d)", removedTaskCount, totalTaskNums-removedTaskCount)
+	logger.GcLogger.With("type", "meta").Infof("gc tasks: successfully full gc task count(%d), remainder count(%d)", removedTaskCount.Load(),
+		totalTaskNums.Load()-removedTaskCount.Load())
 	return nil
 }

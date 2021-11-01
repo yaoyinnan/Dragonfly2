@@ -47,7 +47,7 @@ const (
 )
 
 const (
-	EventHitUnReachableURL       = "hit-unReachableURL"
+	EventHitUnreachableURL       = "hit-unreachableURL"
 	EventRequestSourceFileLength = "request-source-file-length"
 	EventDeleteUnReachableTask   = "downloaded"
 	EventInitSeedProgress        = "init-seed-progress"
