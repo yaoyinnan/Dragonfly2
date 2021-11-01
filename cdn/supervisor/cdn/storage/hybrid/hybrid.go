@@ -54,16 +54,20 @@ func init() {
 
 // NewStorageManager performs initialization for storage manager and return a storage Manager.
 func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
-	if len(cfg.DriverConfigs) != 2 {
+	driverNames := make([]string, len(cfg.DriverConfigs))
+	for k := range cfg.DriverConfigs {
+		driverNames = append(driverNames, k)
+	}
+	if len(driverNames) != 2 {
 		return nil, fmt.Errorf("disk storage manager should have two driver, cfg's driver number is wrong : %v", cfg)
 	}
-	diskDriver, ok := storedriver.Get(local.DiskDriverName)
+	diskDriver, ok := storedriver.Get(driverNames[0])
 	if !ok {
-		return nil, fmt.Errorf("can not find disk driver for hybrid storage manager, config is %v", cfg)
+		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config is %v", driverNames[0], cfg)
 	}
-	memoryDriver, ok := storedriver.Get(local.MemoryDriverName)
+	memoryDriver, ok := storedriver.Get(driverNames[1])
 	if !ok {
-		return nil, fmt.Errorf("can not find memory driver for hybrid storage manager, config %v", cfg)
+		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config %v", driverNames[1], cfg)
 	}
 	storageMgr := &hybridStorageMgr{
 		cfg:          cfg,
@@ -274,9 +278,9 @@ func (h *hybridStorageMgr) CreateUploadLink(taskID string) error {
 	return nil
 }
 
-func (h *hybridStorageMgr) ResetRepo(taskID string) error {
-	if err := h.deleteTaskFiles(taskID, false, true); err != nil {
-		logger.Errorf("reset taskID %s repo: failed to delete task files: %v", taskID, err)
+func (h *hybridStorageMgr) ResetRepo(task *types.SeedTask) error {
+	if err := h.deleteTaskFiles(task.ID, false, true); err != nil {
+		logger.Errorf("reset taskID %s repo: failed to delete task files: %v", task.ID, err)
 	}
 	// 判断是否有足够空间存放
 	shmPath, err := h.tryShmSpace(task.RawURL, task.ID, task.SourceFileLength)

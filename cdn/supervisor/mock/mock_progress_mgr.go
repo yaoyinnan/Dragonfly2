@@ -36,11 +36,9 @@ func (m *MockSeedProgressManager) EXPECT() *MockSeedProgressManagerMockRecorder 
 }
 
 // Clear mocks base method.
-func (m *MockSeedProgressManager) Clear(arg0 string) error {
+func (m *MockSeedProgressManager) Clear(arg0 string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Clear", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Clear", arg0)
 }
 
 // Clear indicates an expected call of Clear.
@@ -50,11 +48,11 @@ func (mr *MockSeedProgressManagerMockRecorder) Clear(arg0 interface{}) *gomock.C
 }
 
 // GetPieces mocks base method.
-func (m *MockSeedProgressManager) GetPieces(arg0 context.Context, arg1 string) ([]*types.SeedPiece, error) {
+func (m *MockSeedProgressManager) GetPieces(arg0 context.Context, arg1 string) ([]*types.SeedPiece, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPieces", arg0, arg1)
 	ret0, _ := ret[0].([]*types.SeedPiece)
-	ret1, _ := ret[1].(error)
+	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 

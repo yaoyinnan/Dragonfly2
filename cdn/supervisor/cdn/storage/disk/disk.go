@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -29,12 +31,14 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
+	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/fileutils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.uber.org/atomic"
 )
 
 const StorageMode = storage.DiskStorageMode
@@ -49,10 +53,14 @@ func init() {
 }
 
 func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
-	if len(cfg.DriverConfigs) != 1 {
+	driverNames := make([]string, len(cfg.DriverConfigs))
+	for k := range cfg.DriverConfigs {
+		driverNames = append(driverNames, k)
+	}
+	if len(driverNames) != 1 {
 		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", cfg)
 	}
-	diskDriver, ok := storedriver.Get(local.DiskDriverName)
+	diskDriver, ok := storedriver.Get(driverNames[0])
 	if !ok {
 		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", cfg)
 	}
@@ -69,6 +77,7 @@ type diskStorageMgr struct {
 	cfg        *storage.Config
 	diskDriver storedriver.Driver
 	cleaner    *storage.Cleaner
+	taskMgr    supervisor.SeedTaskManager
 }
 
 func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
@@ -89,6 +98,7 @@ func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
 }
 
 func (s *diskStorageMgr) Initialize(taskMgr supervisor.SeedTaskManager) {
+	s.taskMgr = taskMgr
 	diskGcConfig := s.cfg.DriverConfigs[local.DiskDriverName].GCConfig
 	if diskGcConfig == nil {
 		diskGcConfig = s.getDefaultGcConfig()
@@ -224,8 +234,8 @@ func (s *diskStorageMgr) DeleteTask(taskID string) error {
 	return nil
 }
 
-func (s *diskStorageMgr) ResetRepo(taskID string) error {
-	return s.DeleteTask(taskID)
+func (s *diskStorageMgr) ResetRepo(task *types.SeedTask) error {
+	return s.DeleteTask(task.ID)
 }
 
 func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
@@ -236,13 +246,41 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 	if freeSpace > 100*unit.GB && freeSpace.ToNumber() > fileLength {
 		return true, nil
 	}
-	// if not enough, gc first
-	s.cleaner.GC("disk", true)
-	freeSpace, err = s.diskDriver.GetFreeSpace()
-	if err != nil {
-		return false, err
+
+	remainder := atomic.NewInt64(0)
+	r := &storedriver.Raw{
+		WalkFn: func(filePath string, info os.FileInfo, err error) error {
+			if fileutils.IsRegular(filePath) {
+				taskID := strings.Split(path.Base(filePath), ".")[0]
+				task, exist := s.taskMgr.Exist(taskID)
+				if exist {
+					var totalLen int64 = 0
+					if task.CdnFileLength > 0 {
+						totalLen = task.CdnFileLength
+					} else {
+						totalLen = task.SourceFileLength
+					}
+					if totalLen > 0 {
+						remainder.Add(totalLen - info.Size())
+					}
+				}
+			}
+			return nil
+		},
 	}
-	enoughSpace = freeSpace.ToNumber()-remainder.Load() > fileLength
+	s.diskDriver.Walk(r)
+
+	enoughSpace := freeSpace.ToNumber()-remainder.Load() > fileLength
+	if !enoughSpace {
+		s.cleaner.GC("disk", true)
+		remainder.Store(0)
+		s.diskDriver.Walk(r)
+		freeSpace, err = s.diskDriver.GetFreeSpace()
+		if err != nil {
+			return false, err
+		}
+		enoughSpace = freeSpace.ToNumber()-remainder.Load() > fileLength
+	}
 	if !enoughSpace {
 		return false, nil
 	}

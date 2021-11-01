@@ -56,7 +56,7 @@ func NewRequestWithHeader(rawURL string, header map[string]string) (*Request, er
 	return request, nil
 }
 
-func NewRequestWithContext(ctx context.Context, rawURL string) (*Request, error) {
+func NewRequestWithContext(ctx context.Context, rawURL string, header map[string]string) (*Request, error) {
 	if ctx == nil {
 		return nil, errors.New("nil Context")
 	}
@@ -68,6 +68,9 @@ func NewRequestWithContext(ctx context.Context, rawURL string) (*Request, error)
 		ctx:    ctx,
 		URL:    u,
 		Header: make(Header),
+	}
+	for k, v := range header {
+		req.Header.Add(k, v)
 	}
 	return req, nil
 }

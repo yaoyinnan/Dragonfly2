@@ -75,12 +75,12 @@ func newManager(cfg *config.Config, cacheStore storage.Manager, progressManage s
 		cfg:             cfg,
 		cacheStore:      cacheStore,
 		limiter:         rateLimiter,
-		cdnLocker:       synclock.NewLockerPool(),
 		metadataManager: metadataManager,
 		cdnReporter:     cdnReporter,
 		progressMgr:     progressManage,
 		detector:        newCacheDetector(metadataManager),
 		writer:          newCacheWriter(cdnReporter, metadataManager, cacheStore),
+		cdnLocker:       synclock.NewLockerPool(),
 	}, nil
 }
 
@@ -102,19 +102,19 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	// first: detect Cache
 	detectResult, err := cm.detector.detectCache(ctx, task, fileDigest)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusFailed), errors.Wrap(err, "detect task cache")
+		return getUpdateTaskInfoWithStatusOnly(task, types.TaskInfoCdnStatusFailed), errors.Wrap(err, "detect task cache")
 	}
 	span.SetAttributes(config.AttributeCacheResult.String(detectResult.String()))
 	task.Log().Infof("detects cache result: %+v", detectResult)
 	// second: report detect result
 	err = cm.cdnReporter.reportDetectResult(ctx, task.ID, detectResult)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusFailed), errors.Wrapf(err, "report detect cache result")
+		return getUpdateTaskInfoWithStatusOnly(task, types.TaskInfoCdnStatusFailed), errors.Wrapf(err, "report detect cache result")
 	}
 	// full cache
 	if detectResult.breakPoint == -1 {
 		task.Log().Infof("cache full hit on local")
-		return getUpdateTaskInfo(types.TaskInfoCdnStatusSuccess, detectResult.fileMetadata.SourceRealDigest, detectResult.fileMetadata.PieceMd5Sign,
+		return getUpdateTaskInfo(task, types.TaskInfoCdnStatusSuccess, detectResult.fileMetadata.SourceRealDigest, detectResult.fileMetadata.PieceMd5Sign,
 			detectResult.fileMetadata.SourceFileLen, detectResult.fileMetadata.CdnFileLength, detectResult.fileMetadata.TotalPieceCount), nil
 	}
 	server.StatSeedStart(task.ID, task.RawURL)
@@ -128,7 +128,7 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	if err != nil {
 		downloadSpan.RecordError(err)
 		server.StatSeedFinish(task.ID, task.RawURL, false, err, start, time.Now(), 0, 0)
-		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusSourceError), errors.Wrap(err, "download task file data")
+		return getUpdateTaskInfoWithStatusOnly(task, types.TaskInfoCdnStatusSourceError), errors.Wrap(err, "download task file data")
 	}
 	defer respBody.Close()
 	reader := limitreader.NewLimitReaderWithLimiterAndDigest(respBody, cm.limiter, fileDigest, digestutils.Algorithms[digestType])
@@ -138,20 +138,22 @@ func (cm *Manager) TriggerCDN(ctx context.Context, task *types.SeedTask) (*types
 	if err != nil {
 		server.StatSeedFinish(task.ID, task.RawURL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
 			downloadMetadata.realSourceFileLength)
-		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusFailed), errors.Wrap(err, "write task file data")
+		return getUpdateTaskInfoWithStatusOnly(task, types.TaskInfoCdnStatusFailed), errors.Wrap(err, "write task file data")
 	}
 	server.StatSeedFinish(task.ID, task.RawURL, true, nil, start, time.Now(), downloadMetadata.backSourceLength,
 		downloadMetadata.realSourceFileLength)
 	// fifth: handle CDN result
-	err = cm.handleCDNResult(&task, downloadMetadata)
+	err = cm.handleCDNResult(task, downloadMetadata)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(types.TaskInfoCdnStatusFailed), err
+		return getUpdateTaskInfoWithStatusOnly(task, types.TaskInfoCdnStatusFailed), err
 	}
-	return getUpdateTaskInfo(types.TaskInfoCdnStatusSuccess, downloadMetadata.sourceRealDigest, downloadMetadata.pieceMd5Sign,
+	return getUpdateTaskInfo(task, types.TaskInfoCdnStatusSuccess, downloadMetadata.sourceRealDigest, downloadMetadata.pieceMd5Sign,
 		downloadMetadata.realSourceFileLength, downloadMetadata.realCdnFileLength, downloadMetadata.totalPieceCount), nil
 }
 
 func (cm *Manager) Delete(taskID string) error {
+	cm.cdnLocker.Lock(taskID, false)
+	defer cm.cdnLocker.UnLock(taskID, false)
 	err := cm.cacheStore.DeleteTask(taskID)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete task files")
@@ -209,17 +211,20 @@ func (cm *Manager) updateExpireInfo(taskID string, expireInfo map[string]string)
 */
 var getCurrentTimeMillisFunc = timeutils.CurrentTimeMillis
 
-func getUpdateTaskInfoWithStatusOnly(cdnStatus string) *types.SeedTask {
-	return getUpdateTaskInfo(cdnStatus, "", "", 0, 0, 0)
+func getUpdateTaskInfoWithStatusOnly(task *types.SeedTask, cdnStatus string) *types.SeedTask {
+	cloneTask := task.Clone()
+	cloneTask.CdnStatus = cdnStatus
+	return cloneTask
 }
 
-func getUpdateTaskInfo(cdnStatus, realMD5, pieceMd5Sign string, sourceFileLength, cdnFileLength int64, totalPieceCount int32) *types.SeedTask {
-	return &types.SeedTask{
-		SourceFileLength: sourceFileLength,
-		CdnFileLength:    cdnFileLength,
-		CdnStatus:        cdnStatus,
-		TotalPieceCount:  totalPieceCount,
-		SourceRealDigest: realMD5,
-		PieceMd5Sign:     pieceMd5Sign,
-	}
+func getUpdateTaskInfo(task *types.SeedTask, cdnStatus, realMD5, pieceMd5Sign string, sourceFileLength, cdnFileLength int64,
+	totalPieceCount int32) *types.SeedTask {
+	cloneTask := task.Clone()
+	cloneTask.SourceFileLength = sourceFileLength
+	cloneTask.CdnFileLength = cdnFileLength
+	cloneTask.CdnStatus = cdnStatus
+	cloneTask.TotalPieceCount = totalPieceCount
+	cloneTask.SourceRealDigest = realMD5
+	cloneTask.PieceMd5Sign = pieceMd5Sign
+	return cloneTask
 }

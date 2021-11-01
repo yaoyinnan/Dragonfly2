@@ -11,6 +11,7 @@ import (
 	storedriver "d7y.io/dragonfly/v2/cdn/storedriver"
 	supervisor "d7y.io/dragonfly/v2/cdn/supervisor"
 	storage "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	types "d7y.io/dragonfly/v2/cdn/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -123,7 +124,7 @@ func (mr *MockManagerMockRecorder) ReadPieceMetaRecords(arg0 interface{}) *gomoc
 }
 
 // ResetRepo mocks base method.
-func (m *MockManager) ResetRepo(arg0 string) error {
+func (m *MockManager) ResetRepo(arg0 *types.SeedTask) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetRepo", arg0)
 	ret0, _ := ret[0].(error)

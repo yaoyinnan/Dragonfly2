@@ -18,11 +18,11 @@ package task
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/config"
+	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	"d7y.io/dragonfly/v2/cdn/types"
@@ -61,38 +61,39 @@ func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr su
 	return taskMgr, nil
 }
 
-func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) (pieceChan <-chan *types.SeedPiece, err error) {
+func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) error {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTaskRegister)
 	defer span.End()
+	taskID := registerTask.ID
 	// add a new task or update a exist task
-	err = tm.addOrUpdateTask(ctx, registerTask)
+	err := tm.addOrUpdateTask(ctx, registerTask)
 	if err != nil {
 		span.RecordError(err)
-		return nil, errors.Wrap(err, "add or update seed task")
+		return errors.Wrap(err, "add or update seed task")
 	}
-	taskBytes, _ := json.Marshal(task)
-	span.SetAttributes(config.AttributeTaskInfo.String(string(taskBytes)))
-	task.Log().Debugf("success get task info: %+v", task)
-
 	// update accessTime for taskId
 	tm.accessTimeMap.Store(registerTask.ID, time.Now())
 
 	// trigger CDN
-	if err := tm.triggerCdnSyncAction(ctx, task); err != nil {
-		return nil, errors.Wrapf(err, "trigger cdn")
+	if err := tm.triggerCdnSyncAction(ctx, taskID); err != nil {
+		return errors.Wrapf(err, "trigger cdn")
 	}
-	task.Log().Infof("successfully trigger cdn sync action")
-	// watch seed progress
-	return tm.progressMgr.WatchSeedProgress(ctx, task)
+	registerTask.Log().Infof("successfully trigger cdn sync action")
+	return nil
 }
 
 // triggerCdnSyncAction
-func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTask) error {
+func (tm *Manager) triggerCdnSyncAction(ctx context.Context, taskID string) error {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTriggerCDNSyncAction)
 	defer span.End()
-	synclock.Lock(task.ID, true)
+	synclock.Lock(taskID, true)
+	task, ok := tm.getTask(taskID)
+	if !ok {
+		synclock.UnLock(taskID, true)
+		return cdnerrors.ErrDataNotFound
+	}
 	if !task.IsFrozen() {
 		span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
 		task.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", task.CdnStatus)
@@ -126,21 +127,21 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, task *types.SeedTas
 			task.Log().Errorf("trigger cdn get error: %v", err)
 		}
 		err = tm.updateTask(task.ID, updateTaskInfo)
+		if err != nil {
+			task.Log().Errorf("failed to update task: %v", err)
+		}
 		go func() {
 			if err := tm.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
 				task.Log().Errorf("failed to publish task: %v", err)
 			}
 
 		}()
-		if err != nil {
-			task.Log().Errorf("failed to update task: %v", err)
-		}
 		task.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
 	}()
 	return nil
 }
 
-func (tm Manager) Get(taskID string) (*types.SeedTask, bool) {
+func (tm *Manager) Get(taskID string) (*types.SeedTask, bool) {
 	task, ok := tm.taskStore.Load(taskID)
 	if !ok {
 		return nil, ok
@@ -158,12 +159,12 @@ func (tm *Manager) Update(taskID string, taskInfo *types.SeedTask) error {
 	return tm.updateTask(taskID, taskInfo)
 }
 
-func (tm Manager) Exist(taskID string) (*types.SeedTask, bool) {
+func (tm *Manager) Exist(taskID string) (*types.SeedTask, bool) {
 	task, ok := tm.taskStore.Load(taskID)
 	return task.(*types.SeedTask), ok
 }
 
-func (tm Manager) Delete(taskID string) {
+func (tm *Manager) Delete(taskID string) {
 	synclock.Lock(taskID, false)
 	defer synclock.UnLock(taskID, false)
 	tm.accessTimeMap.Delete(taskID)
@@ -172,7 +173,7 @@ func (tm Manager) Delete(taskID string) {
 	tm.progressMgr.Clear(taskID)
 }
 
-func (tm *Manager) GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error) {
+func (tm *Manager) GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, ok bool) {
 	synclock.Lock(taskID, true)
 	defer synclock.UnLock(taskID, true)
 	return tm.progressMgr.GetPieces(ctx, taskID)

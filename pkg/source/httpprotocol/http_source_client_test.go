@@ -143,7 +143,7 @@ func (suite *HTTPSourceClientTestSuite) TestNewHTTPSourceClient() {
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponseHeader() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	timeoutRequest, err := source.NewRequestWithContext(ctx, timeoutRawURL)
+	timeoutRequest, err := source.NewRequestWithContext(ctx, timeoutRawURL, nil)
 	suite.Nil(err)
 	response, err := suite.DownloadWithResponseHeader(timeoutRequest)
 	cancel()
@@ -174,12 +174,12 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 			name: "range download",
 			request: &source.Request{
 				URL:    normalURL,
-				Header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s", "0-3")},
+				Header: source.Header{"Range": []string{fmt.Sprintf("bytes=%s", "0-3")}},
 			},
 			content: testContent[0:3],
-			expireInfo: source.ResponseHeader{
-				headers.LastModified: lastModified,
-				headers.ETag:         etag,
+			expireInfo: source.Header{
+				headers.LastModified: []string{lastModified},
+				headers.ETag:         []string{etag},
 			},
 			wantErr: nil,
 		}, {
@@ -226,10 +226,12 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
 		want    int64
 		wantErr error
 	}{
-		{name: "support content length", args: args{ctx: context.Background(), url: normalURL, header: map[string]string{}}, want: int64(len(testContent)),
+		{name: "support content length", request: normalRequest,
+			want:    int64(len(testContent)),
 			wantErr: nil},
-		{name: "not support content length", args: args{ctx: context.Background(), url: normalURL, header: source.RequestHeader{"Range": fmt.Sprintf("bytes=%s",
-			"0-3")}}, want: 4,
+		{name: "not support content length", request: &source.Request{URL: normalURL,
+			Header: source.Header{"Range": []string{fmt.Sprintf("bytes=%s", "0-3")}}},
+			want:    4,
 			wantErr: nil},
 	}
 	for _, tt := range tests {
@@ -270,13 +272,13 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsExpired() {
 }
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
-	httpmock.RegisterResponder(http.MethodGet, timeoutURL, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder(http.MethodGet, timeoutRawURL, func(request *http.Request) (*http.Response, error) {
 		time.Sleep(3 * time.Second)
 		return httpmock.NewStringResponse(http.StatusOK, "ok"), nil
 	})
 	parent := context.Background()
 	ctx, cancel := context.WithTimeout(parent, 1*time.Second)
-	request, err := source.NewRequestWithContext(ctx, timeoutURL)
+	request, err := source.NewRequestWithContext(ctx, timeoutRawURL, nil)
 	suite.Nil(err)
 	support, err := suite.IsSupportRange(request)
 	cancel()

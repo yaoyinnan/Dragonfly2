@@ -40,7 +40,7 @@ type Manager interface {
 	Initialize(taskMgr supervisor.SeedTaskManager)
 
 	// ResetRepo reset the storage of task
-	ResetRepo(taskID string) error
+	ResetRepo(task *types.SeedTask) error
 
 	// StatDownloadFile stat download file info
 	StatDownloadFile(taskID string) (*storedriver.StorageInfo, error)
@@ -171,7 +171,7 @@ func (m *storeManagerPlugin) Name() string {
 }
 
 func (m *storeManagerPlugin) ResetRepo(task *types.SeedTask) error {
-	return m.instance.ResetRepo(task.ID)
+	return m.instance.ResetRepo(task)
 }
 
 func (m *storeManagerPlugin) StatDownloadFile(path string) (*storedriver.StorageInfo, error) {

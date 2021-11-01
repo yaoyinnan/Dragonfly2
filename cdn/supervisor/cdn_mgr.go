@@ -28,7 +28,7 @@ import (
 // operates on the underlying files stored on the local disk, etc.
 type CDNManager interface {
 
-	// TriggerCDN will trigger CDN to download the resource from sourceURL.
+	// TriggerCDN will trigger the download resource from sourceURL.
 	TriggerCDN(context.Context, *types.SeedTask) (*types.SeedTask, error)
 
 	// Delete the cdn meta with specified taskID.

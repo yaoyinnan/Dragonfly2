@@ -34,6 +34,7 @@ import (
 	cdnserver "d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/server"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
@@ -45,8 +46,9 @@ var tracer = otel.Tracer("cdn-server")
 
 type server struct {
 	*grpc.Server
-	taskMgr supervisor.SeedTaskManager
-	cfg     *config.Config
+	taskMgr     supervisor.SeedTaskManager
+	progressMgr supervisor.SeedProgressManager
+	cfg         *config.Config
 }
 
 // New returns a new Manager Object.
@@ -67,6 +69,13 @@ func checkSeedRequestParams(req *cdnsystem.SeedRequest) error {
 	}
 	if !urlutils.IsValidURL(req.Url) {
 		return errors.Errorf("resource url: %s is invalid", req.Url)
+	}
+	if req.UrlMeta != nil && stringutils.IsBlank(req.UrlMeta.Range) {
+		// todo valid source if support range
+		_, err := rangeutils.ParseRange(req.UrlMeta.Range)
+		if err != nil {
+			return errors.Errorf("request range: %s is valid", req.UrlMeta.Range)
+		}
 	}
 	return nil
 }
@@ -92,14 +101,8 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		return err
 	}
 	registerTask := types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta)
-	// todo
-	pieceChan, err := css.seedTask.register()
-	if err != nil {
-
-	}
 	// register task
-	pieceChan, err := css.taskMgr.Register(ctx, registerTask)
-
+	err = css.taskMgr.Register(ctx, registerTask)
 	if err != nil {
 		if cdnerrors.IsResourcesLacked(err) {
 			err = dferrors.Newf(dfcodes.ResourceLacked, "resources lacked for task(%s): %v", req.TaskId, err)
@@ -110,6 +113,12 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
+	// todo
+	pieceChan, err := css.progressMgr.WatchSeedProgress(ctx, registerTask)
+	if err != nil {
+
+	}
+
 	peerID := cdnutil.GenCDNPeerID(req.TaskId)
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
@@ -126,8 +135,8 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			Done: false,
 		}
 	}
-	task, err := css.taskMgr.Get(req.TaskId)
-	if err != nil {
+	task, ok := css.taskMgr.Get(req.TaskId)
+	if !ok {
 		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return err
@@ -167,14 +176,9 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	task, err := css.taskMgr.Get(req.TaskId)
-	if err != nil {
-		if cdnerrors.IsDataNotFound(err) {
-			err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s) from cdn: %v", req.TaskId, err)
-			span.RecordError(err)
-			return nil, err
-		}
-		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s) from cdn: %v", req.TaskId, err)
+	task, ok := css.taskMgr.Get(req.TaskId)
+	if !ok {
+		err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s) from cdn: %v", req.TaskId, err)
 		span.RecordError(err)
 		return nil, err
 	}

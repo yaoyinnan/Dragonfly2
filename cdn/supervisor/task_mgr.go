@@ -29,10 +29,10 @@ import (
 type SeedTaskManager interface {
 
 	// Register a task corresponding to a downloaded file.
-	Register(ctx context.Context, registerTask *types.SeedTask) (pieceCh <-chan *types.SeedPiece, err error)
+	Register(ctx context.Context, registerTask *types.SeedTask) error
 
 	// Get the task Info with specified taskID.
-	Get(taskID string) (*types.SeedTask, error)
+	Get(taskID string) (*types.SeedTask, bool)
 
 	// Update the task info with specified taskID and updateTask
 	Update(taskID string, updateTask *types.SeedTask) error
@@ -44,5 +44,5 @@ type SeedTaskManager interface {
 	Delete(taskID string)
 
 	// GetPieces gets the pieces which has been downloaded from source.
-	GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error)
+	GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, ok bool)
 }

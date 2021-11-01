@@ -19,24 +19,18 @@ package task
 import (
 	"context"
 	"fmt"
-	"os"
-	"path"
-	"strings"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/config"
 	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
-	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"d7y.io/dragonfly/v2/pkg/util/fileutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/atomic"
 )
 
 // addOrUpdateTask add a new task or update exist task
@@ -77,7 +71,7 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		return errors.Wrap(err, "create content length request")
 	}
 	// add range info
-	if registerTask.Range != "" {
+	if stringutils.IsBlank(registerTask.Range) {
 		contentLengthRequest.Header.Add(source.Range, registerTask.Range)
 	}
 	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
@@ -92,7 +86,6 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	task.SourceFileLength = sourceFileLength
 	task.Log().Debugf("success get file content length: %d", sourceFileLength)
 	if task.SourceFileLength > 0 {
-		tm.getReamain
 		ok, err := tm.cdnMgr.TryFreeSpace(registerTask.SourceFileLength)
 		if err != nil {
 			registerTask.Log().Errorf("failed to try free space: %v", err)
@@ -184,30 +177,6 @@ func (tm *Manager) getTaskUnreachableTime(taskID string) (time.Time, bool) {
 	return unreachableTime.(time.Time), true
 }
 
-
-func getRemaind() {
-	remainder := atomic.NewInt64(0)
-	r := &storedriver.Raw{
-		WalkFn: func(filePath string, info os.FileInfo, err error) error {
-			if fileutils.IsRegular(filePath) {
-				taskID := strings.Split(path.Base(filePath), ".")[0]
-				task, exist := .Exist(taskID)
-				if exist {
-					var totalLen int64 = 0
-					if task.CdnFileLength > 0 {
-						totalLen = task.CdnFileLength
-					} else {
-						totalLen = task.SourceFileLength
-					}
-					if totalLen > 0 {
-						remainder.Add(totalLen - info.Size())
-					}
-				}
-			}
-			return nil
-		},
-	}
-}
 // checkSame check task1 is same with task2
 func checkSame(task1, task2 *types.SeedTask) bool {
 	if task1 == task2 {

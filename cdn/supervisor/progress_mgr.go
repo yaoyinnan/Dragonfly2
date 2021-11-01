@@ -39,8 +39,8 @@ type SeedProgressManager interface {
 	PublishTask(ctx context.Context, taskID string, task *types.SeedTask) error
 
 	// GetPieces get pieces by taskID
-	GetPieces(ctx context.Context, taskID string) (records []*types.SeedPiece, err error)
+	GetPieces(ctx context.Context, taskID string) (records []*types.SeedPiece, ok bool)
 
 	// Clear meta info of task
-	Clear(taskID string) error
+	Clear(taskID string)
 }

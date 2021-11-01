@@ -42,7 +42,7 @@ type DiskStorageMgrSuite struct {
 func (suite *DiskStorageMgrSuite) TestTryFreeSpace() {
 	ctrl := gomock.NewController(suite.T())
 	diskDriver := storedriver.NewMockDriver(ctrl)
-	taskMgr := mock.NewMockSeedTaskMgr(ctrl)
+	taskMgr := mock.NewMockSeedTaskManager(ctrl)
 	suite.m = &diskStorageMgr{
 		diskDriver: diskDriver,
 		taskMgr:    taskMgr,

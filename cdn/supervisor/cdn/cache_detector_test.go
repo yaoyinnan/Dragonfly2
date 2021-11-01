@@ -91,17 +91,17 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 		ModTime:    time.Time{},
 	}, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Any(), expiredAndSupportURL, gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Any(), expiredAndSupportURL, gomock.Any()).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(gomock.Eq(expiredAndSupportRequest)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Any(), expiredAndNotSupportURL, gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Any(), expiredAndNotSupportURL, gomock.Any()).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Any(), noExpiredAndSupportURL, gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Any(), noExpiredAndSupportURL, gomock.Any()).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndSupportRequest)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Any(), noExpiredAndNotSupportURL, gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Any(), noExpiredAndNotSupportURL, gomock.Any()).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
 }
 
 var noCacheTask, partialAndSupportCacheTask, partialAndNotSupportCacheTask, fullCacheExpiredTask, fullCacheNotExpiredTask = "noCache", "partialSupportCache",
@@ -109,6 +109,14 @@ var noCacheTask, partialAndSupportCacheTask, partialAndNotSupportCacheTask, full
 
 var expiredAndSupportURL, expiredAndNotSupportURL, noExpiredAndSupportURL, noExpiredAndNotSupportURL = "http://expiredsupport.com",
 	"http://expiredNotsupport.com", "http://noexpiredAndsupport.com", "http://noexpiredAndnotsupport.com"
+
+var expiredAndSupportRequest, _ = source.NewRequest(expiredAndSupportURL)
+
+var expiredAndNotSupporRequest, _ = source.NewRequest(expiredAndNotSupportURL)
+
+var noExpiredAndSupportRequest, _ = source.NewRequest(noExpiredAndSupportURL)
+
+var noExpiredAndNotSupportRequest, _ = source.NewRequest(noExpiredAndNotSupportURL)
 
 type mockData struct {
 	taskID   string

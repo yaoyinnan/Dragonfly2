@@ -36,11 +36,9 @@ func (m *MockSeedTaskManager) EXPECT() *MockSeedTaskManagerMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockSeedTaskManager) Delete(arg0 string) error {
+func (m *MockSeedTaskManager) Delete(arg0 string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Delete", arg0)
 }
 
 // Delete indicates an expected call of Delete.
@@ -65,11 +63,11 @@ func (mr *MockSeedTaskManagerMockRecorder) Exist(arg0 interface{}) *gomock.Call 
 }
 
 // Get mocks base method.
-func (m *MockSeedTaskManager) Get(arg0 string) (*types.SeedTask, error) {
+func (m *MockSeedTaskManager) Get(arg0 string) (*types.SeedTask, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0)
 	ret0, _ := ret[0].(*types.SeedTask)
-	ret1, _ := ret[1].(error)
+	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
@@ -95,16 +93,29 @@ func (mr *MockSeedTaskManagerMockRecorder) GetPieces(arg0, arg1 interface{}) *go
 }
 
 // Register mocks base method.
-func (m *MockSeedTaskManager) Register(arg0 context.Context, arg1 *types.SeedTask) (<-chan *types.SeedPiece, error) {
+func (m *MockSeedTaskManager) Register(arg0 context.Context, arg1 *types.SeedTask) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Register", arg0, arg1)
-	ret0, _ := ret[0].(<-chan *types.SeedPiece)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Register indicates an expected call of Register.
 func (mr *MockSeedTaskManagerMockRecorder) Register(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockSeedTaskManager)(nil).Register), arg0, arg1)
+}
+
+// Update mocks base method.
+func (m *MockSeedTaskManager) Update(arg0 string, arg1 *types.SeedTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockSeedTaskManagerMockRecorder) Update(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockSeedTaskManager)(nil).Update), arg0, arg1)
 }
