@@ -65,8 +65,8 @@ type ResourceClient interface {
 	// Download downloads from source
 	Download(request *Request) (io.ReadCloser, error)
 
-	// DownloadWithResponseHeader download from source with responseHeader
-	DownloadWithResponseHeader(request *Request) (*Response, error)
+	// DownloadWithExpireInfo download from source with expireInfo
+	DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error)
 
 	// GetLastModifiedMillis gets last modified timestamp milliseconds of resource
 	GetLastModifiedMillis(request *Request) (int64, error)
@@ -74,7 +74,7 @@ type ResourceClient interface {
 
 type ClientManager interface {
 	// Register a source client with scheme
-	Register(scheme string, resourceClient ResourceClient, hook ...Hook)
+	Register(scheme string, resourceClient ResourceClient, adapter requestAdapter, hook ...Hook)
 
 	// UnRegister a source client from manager
 	UnRegister(scheme string)
@@ -99,15 +99,16 @@ func NewManager() ClientManager {
 	}
 }
 
-func (m *clientManager) Register(scheme string, resourceClient ResourceClient, hooks ...Hook) {
+func (m *clientManager) Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
 		logger.Infof("replace client %#v with %#v for scheme %s", client, resourceClient, scheme)
 	}
 	m.clients[strings.ToLower(scheme)] = &client{
-		hooks: hooks,
-		rc:    resourceClient,
+		adapter: adaptor,
+		hooks:   hooks,
+		rc:      resourceClient,
 	}
 }
 
@@ -120,9 +121,8 @@ func (m *clientManager) UnRegister(scheme string) {
 	delete(m.clients, strings.ToLower(scheme))
 }
 
-
-func Register(scheme string, resourceClient ResourceClient, hooks ...Hook) {
-	_defaultManager.Register(scheme, resourceClient, hooks...)
+func Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) {
+	_defaultManager.Register(scheme, resourceClient, adaptor, hooks...)
 }
 
 func UnRegister(scheme string) {
@@ -136,61 +136,41 @@ func (m *clientManager) GetClient(scheme string) (ResourceClient, bool) {
 	return client, ok
 }
 
-type before func(request *Request) *Request
+type requestAdapter func(request *Request) *Request
 
-
+// Hook TODO hook
 type Hook interface {
 	BeforeRequest(request *Request) error
 	AfterResponse(response *Response) error
 }
 
 type client struct {
-	be before
-	hooks []Hook
-	rc    ResourceClient
+	adapter requestAdapter
+	hooks   []Hook
+	rc      ResourceClient
 }
 
 func (c *client) GetContentLength(request *Request) (int64, error) {
-	if len(c.hooks) == 0 {
-		c.hooks.
-	}
-	var hookIndex int
-	var retErr error
-	for ; hookIndex < len(c.hooks) && retErr == nil; hookIndex++ {
-		ctx, retErr = c.hooks[hookIndex].BeforeRequest(request)
-		if retErr != nil {
-			cmd.SetErr(retErr)
-		}
-	}
-	if retErr == nil {
-		c.rc.GetContentLength(c.be(request))
-	}
-	for hookIndex--; hookIndex >= 0; hookIndex-- {
-		if err := c.hooks[hookIndex].AfterResponse(Response{}); err != nil {
-			retErr = err
-			cmd.SetErr(retErr)
-		}
-	}
-	return
+	return c.rc.GetContentLength(c.adapter(request))
 }
 
 func (c *client) IsSupportRange(request *Request) (bool, error) {
-	return c.rc.IsSupportRange(c.be(request))
+	return c.rc.IsSupportRange(c.adapter(request))
 }
 
 func (c *client) IsExpired(request *Request) (bool, error) {
-	return c.rc.IsExpired(c.be(request))
+	return c.rc.IsExpired(c.adapter(request))
 }
 func (c *client) Download(request *Request) (io.ReadCloser, error) {
-	return c.rc.Download(c.be(request))
+	return c.rc.Download(c.adapter(request))
 }
 
-func (c *client) DownloadWithResponseHeader(request *Request) (*Response, error) {
-	return c.rc.DownloadWithResponseHeader(c.be(request))
+func (c *client) DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error) {
+	return c.rc.DownloadWithExpireInfo(c.adapter(request))
 }
 
 func (c *client) GetLastModifiedMillis(request *Request) (int64, error) {
-	return c.rc.GetLastModifiedMillis(c.be(request))
+	return c.rc.GetLastModifiedMillis(c.adapter(request))
 }
 
 func GetContentLength(request *Request) (int64, error) {
@@ -270,12 +250,12 @@ func Download(request *Request) (io.ReadCloser, error) {
 	return client.Download(request)
 }
 
-func DownloadWithResponseHeader(request *Request) (*Response, error) {
+func DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return nil, ErrNoClientFound
+		return nil, nil, ErrNoClientFound
 	}
-	return client.DownloadWithResponseHeader(request)
+	return client.DownloadWithExpireInfo(request)
 }
 
 func (m *clientManager) loadSourcePlugin(scheme string) (ResourceClient, error) {

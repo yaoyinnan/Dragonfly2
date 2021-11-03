@@ -43,22 +43,12 @@ func (c *client) IsExpired(request *source.Request) (bool, error) {
 	panic("implement me")
 }
 
-func (c *client) Transform(header source.Header) source.Header {
-	panic("implement me")
-}
-
 func (c *client) Download(request *source.Request) (io.ReadCloser, error) {
 	return ioutil.NopCloser(bytes.NewBufferString(data)), nil
 }
 
-func (c *client) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
-	return &source.Response{
-		Status:        "",
-		StatusCode:    0,
-		Header:        nil,
-		Body:          ioutil.NopCloser(bytes.NewBufferString(data)),
-		ContentLength: 0,
-	}, nil
+func (c *client) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
+	return ioutil.NopCloser(bytes.NewBufferString(data)), nil, nil
 }
 
 func (c *client) GetLastModifiedMillis(request *source.Request) (int64, error) {

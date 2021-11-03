@@ -51,12 +51,12 @@ func (suite *HTTPSourceClientTestSuite) TearDownSuite() {
 }
 
 var (
-	timeoutRawURL                   = "http://timeout.com"
-	normalRawURL                    = "http://normal.com"
-	normalURL, _                    = url.Parse(normalRawURL)
-	normalRequest, _                = source.NewRequest(normalRawURL)
-	errorRawURL                     = "http://error.com"
-	errorURL, _                     = url.Parse(errorRawURL)
+	timeoutRawURL    = "http://timeout.com"
+	normalRawURL     = "http://normal.com"
+	normalURL, _     = url.Parse(normalRawURL)
+	normalRequest, _ = source.NewRequest(normalRawURL)
+	errorRawURL      = "http://error.com"
+	//errorURL, _                     = url.Parse(errorRawURL)
 	errorRequest, _                 = source.NewRequest(errorRawURL)
 	forbiddenRawURL                 = "http://forbidden.com"
 	notfoundRawURL                  = "http://notfound.com"
@@ -140,17 +140,18 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	timeoutRequest, err := source.NewRequestWithContext(ctx, timeoutRawURL, nil)
 	suite.Nil(err)
-	response, err := suite.DownloadWithResponseHeader(timeoutRequest)
+	reader, expireInfo, err := suite.DownloadWithExpireInfo(timeoutRequest)
 	cancel()
 	suite.NotNil(err)
-	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
-	suite.Nil(response)
+	suite.Equal("request source: Get \"http://timeout.com\": context deadline exceeded", err.Error())
+	suite.Nil(reader)
+	suite.Nil(expireInfo)
 
 	tests := []struct {
 		name       string
 		request    *source.Request
 		content    string
-		expireInfo source.Header
+		expireInfo *source.ExpireInfo
 		wantErr    error
 	}{
 		{
@@ -160,9 +161,9 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 				Header: nil,
 			},
 			content: testContent,
-			expireInfo: source.Header{
-				source.LastModified: []string{lastModified},
-				source.ETag:         []string{etag},
+			expireInfo: &source.ExpireInfo{
+				LastModified: lastModified,
+				ETag:         etag,
 			},
 			wantErr: nil,
 		}, {
@@ -172,9 +173,9 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 				Header: source.Header{"Range": []string{fmt.Sprintf("bytes=%s", "0-3")}},
 			},
 			content: testContent[0:3],
-			expireInfo: source.Header{
-				headers.LastModified: []string{lastModified},
-				headers.ETag:         []string{etag},
+			expireInfo: &source.ExpireInfo{
+				LastModified: lastModified,
+				ETag:         etag,
 			},
 			wantErr: nil,
 		}, {
@@ -184,32 +185,32 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 			},
 			content:    "",
 			expireInfo: nil,
-			wantErr:    fmt.Errorf("unexpected status code: %d", http.StatusNotFound),
-		}, {
-			name: "error download",
-			request: &source.Request{
-				URL: errorURL,
-			},
-			content:    "",
-			expireInfo: nil,
-			wantErr: &url.Error{
-				Op:  "Get",
-				URL: errorRawURL,
-				Err: fmt.Errorf("error"),
+			wantErr: &source.ErrUnExpectedResponse{
+				StatusCode: 404,
+				Status:     "404",
 			},
 		},
+		//{
+		//	name: "error download",
+		//	request: &source.Request{
+		//		URL: errorURL,
+		//	},
+		//	content:    "",
+		//	expireInfo: nil,
+		//	wantErr:    errors.Wrapf(fmt.Errorf("Get \"http://error.com\": error"), "request source"),
+		//},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			response, err := suite.DownloadWithResponseHeader(tt.request)
+			reader, expireInfo, err := suite.DownloadWithExpireInfo(tt.request)
 			suite.Equal(tt.wantErr, err)
 			if err != nil {
 				return
 			}
-			bytes, err := ioutil.ReadAll(response.Body)
+			bytes, err := ioutil.ReadAll(reader)
 			suite.Nil(err)
 			suite.Equal(tt.content, string(bytes))
-			suite.Equal(tt.expireInfo, response.Header)
+			suite.Equal(tt.expireInfo, expireInfo)
 		})
 	}
 }
@@ -240,11 +241,11 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientGetContentLength() {
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsExpired() {
 	notExpireRequest := normalRequest.Clone(context.Background())
-	notExpireRequest.Header.Add(source.LastModified, lastModified)
-	notExpireRequest.Header.Add(source.ETag, etag)
+	notExpireRequest.Header.Add(headers.IfModifiedSince, lastModified)
+	notExpireRequest.Header.Add(headers.IfNoneMatch, etag)
 	errorNotExpireRequest := errorRequest.Clone(context.Background())
-	errorNotExpireRequest.Header.Add(source.LastModified, lastModified)
-	errorNotExpireRequest.Header.Add(source.ETag, etag)
+	errorNotExpireRequest.Header.Add(headers.IfModifiedSince, lastModified)
+	errorNotExpireRequest.Header.Add(headers.IfNoneMatch, etag)
 	expiredRequest := normalRequest.Clone(context.Background())
 
 	tests := []struct {
@@ -278,7 +279,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	support, err := suite.IsSupportRange(request)
 	cancel()
 	suite.NotNil(err)
-	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
+	suite.Equal("request source: Get \"http://timeout.com\": context deadline exceeded", err.Error())
 	suite.Equal(false, support)
 	httpmock.RegisterResponder(http.MethodGet, normalRawURL, httpmock.NewStringResponder(http.StatusPartialContent, ""))
 	httpmock.RegisterResponder(http.MethodGet, normalNotSupportRangeRawURL, httpmock.NewStringResponder(http.StatusOK, ""))
@@ -286,10 +287,8 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 
 	supportRequest := normalRequest.Clone(context.Background())
 	supportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
-	suite.Nil(err)
 	notSupportRequest := normalNotSupportRangeRequest.Clone(context.Background())
 	notSupportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
-	suite.Nil(err)
 	tests := []struct {
 		name    string
 		request *source.Request

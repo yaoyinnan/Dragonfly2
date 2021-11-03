@@ -52,7 +52,9 @@ type CacheDetectorTestSuite struct {
 func (suite *CacheDetectorTestSuite) SetupSuite() {
 	ctrl := gomock.NewController(suite.T())
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	storageMgr := storageMock.NewMockManager(ctrl)
 	cacheDataManager := newMetadataManager(storageMgr)
 	suite.detector = newCacheDetector(cacheDataManager)

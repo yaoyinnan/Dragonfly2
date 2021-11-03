@@ -83,7 +83,9 @@ func (suite *CDNManagerTestSuite) TearDownSuite() {
 func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 	ctrl := gomock.NewController(suite.T())
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 
 	sourceClient.EXPECT().IsSupportRange(gomock.Any()).Return(true, nil).AnyTimes()
@@ -98,26 +100,22 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
 		},
 	).AnyTimes()
-	sourceClient.EXPECT().DownloadWithResponseHeader(gomock.Any()).DoAndReturn(
-		func(request *source.Request) (*source.Response, error) {
+	sourceClient.EXPECT().DownloadWithExpireInfo(gomock.Any()).DoAndReturn(
+		func(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
 			content, _ := ioutil.ReadFile("../../testdata/cdn/go.html")
 			if request.Header.Get(source.Range) != "" {
 				parsed, _ := rangeutils.ParseRange(request.Header.Get(source.Range))
-				return &source.Response{
-					Body: ioutil.NopCloser(io.NewSectionReader(strings.NewReader(string(content)), int64(parsed.StartIndex), int64(parsed.EndIndex))),
-					Header: source.Header{
-						source.LastModified: []string{"Sun, 06 Jun 2021 12:52:30 GMT"},
-						source.ETag:         []string{"etag"},
-					},
-				}, nil
+				return ioutil.NopCloser(io.NewSectionReader(strings.NewReader(string(content)), int64(parsed.StartIndex), int64(parsed.EndIndex))),
+					&source.ExpireInfo{
+						LastModified: "Sun, 06 Jun 2021 12:52:30 GMT",
+						ETag:         "etag",
+					}, nil
 			}
-			return &source.Response{
-				Body: ioutil.NopCloser(strings.NewReader(string(content))),
-				Header: source.Header{
-					source.LastModified: []string{"Sun, 06 Jun 2021 12:52:30 GMT"},
-					source.ETag:         []string{"etag"},
-				},
-			}, nil
+			return ioutil.NopCloser(strings.NewReader(string(content))),
+				&source.ExpireInfo{
+					LastModified: "Sun, 06 Jun 2021 12:52:30 GMT",
+					ETag:         "etag",
+				}, nil
 		},
 	).AnyTimes()
 	sourceClient.EXPECT().GetLastModifiedMillis(gomock.Any()).Return(

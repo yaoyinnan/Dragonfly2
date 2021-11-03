@@ -78,11 +78,11 @@ func (mr *MockSeedTaskManagerMockRecorder) Get(arg0 interface{}) *gomock.Call {
 }
 
 // GetPieces mocks base method.
-func (m *MockSeedTaskManager) GetPieces(arg0 context.Context, arg1 string) ([]*types.SeedPiece, error) {
+func (m *MockSeedTaskManager) GetPieces(arg0 context.Context, arg1 string) ([]*types.SeedPiece, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPieces", arg0, arg1)
 	ret0, _ := ret[0].([]*types.SeedPiece)
-	ret1, _ := ret[1].(error)
+	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 

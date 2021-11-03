@@ -83,7 +83,9 @@ func TestFilePeerTask_BackSource_WithContentLength(t *testing.T) {
 	})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
 		func(request *source.Request) (int64, error) {
@@ -207,7 +209,9 @@ func TestFilePeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
 		func(request *source.Request) (int64, error) {

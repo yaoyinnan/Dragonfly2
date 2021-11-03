@@ -50,19 +50,20 @@ func (mr *MockResourceClientMockRecorder) Download(arg0 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockResourceClient)(nil).Download), arg0)
 }
 
-// DownloadWithResponseHeader mocks base method.
-func (m *MockResourceClient) DownloadWithResponseHeader(arg0 *source.Request) (*source.Response, error) {
+// DownloadWithExpireInfo mocks base method.
+func (m *MockResourceClient) DownloadWithExpireInfo(arg0 *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DownloadWithResponseHeader", arg0)
-	ret0, _ := ret[0].(*source.Response)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "DownloadWithExpireInfo", arg0)
+	ret0, _ := ret[0].(io.ReadCloser)
+	ret1, _ := ret[1].(*source.ExpireInfo)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// DownloadWithResponseHeader indicates an expected call of DownloadWithResponseHeader.
-func (mr *MockResourceClientMockRecorder) DownloadWithResponseHeader(arg0 interface{}) *gomock.Call {
+// DownloadWithExpireInfo indicates an expected call of DownloadWithExpireInfo.
+func (mr *MockResourceClientMockRecorder) DownloadWithExpireInfo(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadWithResponseHeader", reflect.TypeOf((*MockResourceClient)(nil).DownloadWithResponseHeader), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadWithExpireInfo", reflect.TypeOf((*MockResourceClient)(nil).DownloadWithExpireInfo), arg0)
 }
 
 // GetContentLength mocks base method.
@@ -123,18 +124,4 @@ func (m *MockResourceClient) IsSupportRange(arg0 *source.Request) (bool, error) 
 func (mr *MockResourceClientMockRecorder) IsSupportRange(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSupportRange", reflect.TypeOf((*MockResourceClient)(nil).IsSupportRange), arg0)
-}
-
-// TransformToConcreteHeader mocks base method.
-func (m *MockResourceClient) TransformToConcreteHeader(arg0 source.Header) source.Header {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TransformToConcreteHeader", arg0)
-	ret0, _ := ret[0].(source.Header)
-	return ret0
-}
-
-// TransformToConcreteHeader indicates an expected call of TransformToConcreteHeader.
-func (mr *MockResourceClientMockRecorder) TransformToConcreteHeader(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransformToConcreteHeader", reflect.TypeOf((*MockResourceClient)(nil).TransformToConcreteHeader), arg0)
 }

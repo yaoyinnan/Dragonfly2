@@ -27,6 +27,7 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -45,18 +46,18 @@ const (
 )
 
 func init() {
-	source.Register(HDFSClient, NewHDFSSourceClient())
+	source.Register(HDFSClient, NewHDFSSourceClient(), adapter)
+}
+
+func adapter(request *source.Request) *source.Request {
+	clonedRequest := request.Clone(request.Context())
+	return clonedRequest
 }
 
 // hdfsSourceClient is an implementation of the interface of SourceClient.
 type hdfsSourceClient struct {
 	sync.RWMutex
 	clientMap map[string]*hdfs.Client
-}
-
-func (h *hdfsSourceClient) TransformToConcreteHeader(header source.Header) source.Header {
-	clonedHeader := header.Clone()
-	return clonedHeader
 }
 
 // hdfsFileReaderClose is a combination object of the  io.LimitedReader and io.Closer
@@ -146,16 +147,16 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), nil
 }
 
-func (h *hdfsSourceClient) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
+func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
 
 	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hdfsFile, err := hdfsClient.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	fileInfo := hdfsFile.Stat()
@@ -166,24 +167,18 @@ func (h *hdfsSourceClient) DownloadWithResponseHeader(request *source.Request) (
 	if request.Header.Get(source.Range) != "" {
 		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		_, err = hdfsFile.Seek(int64(requestRange.StartIndex), 0)
 		if err != nil {
 			hdfsFile.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
 	}
-
-	return &source.Response{
-		Body:   newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile),
-		Header: source.Header{source.LastModified: []string{fileInfo.ModTime().Format(layout)}},
+	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), &source.ExpireInfo{
+		LastModified: timeutils.Format(fileInfo.ModTime()),
 	}, nil
-}
-
-func (h *hdfsSourceClient) Transform(header source.Header) source.Header {
-	panic("implement me")
 }
 
 func (h *hdfsSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {

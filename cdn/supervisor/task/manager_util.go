@@ -36,7 +36,7 @@ import (
 // addOrUpdateTask add a new task or update exist task
 func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) error {
 	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
+	_, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
 	defer span.End()
 	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
 		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {

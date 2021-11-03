@@ -32,6 +32,7 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/distribution/distribution/v3/uuid"
+
 	// Register oss client
 	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"
 )

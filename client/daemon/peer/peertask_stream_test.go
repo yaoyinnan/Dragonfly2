@@ -80,7 +80,9 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create request")
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 	sourceClient.EXPECT().GetContentLength(gomock.Eq(request)).DoAndReturn(
 		func(request *source.Request) (int64, error) {
@@ -186,7 +188,9 @@ func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create reqeust")

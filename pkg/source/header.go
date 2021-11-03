@@ -26,6 +26,11 @@ const (
 	Range           = "X-Dragonfly-Range" // startIndex-endIndex
 )
 
+type ExpireInfo struct {
+	LastModified string // Mon, 02 Jan 2006 15:04:05 GMT
+	ETag         string
+}
+
 // A Header represents the key-value pairs in a Dragonfly source header.
 //
 // The keys should be in canonical form, as returned by

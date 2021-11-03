@@ -46,16 +46,15 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoin
 	if stringutils.IsBlank(breakRange) {
 		downloadRequest.Header.Add(source.Range, breakRange)
 	}
-	resp, err := source.DownloadWithResponseHeader(downloadRequest)
+	body, expireInfo, err := source.DownloadWithExpireInfo(downloadRequest)
 	// update Expire info
 	if err == nil {
-		expireInfo := map[string]string{
-			source.LastModified: resp.Header.Get(source.LastModified),
-			source.ETag:         resp.Header.Get(source.ETag),
-		}
-		cm.updateExpireInfo(task.ID, expireInfo)
+		cm.updateExpireInfo(task.ID, map[string]string{
+			source.LastModified: expireInfo.LastModified,
+			source.ETag:         expireInfo.ETag,
+		})
 	}
-	return resp.Body, err
+	return body, err
 }
 
 func getBreakRange(breakPoint int64, sourceFileLength int64, taskRange string) (string, error) {

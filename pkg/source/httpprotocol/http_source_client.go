@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/types"
@@ -72,11 +71,11 @@ func init() {
 	}
 	sc := newHTTPSourceClient()
 
-	source.Register(HTTPClient, sc, func() {})
-	source.Register(HTTPSClient, sc, func() {})
+	source.Register(HTTPClient, sc, adapter)
+	source.Register(HTTPSClient, sc, adapter)
 }
 
-func TransformToConcreteHeader(request *source.Request) *source.Request {
+func adapter(request *source.Request) *source.Request {
 	clonedRequest := request.Clone(request.Context())
 	if request.Header.Get(source.Range) != "" {
 		clonedRequest.Header.Set(headers.Range, fmt.Sprintf("bytes=%s", request.Header.Get(source.Range)))
@@ -161,23 +160,19 @@ func (client *httpSourceClient) Download(request *source.Request) (io.ReadCloser
 	return nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 }
 
-func (client *httpSourceClient) DownloadWithResponseHeader(request *source.Request) (*source.Response, error) {
+func (client *httpSourceClient) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
 	resp, err := client.doRequest(http.MethodGet, request)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		response := &source.Response{
-			Status:        resp.Status,
-			StatusCode:    resp.StatusCode,
-			Header:        transformToSourceHeader(resp.Header),
-			Body:          resp.Body,
-			ContentLength: resp.ContentLength,
-		}
-		return response, nil
+		return resp.Body, &source.ExpireInfo{
+			LastModified: resp.Header.Get(headers.LastModified),
+			ETag:         resp.Header.Get(headers.ETag),
+		}, nil
 	}
 	defer resp.Body.Close()
-	return nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
+	return nil, nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
@@ -192,25 +187,6 @@ func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (
 	return -1, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }
 
-func transformToSourceHeader(httpHeader http.Header) source.Header {
-	sourceHeader := source.Header{}
-	for key, values := range httpHeader {
-		for i := range values {
-			sourceHeader.Add(key, values[i])
-		}
-	}
-	if sourceHeader.Get(headers.Range) != "" {
-		sourceHeader.Set(source.Range, strings.Split(sourceHeader.Get(headers.Range), "=")[1])
-	}
-	if sourceHeader.Get(headers.LastModified) != "" {
-		sourceHeader.Set(source.LastModified, sourceHeader.Get(headers.LastModified))
-	}
-	if sourceHeader.Get(headers.ETag) != "" {
-		sourceHeader.Set(source.ETag, sourceHeader.Get(headers.ETag))
-	}
-	return sourceHeader
-}
-
 func (client *httpSourceClient) doRequest(method string, request *source.Request) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(request.Context(), method, request.URL.String(), nil)
 	if err != nil {
@@ -223,7 +199,7 @@ func (client *httpSourceClient) doRequest(method string, request *source.Request
 	}
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "request source resource")
+		return nil, errors.Wrapf(err, "request source")
 	}
 	return resp, nil
 }

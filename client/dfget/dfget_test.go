@@ -42,7 +42,9 @@ func Test_downloadFromSource(t *testing.T) {
 	content := idgen.UUIDString()
 
 	sourceClient := sourcemock.NewMockResourceClient(gomock.NewController(t))
-	source.Register("http", sourceClient)
+	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
+		return request
+	})
 	defer source.UnRegister("http")
 
 	cfg := &config.DfgetConfig{
@@ -50,8 +52,9 @@ func Test_downloadFromSource(t *testing.T) {
 		Output: output,
 		Digest: strings.Join([]string{digestutils.Sha256Hash.String(), digestutils.Sha256(content)}, ":"),
 	}
-
-	sourceClient.EXPECT().Download(context.Background(), cfg.URL, nil, nil).Return(ioutil.NopCloser(strings.NewReader(content)), nil)
+	request, err := source.NewRequest(cfg.URL)
+	assert.Nil(t, err)
+	sourceClient.EXPECT().Download(request).Return(ioutil.NopCloser(strings.NewReader(content)), nil)
 
 	err = downloadFromSource(context.Background(), cfg, nil)
 	assert.Nil(t, err)
