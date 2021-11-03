@@ -49,8 +49,8 @@ import (
 	daemonserver "d7y.io/dragonfly/v2/pkg/rpc/dfdaemon/server"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	schedulerclient "d7y.io/dragonfly/v2/pkg/rpc/scheduler/client"
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
+	_ "d7y.io/dragonfly/v2/pkg/source"
+	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 )
 
 type componentsOption struct {
@@ -332,8 +332,6 @@ func TestPeerTaskManager_StartStreamPeerTask_BackSource(t *testing.T) {
 		peerID = "peer-0"
 		taskID = "task-0"
 	)
-
-	source.Register("http", httpprotocol.NewHTTPSourceClient())
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n, err := w.Write(testBytes)

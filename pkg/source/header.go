@@ -23,7 +23,7 @@ const (
 	IfModifiedSince = "X-Dragonfly-If-Modified-Since"
 	ETag            = "X-Dragonfly-ETag"
 	IfNoneMatch     = "X-Dragonfly-If-None-Match"
-	Range           = "X-Dragonfly-Range"
+	Range           = "X-Dragonfly-Range" // startIndex-endIndex
 )
 
 // A Header represents the key-value pairs in a Dragonfly source header.

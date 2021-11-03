@@ -18,6 +18,7 @@ package cdn
 
 import (
 	"crypto/md5"
+	"fmt"
 	"time"
 
 	"context"
@@ -167,36 +168,41 @@ func (cm *Manager) TryFreeSpace(fileLength int64) (bool, error) {
 
 func (cm *Manager) handleCDNResult(task *types.SeedTask, downloadMetadata *downloadMetadata) error {
 	task.Log().Debugf("start handle cdn result, downloadMetadata: %+v", downloadMetadata)
-	var isSuccess = true
-	var err error
+	var success = true
+	var errMsg string
 	// check md5
 	if !stringutils.IsBlank(task.Digest) && task.Digest != downloadMetadata.sourceRealDigest {
-		err = errors.Errorf("file digest not match expected: %s real: %s", task.Digest, downloadMetadata.sourceRealDigest)
-		isSuccess = false
+		errMsg = fmt.Sprintf("file digest not match expected: %s real: %s", task.Digest, downloadMetadata.sourceRealDigest)
+		success = false
 	}
 	// check source length
-	if isSuccess && task.SourceFileLength >= 0 && task.SourceFileLength != downloadMetadata.realSourceFileLength {
-		err = errors.Errorf("file length not match expected: %d real: %d", task.SourceFileLength, downloadMetadata.realSourceFileLength)
-		isSuccess = false
+	if success && task.SourceFileLength >= 0 && task.SourceFileLength != downloadMetadata.realSourceFileLength {
+		errMsg = fmt.Sprintf("file length not match expected: %d real: %d", task.SourceFileLength, downloadMetadata.realSourceFileLength)
+		success = false
 	}
-	if isSuccess && task.TotalPieceCount > 0 && downloadMetadata.totalPieceCount != task.TotalPieceCount {
-		err = errors.Errorf("task total piece count not match expected: %d real: %d", task.TotalPieceCount, downloadMetadata.totalPieceCount)
-		isSuccess = false
+	if success && task.TotalPieceCount > 0 && downloadMetadata.totalPieceCount != task.TotalPieceCount {
+		errMsg = fmt.Sprintf("task total piece count not match expected: %d real: %d", task.TotalPieceCount, downloadMetadata.totalPieceCount)
+		success = false
 	}
 	sourceFileLen := task.SourceFileLength
-	if isSuccess && task.SourceFileLength <= 0 {
+	if success && task.SourceFileLength <= 0 {
 		sourceFileLen = downloadMetadata.realSourceFileLength
 	}
-	err = cm.metadataManager.updateStatusAndResult(task.ID, &storage.FileMetadata{
+	if err := cm.metadataManager.updateStatusAndResult(task.ID, &storage.FileMetadata{
 		Finish:           true,
-		Success:          isSuccess,
+		Success:          success,
 		SourceFileLen:    sourceFileLen,
 		CdnFileLength:    downloadMetadata.realCdnFileLength,
 		SourceRealDigest: downloadMetadata.sourceRealDigest,
 		TotalPieceCount:  downloadMetadata.totalPieceCount,
 		PieceMd5Sign:     downloadMetadata.pieceMd5Sign,
-	})
-	return err
+	}); err != nil {
+		return errors.Wrapf(err, "update metadata")
+	}
+	if !success {
+		return errors.New(errMsg)
+	}
+	return nil
 }
 
 func (cm *Manager) updateExpireInfo(taskID string, expireInfo map[string]string) {

@@ -187,8 +187,8 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	pieces, err := css.taskMgr.GetPieces(ctx, req.TaskId)
-	if err != nil {
+	pieces, ok := css.taskMgr.GetPieces(ctx, req.TaskId)
+	if !ok {
 		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s) from cdn: %v", task.ID, err)
 		span.RecordError(err)
 		return nil, err

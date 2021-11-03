@@ -21,12 +21,12 @@ import (
 	"io"
 	"net/url"
 	"os/user"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/types"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -55,7 +55,8 @@ type hdfsSourceClient struct {
 }
 
 func (h *hdfsSourceClient) TransformToConcreteHeader(header source.Header) source.Header {
-	panic("implement me")
+	clonedHeader := header.Clone()
+	return clonedHeader
 }
 
 // hdfsFileReaderClose is a combination object of the  io.LimitedReader and io.Closer
@@ -84,13 +85,6 @@ func (h *hdfsSourceClient) GetContentLength(request *source.Request) (int64, err
 	if err != nil {
 		return types.UnKnownSourceFileLen, err
 	}
-	//if request.Header.Get(source.Range) != "" {
-	//	rangeIndex := strings.Split(request.Header.Get(source.Range), "=")
-	//	if strconv.Atoi(rangeIndex[1]) <= info.Size() {
-	//		return int64(rang.EndIndex - rang.StartIndex), nil
-	//	}
-	//	return info.Size() - int64(rang.StartIndex), nil
-	//}
 	return info.Size(), nil
 }
 
@@ -116,7 +110,7 @@ func (h *hdfsSourceClient) IsExpired(request *source.Request) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	t, err := time.ParseInLocation(layout, lastModified, time.Local)
+	t, err := time.ParseInLocation(layout, request.Header.Get(source.LastModified), time.Local)
 	if err != nil {
 		return false, err
 	}
@@ -137,13 +131,16 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 	var limitReadN int64 = hdfsFile.Stat().Size()
 
 	if request.Header.Get(source.Range) != "" {
-
-		_, err = hdfsFile.Seek(int64(rang.StartIndex), 0)
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
+		if err != nil {
+			return nil, err
+		}
+		_, err = hdfsFile.Seek(int64(requestRange.StartIndex), 0)
 		if err != nil {
 			hdfsFile.Close()
 			return nil, err
 		}
-		limitReadN = int64(rang.EndIndex - rang.StartIndex)
+		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
 	}
 
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), nil
@@ -166,19 +163,23 @@ func (h *hdfsSourceClient) DownloadWithResponseHeader(request *source.Request) (
 	// default read all data when rang is nil
 	var limitReadN int64 = fileInfo.Size()
 
-	//if rang != nil {
-	//	_, err = hdfsFile.Seek(int64(rang.StartIndex), 0)
-	//	if err != nil {
-	//		hdfsFile.Close()
-	//		return nil, nil, err
-	//	}
-	//	limitReadN = int64(rang.EndIndex - rang.StartIndex)
-	//}
-	//
-	//return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), source.ResponseHeader{
-	//	source.LastModified: fileInfo.ModTime().Format(layout),
-	//}, nil
-	return nil, nil
+	if request.Header.Get(source.Range) != "" {
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
+		if err != nil {
+			return nil, err
+		}
+		_, err = hdfsFile.Seek(int64(requestRange.StartIndex), 0)
+		if err != nil {
+			hdfsFile.Close()
+			return nil, err
+		}
+		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
+	}
+
+	return &source.Response{
+		Body:   newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile),
+		Header: source.Header{source.LastModified: []string{fileInfo.ModTime().Format(layout)}},
+	}, nil
 }
 
 func (h *hdfsSourceClient) Transform(header source.Header) source.Header {

@@ -214,7 +214,7 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 
 // resetCache file
 func (cd *cacheDetector) resetCache(task *types.SeedTask) (*storage.FileMetadata, error) {
-	err := cd.metadataManager.resetRepo(task.ID)
+	err := cd.metadataManager.resetRepo(task)
 	if err != nil {
 		return nil, err
 	}

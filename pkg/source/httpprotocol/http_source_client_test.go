@@ -52,7 +52,6 @@ func (suite *HTTPSourceClientTestSuite) TearDownSuite() {
 
 var (
 	timeoutRawURL                   = "http://timeout.com"
-	timeoutURL, _                   = url.Parse(timeoutRawURL)
 	normalRawURL                    = "http://normal.com"
 	normalURL, _                    = url.Parse(normalRawURL)
 	normalRequest, _                = source.NewRequest(normalRawURL)
@@ -60,13 +59,9 @@ var (
 	errorURL, _                     = url.Parse(errorRawURL)
 	errorRequest, _                 = source.NewRequest(errorRawURL)
 	forbiddenRawURL                 = "http://forbidden.com"
-	forbiddenURL, _                 = url.Parse(forbiddenRawURL)
-	forbiddenRequest, _             = source.NewRequest(forbiddenRawURL)
 	notfoundRawURL                  = "http://notfound.com"
 	notfoundURL, _                  = url.Parse(notfoundRawURL)
-	notfoundRequest, _              = source.NewRequest(notfoundRawURL)
 	normalNotSupportRangeRawURL     = "http://notsuppertrange.com"
-	normalNotSupportRangeURL, _     = url.Parse(normalNotSupportRangeRawURL)
 	normalNotSupportRangeRequest, _ = source.NewRequest(normalNotSupportRangeRawURL)
 )
 
@@ -293,7 +288,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	supportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
 	suite.Nil(err)
 	notSupportRequest := normalNotSupportRangeRequest.Clone(context.Background())
-	supportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
+	notSupportRequest.Header.Add("Range", fmt.Sprintf("bytes=%s", "0-3"))
 	suite.Nil(err)
 	tests := []struct {
 		name    string
@@ -303,6 +298,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	}{
 		{name: "support", request: supportRequest, want: true, wantErr: false},
 		{name: "notSupport", request: notSupportRequest, want: false, wantErr: false},
+		{name: "error", request: errorRequest, want: false, wantErr: true},
 	}
 
 	for _, tt := range tests {

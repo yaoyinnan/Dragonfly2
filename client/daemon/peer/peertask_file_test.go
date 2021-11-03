@@ -19,6 +19,7 @@ package peer
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -28,7 +29,6 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
-	rangers "d7y.io/dragonfly/v2/pkg/util/rangeutils"
 
 	"github.com/golang/mock/gomock"
 	testifyassert "github.com/stretchr/testify/assert"
@@ -85,13 +85,19 @@ func TestFilePeerTask_BackSource_WithContentLength(t *testing.T) {
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
 	source.Register("http", sourceClient)
 	defer source.UnRegister("http")
-	sourceClient.EXPECT().GetContentLength(gomock.Any(), url, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, url string, headers source.RequestHeader, rang *rangers.Range) (int64, error) {
-			return int64(len(testBytes)), nil
+	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
+		func(request *source.Request) (int64, error) {
+			if request.URL.String() == url {
+				return int64(len(testBytes)), nil
+			}
+			return -1, fmt.Errorf("unexpect url: %s", request.URL.String())
 		})
-	sourceClient.EXPECT().Download(gomock.Any(), url, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, url string, headers source.RequestHeader, rang *rangers.Range) (io.ReadCloser, error) {
-			return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
+	sourceClient.EXPECT().Download(gomock.Any()).DoAndReturn(
+		func(request *source.Request) (io.ReadCloser, error) {
+			if request.URL.String() == url {
+				return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
+			}
+			return nil, fmt.Errorf("unexpect url: %s", request.URL.String())
 		})
 
 	ptm := &peerTaskManager{
@@ -203,13 +209,19 @@ func TestFilePeerTask_BackSource_WithoutContentLength(t *testing.T) {
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
 	source.Register("http", sourceClient)
 	defer source.UnRegister("http")
-	sourceClient.EXPECT().GetContentLength(gomock.Any(), url, source.RequestHeader{}, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, url string, header source.RequestHeader, rang *rangers.Range) (int64, error) {
-			return -1, nil
+	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
+		func(request *source.Request) (int64, error) {
+			if request.URL.String() == url {
+				return -1, nil
+			}
+			return -1, fmt.Errorf("unexpect url: %s", request.URL.String())
 		})
-	sourceClient.EXPECT().Download(gomock.Any(), url, source.RequestHeader{}, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, url string, header source.RequestHeader, rang *rangers.Range) (io.ReadCloser, error) {
-			return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
+	sourceClient.EXPECT().Download(gomock.Any()).DoAndReturn(
+		func(request *source.Request) (io.ReadCloser, error) {
+			if request.URL.String() == url {
+				return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
+			}
+			return nil, fmt.Errorf("unexpect url: %s", request.URL.String())
 		})
 
 	ptm := &peerTaskManager{

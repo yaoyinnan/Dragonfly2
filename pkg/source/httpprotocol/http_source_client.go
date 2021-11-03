@@ -71,8 +71,26 @@ func init() {
 		Transport: transport,
 	}
 	sc := newHTTPSourceClient()
-	source.Register(HTTPClient, sc)
-	source.Register(HTTPSClient, sc)
+
+	source.Register(HTTPClient, sc, func() {})
+	source.Register(HTTPSClient, sc, func() {})
+}
+
+func TransformToConcreteHeader(request *source.Request) *source.Request {
+	clonedRequest := request.Clone(request.Context())
+	if request.Header.Get(source.Range) != "" {
+		clonedRequest.Header.Set(headers.Range, fmt.Sprintf("bytes=%s", request.Header.Get(source.Range)))
+		clonedRequest.Header.Del(source.Range)
+	}
+	if request.Header.Get(source.LastModified) != "" {
+		clonedRequest.Header.Set(headers.LastModified, request.Header.Get(source.LastModified))
+		clonedRequest.Header.Del(source.LastModified)
+	}
+	if request.Header.Get(source.ETag) != "" {
+		clonedRequest.Header.Set(headers.ETag, request.Header.Get(source.ETag))
+		clonedRequest.Header.Del(source.ETag)
+	}
+	return clonedRequest
 }
 
 // httpSourceClient is an implementation of the interface of source.ResourceClient.
@@ -106,14 +124,13 @@ func (client *httpSourceClient) GetContentLength(request *source.Request) (int64
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		//similar to proposing another error type to indicate that this  error can interact with the URL, but the status code does not meet expectations
+		//similar to proposing another error type to indicate that this error can interact with the URL, but the status code does not meet expectations
 		return types.UnKnownSourceFileLen, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 	return resp.ContentLength, nil
 }
 
 func (client *httpSourceClient) IsSupportRange(request *source.Request) (bool, error) {
-	request.Header.Add(headers.Range, "bytes=0-0")
 	resp, err := client.doRequest(http.MethodGet, request)
 	if err != nil {
 		return false, err
@@ -164,11 +181,7 @@ func (client *httpSourceClient) DownloadWithResponseHeader(request *source.Reque
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
-	req, err := http.NewRequestWithContext(request.Context(), http.MethodGet, request.URL.String(), nil)
-	if err != nil {
-		return -1, err
-	}
-	resp, err := client.httpClient.Do(req)
+	resp, err := client.doRequest(http.MethodGet, request)
 	if err != nil {
 		return -1, err
 	}
@@ -177,20 +190,6 @@ func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (
 		return timeutils.UnixMillis(resp.Header.Get(headers.LastModified)), nil
 	}
 	return -1, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-}
-
-func (client *httpSourceClient) TransformToConcreteHeader(header source.Header) source.Header {
-	clonedHeader := header.Clone()
-	if clonedHeader.Get(source.Range) != "" {
-		clonedHeader.Set(headers.Range, fmt.Sprintf("bytes=%s", clonedHeader.Get(source.Range)))
-	}
-	if clonedHeader.Get(source.LastModified) != "" {
-		clonedHeader.Set(headers.LastModified, clonedHeader.Get(source.LastModified))
-	}
-	if clonedHeader.Get(source.ETag) != "" {
-		clonedHeader.Set(headers.ETag, clonedHeader.Get(source.ETag))
-	}
-	return clonedHeader
 }
 
 func transformToSourceHeader(httpHeader http.Header) source.Header {

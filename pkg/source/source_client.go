@@ -48,7 +48,7 @@ func IsUnExpectedResponse(err error) bool {
 
 var ErrNoClientFound = errors.New("no source client found")
 
-// ResourceClient define apis that interact with the source.
+// ResourceClient defines the API interface to interact with source.
 type ResourceClient interface {
 
 	// GetContentLength get length of resource content
@@ -70,14 +70,11 @@ type ResourceClient interface {
 
 	// GetLastModifiedMillis gets last modified timestamp milliseconds of resource
 	GetLastModifiedMillis(request *Request) (int64, error)
-
-	// TransformToConcreteHeader source header tag to concrete source header tag
-	TransformToConcreteHeader(header Header) Header
 }
 
 type ClientManager interface {
 	// Register a source client with scheme
-	Register(scheme string, resourceClient ResourceClient)
+	Register(scheme string, resourceClient ResourceClient, hook ...Hook)
 
 	// UnRegister a source client from manager
 	UnRegister(scheme string)
@@ -102,13 +99,16 @@ func NewManager() ClientManager {
 	}
 }
 
-func (m *clientManager) Register(scheme string, resourceClient ResourceClient) {
+func (m *clientManager) Register(scheme string, resourceClient ResourceClient, hooks ...Hook) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
 		logger.Infof("replace client %#v with %#v for scheme %s", client, resourceClient, scheme)
 	}
-	m.clients[strings.ToLower(scheme)] = resourceClient
+	m.clients[strings.ToLower(scheme)] = &client{
+		hooks: hooks,
+		rc:    resourceClient,
+	}
 }
 
 func (m *clientManager) UnRegister(scheme string) {
@@ -120,19 +120,77 @@ func (m *clientManager) UnRegister(scheme string) {
 	delete(m.clients, strings.ToLower(scheme))
 }
 
-func (m *clientManager) GetClient(scheme string) (ResourceClient, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	client, ok := m.clients[strings.ToLower(scheme)]
-	return client, ok
-}
 
-func Register(scheme string, resourceClient ResourceClient) {
-	_defaultManager.Register(scheme, resourceClient)
+func Register(scheme string, resourceClient ResourceClient, hooks ...Hook) {
+	_defaultManager.Register(scheme, resourceClient, hooks...)
 }
 
 func UnRegister(scheme string) {
 	_defaultManager.UnRegister(scheme)
+}
+
+func (m *clientManager) GetClient(scheme string) (ResourceClient, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	client, ok := m.clients[strings.ToLower(scheme)]
+	return client, ok
+}
+
+type before func(request *Request) *Request
+
+
+type Hook interface {
+	BeforeRequest(request *Request) error
+	AfterResponse(response *Response) error
+}
+
+type client struct {
+	be before
+	hooks []Hook
+	rc    ResourceClient
+}
+
+func (c *client) GetContentLength(request *Request) (int64, error) {
+	if len(c.hooks) == 0 {
+		c.hooks.
+	}
+	var hookIndex int
+	var retErr error
+	for ; hookIndex < len(c.hooks) && retErr == nil; hookIndex++ {
+		ctx, retErr = c.hooks[hookIndex].BeforeRequest(request)
+		if retErr != nil {
+			cmd.SetErr(retErr)
+		}
+	}
+	if retErr == nil {
+		c.rc.GetContentLength(c.be(request))
+	}
+	for hookIndex--; hookIndex >= 0; hookIndex-- {
+		if err := c.hooks[hookIndex].AfterResponse(Response{}); err != nil {
+			retErr = err
+			cmd.SetErr(retErr)
+		}
+	}
+	return
+}
+
+func (c *client) IsSupportRange(request *Request) (bool, error) {
+	return c.rc.IsSupportRange(c.be(request))
+}
+
+func (c *client) IsExpired(request *Request) (bool, error) {
+	return c.rc.IsExpired(c.be(request))
+}
+func (c *client) Download(request *Request) (io.ReadCloser, error) {
+	return c.rc.Download(c.be(request))
+}
+
+func (c *client) DownloadWithResponseHeader(request *Request) (*Response, error) {
+	return c.rc.DownloadWithResponseHeader(c.be(request))
+}
+
+func (c *client) GetLastModifiedMillis(request *Request) (int64, error) {
+	return c.rc.GetLastModifiedMillis(c.be(request))
 }
 
 func GetContentLength(request *Request) (int64, error) {
@@ -145,7 +203,6 @@ func GetContentLength(request *Request) (int64, error) {
 		request = request.WithContext(ctx)
 		defer cancel()
 	}
-	request.Header = client.TransformToConcreteHeader(request.Header)
 	return client.GetContentLength(request)
 }
 
@@ -159,11 +216,9 @@ func IsSupportRange(request *Request) (bool, error) {
 		request = request.WithContext(ctx)
 		defer cancel()
 	}
-	request.Header = client.TransformToConcreteHeader(request.Header)
 	if request.Header.get(Range) == "" {
 		request.Header.Add(Range, "0-0")
 	}
-	request.Header = client.TransformToConcreteHeader(request.Header)
 	return client.IsSupportRange(request)
 }
 
@@ -212,7 +267,6 @@ func Download(request *Request) (io.ReadCloser, error) {
 	if !ok {
 		return nil, ErrNoClientFound
 	}
-	request.Header = client.TransformToConcreteHeader(request.Header)
 	return client.Download(request)
 }
 
@@ -221,7 +275,6 @@ func DownloadWithResponseHeader(request *Request) (*Response, error) {
 	if !ok {
 		return nil, ErrNoClientFound
 	}
-	request.Header = client.TransformToConcreteHeader(request.Header)
 	return client.DownloadWithResponseHeader(request)
 }
 

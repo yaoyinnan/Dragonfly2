@@ -41,14 +41,12 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	_ "d7y.io/dragonfly/v2/pkg/rpc/dfdaemon/server"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
+	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 )
 
 func TestPieceManager_DownloadSource(t *testing.T) {
 	assert := testifyassert.New(t)
 	ctrl := gomock.NewController(t)
-	source.Register("http", httpprotocol.NewHTTPSourceClient())
 	testBytes, err := ioutil.ReadFile(test.File)
 	assert.Nil(err, "load test file")
 
