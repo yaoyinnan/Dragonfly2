@@ -31,7 +31,7 @@ func GenCDNPeerID(taskID string) string {
 
 // ComputePieceSize computes the piece size with specified fileLength.
 //
-// If the fileLength<=0, which means failed to get fileLength
+// If the fileLength<0, which means failed to get fileLength
 // and then use the DefaultPieceSize.
 func ComputePieceSize(length int64) int32 {
 	if length <= 0 || length <= 200*1024*1024 {
