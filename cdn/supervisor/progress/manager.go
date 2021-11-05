@@ -190,9 +190,9 @@ func (pm *Manager) addPieceMetaRecord(taskID string, record *types.SeedPiece) er
 	if !ok {
 		return cdnerrors.ErrDataNotFound
 	}
-	pieceRecordMap, ok := pieceRecords.(*sync.Map)
+	pieceRecordMap := pieceRecords.(*sync.Map)
 	if !ok {
-		return cdnerrors.ErrConvertFailed
+		return errors.Errorf("pieceRecords type is not sync.Map")
 	}
 	pieceRecordMap.Store(record.PieceNum, record)
 	return nil

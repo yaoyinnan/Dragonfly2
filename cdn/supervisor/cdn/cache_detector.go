@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -105,7 +104,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	}
 	task.Log().Debugf("task expired result: %t", expired)
 	if expired {
-		return nil, cdnerrors.ErrResourceExpired{URL: task.RawURL}
+		return nil, errors.Errorf("resource %s has expired", task.TaskURL)
 	}
 	// not expired
 	if fileMetadata.Finish {
@@ -124,7 +123,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 		return nil, errors.Wrap(err, "check if support range")
 	}
 	if !supportRange {
-		return nil, cdnerrors.ErrResourceNotSupportRangeRequest{URL: task.RawURL}
+		return nil, errors.Errorf("resource %s is not support range request", task.TaskURL)
 	}
 	return cd.detectByReadFile(task.ID, fileMetadata, fileDigest)
 }
@@ -139,12 +138,10 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 		return nil, errors.Wrap(err, "get pieces md5 sign")
 	}
 	if fileMetadata.TotalPieceCount > 0 && len(pieceMetaRecords) != int(fileMetadata.TotalPieceCount) {
-		err := cdnerrors.ErrInconsistentValues{Expected: fileMetadata.TotalPieceCount, Actual: len(pieceMetaRecords)}
-		return nil, errors.Wrapf(err, "total piece count is inconsistent")
+		return nil, errors.Errorf("total piece count is inconsistent, expected is %d, but got %d", fileMetadata.TotalPieceCount, len(pieceMetaRecords))
 	}
 	if fileMetadata.PieceMd5Sign != "" && md5Sign != fileMetadata.PieceMd5Sign {
-		err := cdnerrors.ErrInconsistentValues{Expected: fileMetadata.PieceMd5Sign, Actual: md5Sign}
-		return nil, errors.Wrap(err, "piece md5 sign is inconsistent")
+		return nil, errors.Errorf("piece md5 sign is inconsistent, expected is %s, but got %s", fileMetadata.PieceMd5Sign, md5Sign)
 	}
 	storageInfo, err := cd.metadataManager.statDownloadFile(taskID)
 	if err != nil {
@@ -152,11 +149,7 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 	}
 	// check file data integrity by file size
 	if fileMetadata.CdnFileLength != storageInfo.Size {
-		err := cdnerrors.ErrInconsistentValues{
-			Expected: fileMetadata.CdnFileLength,
-			Actual:   storageInfo.Size,
-		}
-		return nil, errors.Wrapf(err, "file size is inconsistent")
+		return nil, errors.Errorf("file size is inconsistent, expected is %d, but got %d", fileMetadata.CdnFileLength, storageInfo.Size)
 	}
 	return &cacheResult{
 		breakPoint:       -1,
@@ -274,11 +267,7 @@ func checkPieceContent(reader io.Reader, pieceRecord *storage.PieceMetaRecord, f
 	realPieceMd5 := digestutils.ToHashString(pieceMd5)
 	// check piece content
 	if realPieceMd5 != pieceRecord.Md5 {
-		err := cdnerrors.ErrInconsistentValues{
-			Expected: pieceRecord.Md5,
-			Actual:   realPieceMd5,
-		}
-		return errors.Wrap(err, "compare piece md5")
+		return errors.Errorf("piece md5 sign is inconsistent, expected is %s, but got %s", pieceRecord.Md5, realPieceMd5)
 	}
 	return nil
 }

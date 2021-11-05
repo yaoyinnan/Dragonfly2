@@ -33,6 +33,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+var (
+	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
+	errResourcesLacked = errors.New("resources lacked")
+)
+
+func IsResourcesLacked(err error) bool {
+	return errors.Is(err, errResourcesLacked)
+}
+
 // addOrUpdateTask add a new task or update exist task
 func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) error {
 	var span trace.Span
@@ -42,8 +51,7 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
 			// TODO 校验Header
 			span.AddEvent(config.EventHitUnreachableURL)
-			return errors.Wrapf(cdnerrors.ErrURLNotReachable{URL: registerTask.RawURL}, "hit unreachable cache and interval less than %d",
-				tm.cfg.FailAccessInterval)
+			return errors.Errorf("hit unreachable resource %s cache and interval less than %d", registerTask.TaskURL, tm.cfg.FailAccessInterval)
 		}
 		span.AddEvent(config.EventDeleteUnReachableTask)
 		tm.taskURLUnreachableStore.Delete(registerTask.ID)
@@ -54,7 +62,7 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	if existTask, ok := tm.getTask(registerTask.ID); ok {
 		if !checkSame(existTask, registerTask) {
 			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask))
-			return cdnerrors.ErrTaskIDDuplicate{TaskID: registerTask.ID, Cause: fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask)}
+			return errors.Errorf("register task %v is conflict with exist task %v", registerTask, existTask)
 		}
 		task = existTask.Clone()
 	}
@@ -77,7 +85,7 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
 	if err != nil {
 		registerTask.Log().Errorf("get url (%s) content length failed: %v", registerTask.RawURL, err)
-		if cdnerrors.IsURLNotReachable(err) {
+		if source.IsResourceNotReachableError(err) {
 			tm.taskURLUnreachableStore.Store(registerTask, time.Now())
 			return err
 		}
@@ -91,7 +99,7 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 			registerTask.Log().Errorf("failed to try free space: %v", err)
 		}
 		if !ok {
-			return cdnerrors.ErrResourcesLacked
+			return errResourcesLacked
 		}
 	}
 

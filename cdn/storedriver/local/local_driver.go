@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
@@ -366,9 +365,6 @@ func (ds *driver) statPath(bucket, key string) (string, os.FileInfo, error) {
 	filePath := filepath.Join(ds.BaseDir, bucket, key)
 	f, err := os.Stat(filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil, cdnerrors.ErrFileNotExist{File: "filePath"}
-		}
 		return "", nil, err
 	}
 	return filePath, f, nil

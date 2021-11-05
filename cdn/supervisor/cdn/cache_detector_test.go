@@ -22,12 +22,12 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	storageMock "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/mock"
@@ -62,7 +62,7 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 	storageMgr.EXPECT().ReadFileMetadata(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
 	storageMgr.EXPECT().ReadFileMetadata(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()
 	storageMgr.EXPECT().ReadFileMetadata(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetadata(noCache.taskID).Return(noCache.fileMeta, cdnerrors.ErrFileNotExist{}).AnyTimes()
+	storageMgr.EXPECT().ReadFileMetadata(noCache.taskID).Return(noCache.fileMeta, os.ErrNotExist).AnyTimes()
 	storageMgr.EXPECT().ReadDownloadFile(fullNoExpiredCache.taskID).DoAndReturn(
 		func(taskID string) (io.ReadCloser, error) {
 			content, err := ioutil.ReadFile("../../testdata/cdn/go.html")
@@ -81,11 +81,11 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 			suite.Nil(err)
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
 		}).AnyTimes()
-	storageMgr.EXPECT().ReadDownloadFile(noCache.taskID).Return(nil, cdnerrors.ErrFileNotExist{}).AnyTimes()
+	storageMgr.EXPECT().ReadDownloadFile(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
 	storageMgr.EXPECT().ReadPieceMetaRecords(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.pieces, nil).AnyTimes()
 	storageMgr.EXPECT().ReadPieceMetaRecords(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.pieces, nil).AnyTimes()
 	storageMgr.EXPECT().ReadPieceMetaRecords(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.pieces, nil).AnyTimes()
-	storageMgr.EXPECT().ReadPieceMetaRecords(noCache.taskID).Return(nil, cdnerrors.ErrFileNotExist{}).AnyTimes()
+	storageMgr.EXPECT().ReadPieceMetaRecords(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
 	storageMgr.EXPECT().StatDownloadFile(fullNoExpiredCache.taskID).Return(&storedriver.StorageInfo{
 		Path:       "",
 		Size:       9789,

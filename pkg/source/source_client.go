@@ -19,7 +19,6 @@ package source
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -30,23 +29,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ErrUnExpectedResponse represents the response is not expected
-type ErrUnExpectedResponse struct {
-	StatusCode int
-	Status     string
+var (
+	// ErrResourceNotReachable represents the url resource is a not reachable.
+	ErrResourceNotReachable = errors.New("resource is not reachable")
+
+	ErrNoClientFound = errors.New("no source client found")
+)
+
+func IsResourceNotReachableError(err error) bool {
+	return errors.Is(err, ErrResourceNotReachable)
 }
 
-func (e *ErrUnExpectedResponse) Error() string {
-	return fmt.Sprintf("Status: %s, StatusCode: %d", e.Status, e.StatusCode)
+func IsNoClientFound(err error) bool {
+	return errors.Is(err, ErrNoClientFound)
 }
-
-func IsUnExpectedResponse(err error) bool {
-	err = errors.Cause(err)
-	_, ok := err.(*ErrUnExpectedResponse)
-	return ok
-}
-
-var ErrNoClientFound = errors.New("no source client found")
 
 // ResourceClient defines the API interface to interact with source.
 type ResourceClient interface {

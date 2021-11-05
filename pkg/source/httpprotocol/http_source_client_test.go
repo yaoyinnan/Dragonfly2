@@ -29,6 +29,7 @@ import (
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"github.com/go-http-utils/headers"
 	"github.com/jarcoal/httpmock"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -51,12 +52,12 @@ func (suite *HTTPSourceClientTestSuite) TearDownSuite() {
 }
 
 var (
-	timeoutRawURL    = "http://timeout.com"
-	normalRawURL     = "http://normal.com"
-	normalURL, _     = url.Parse(normalRawURL)
-	normalRequest, _ = source.NewRequest(normalRawURL)
-	errorRawURL      = "http://error.com"
-	//errorURL, _                     = url.Parse(errorRawURL)
+	timeoutRawURL                   = "http://timeout.com"
+	normalRawURL                    = "http://normal.com"
+	normalURL, _                    = url.Parse(normalRawURL)
+	normalRequest, _                = source.NewRequest(normalRawURL)
+	errorRawURL                     = "http://error.com"
+	errorURL, _                     = url.Parse(errorRawURL)
 	errorRequest, _                 = source.NewRequest(errorRawURL)
 	forbiddenRawURL                 = "http://forbidden.com"
 	notfoundRawURL                  = "http://notfound.com"
@@ -185,26 +186,22 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 			},
 			content:    "",
 			expireInfo: nil,
-			wantErr: &source.ErrUnExpectedResponse{
-				StatusCode: 404,
-				Status:     "404",
+			wantErr:    errors.Errorf("got unexpect status code 404 and status 404"),
+		}, {
+			name: "error download",
+			request: &source.Request{
+				URL: errorURL,
 			},
+			content:    "",
+			expireInfo: nil,
+			wantErr:    errors.Wrapf(fmt.Errorf("Get \"http://error.com\": error"), "request source"),
 		},
-		//{
-		//	name: "error download",
-		//	request: &source.Request{
-		//		URL: errorURL,
-		//	},
-		//	content:    "",
-		//	expireInfo: nil,
-		//	wantErr:    errors.Wrapf(fmt.Errorf("Get \"http://error.com\": error"), "request source"),
-		//},
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
 			reader, expireInfo, err := suite.DownloadWithExpireInfo(tt.request)
-			suite.Equal(tt.wantErr, err)
 			if err != nil {
+				suite.True(tt.wantErr.Error() == err.Error())
 				return
 			}
 			bytes, err := ioutil.ReadAll(reader)

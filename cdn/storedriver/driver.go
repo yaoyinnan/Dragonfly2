@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/fileutils"
@@ -260,7 +259,7 @@ func (s *driverPlugin) PutBytes(raw *Raw, data []byte) error {
 func (s *driverPlugin) Remove(raw *Raw) error {
 	if raw == nil || (stringutils.IsBlank(raw.Key) &&
 		stringutils.IsBlank(raw.Bucket)) {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "cannot set both key and bucket empty at the same time")
+		return errors.Errorf("both key and bucket are empty")
 	}
 	return s.instance.Remove(raw)
 }
@@ -300,7 +299,7 @@ func (s *driverPlugin) GetBaseDir() string {
 
 func checkEmptyKey(raw *Raw) error {
 	if raw == nil || stringutils.IsBlank(raw.Key) {
-		return errors.Wrapf(cdnerrors.ErrInvalidValue, "raw key is empty")
+		return errors.Errorf("raw key is empty")
 	}
 	return nil
 }

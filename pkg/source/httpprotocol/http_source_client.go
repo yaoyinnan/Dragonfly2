@@ -124,7 +124,7 @@ func (client *httpSourceClient) GetContentLength(request *source.Request) (int64
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		//similar to proposing another error type to indicate that this error can interact with the URL, but the status code does not meet expectations
-		return types.UnKnownSourceFileLen, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
+		return types.UnKnownSourceFileLen, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
 	}
 	return resp.ContentLength, nil
 }
@@ -157,7 +157,7 @@ func (client *httpSourceClient) Download(request *source.Request) (io.ReadCloser
 		return resp.Body, nil
 	}
 	defer resp.Body.Close()
-	return nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
+	return nil, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
 }
 
 func (client *httpSourceClient) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
@@ -172,7 +172,7 @@ func (client *httpSourceClient) DownloadWithExpireInfo(request *source.Request) 
 		}, nil
 	}
 	defer resp.Body.Close()
-	return nil, nil, &source.ErrUnExpectedResponse{StatusCode: resp.StatusCode, Status: resp.Status}
+	return nil, nil, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
