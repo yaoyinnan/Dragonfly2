@@ -259,7 +259,7 @@ func (s *driverPlugin) PutBytes(raw *Raw, data []byte) error {
 func (s *driverPlugin) Remove(raw *Raw) error {
 	if raw == nil || (stringutils.IsBlank(raw.Key) &&
 		stringutils.IsBlank(raw.Bucket)) {
-		return errors.Errorf("both key and bucket are empty")
+		return errors.New("both key and bucket are empty")
 	}
 	return s.instance.Remove(raw)
 }
@@ -299,7 +299,7 @@ func (s *driverPlugin) GetBaseDir() string {
 
 func checkEmptyKey(raw *Raw) error {
 	if raw == nil || stringutils.IsBlank(raw.Key) {
-		return errors.Errorf("raw key is empty")
+		return errors.New("raw key is empty")
 	}
 	return nil
 }

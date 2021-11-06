@@ -23,7 +23,6 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -32,15 +31,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 )
-
-var (
-	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
-	errResourcesLacked = errors.New("resources lacked")
-)
-
-func IsResourcesLacked(err error) bool {
-	return errors.Is(err, errResourcesLacked)
-}
 
 // addOrUpdateTask add a new task or update exist task
 func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) error {
@@ -121,16 +111,16 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 // updateTask update task
 func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) error {
 	if updateTaskInfo == nil {
-		return errors.Wrap(cdnerrors.ErrInvalidValue, "updateTaskInfo is nil")
+		return errors.New("updateTaskInfo is nil")
 	}
 
 	if stringutils.IsBlank(updateTaskInfo.CdnStatus) {
-		return errors.Wrap(cdnerrors.ErrInvalidValue, "status of task is empty")
+		return errors.New("status of updateTaskInfo is empty")
 	}
 	// get origin task
 	task, ok := tm.getTask(taskID)
 	if !ok {
-		return errors.Wrap(cdnerrors.ErrDataNotFound, "task not found")
+		return errTaskNotFound
 	}
 
 	if task.IsSuccess() && !updateTaskInfo.IsSuccess() {

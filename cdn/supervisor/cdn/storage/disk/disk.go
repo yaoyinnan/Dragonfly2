@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
@@ -215,20 +214,20 @@ func (s *diskStorageMgr) CreateUploadLink(taskID string) error {
 }
 
 func (s *diskStorageMgr) DeleteTask(taskID string) error {
-	if err := s.diskDriver.Remove(storage.GetTaskMetadataRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := s.diskDriver.Remove(storage.GetTaskMetadataRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := s.diskDriver.Remove(storage.GetPieceMetadataRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := s.diskDriver.Remove(storage.GetPieceMetadataRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := s.diskDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := s.diskDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := s.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := s.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	// try to clean the parent bucket
-	if err := s.diskDriver.Remove(storage.GetParentRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := s.diskDriver.Remove(storage.GetParentRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		logrus.Warnf("taskID: %s failed remove parent bucket: %v", taskID, err)
 	}
 	return nil

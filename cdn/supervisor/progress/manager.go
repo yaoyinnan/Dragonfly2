@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -36,6 +35,8 @@ import (
 )
 
 var _ supervisor.SeedProgressManager = (*Manager)(nil)
+
+var ErrDataNotFound = errors.New("data not found")
 
 type Manager struct {
 	mu                   *synclock.LockerPool
@@ -72,13 +73,13 @@ func (pm *Manager) WatchSeedProgress(ctx context.Context, task *types.SeedTask) 
 	defer pm.mu.UnLock(task.ID, true)
 	chanList, ok := pm.getSeedSubscribers(task.ID)
 	if !ok {
-		return nil, errors.Wrap(cdnerrors.ErrDataNotFound, "get seed subscribers")
+		return nil, ErrDataNotFound
 	}
 	ch := make(chan *types.SeedPiece, pm.buffer)
 	ele := chanList.PushBack(ch)
 	pieceMetadataRecords, ok := pm.getPieceMetaRecords(task.ID)
 	if !ok {
-		return nil, errors.Wrap(cdnerrors.ErrDataNotFound, "get piece meta records")
+		return nil, errors.New("piece meta records of task is not found")
 	}
 	go func(seedCh chan *types.SeedPiece, ele *list.Element) {
 		for _, pieceMetaRecord := range pieceMetadataRecords {
@@ -135,7 +136,7 @@ func (pm *Manager) PublishTask(ctx context.Context, taskID string, task *types.S
 	defer pm.mu.UnLock(taskID, false)
 	chanList, ok := pm.getSeedSubscribers(taskID)
 	if !ok {
-		return errors.Wrap(cdnerrors.ErrDataNotFound, "get seed subscribers")
+		return ErrDataNotFound
 	}
 	// unwatch
 	for e := chanList.Front(); e != nil; e = e.Next() {
@@ -188,11 +189,11 @@ func (pm *Manager) getSeedSubscribers(taskID string) (*list.List, bool) {
 func (pm *Manager) addPieceMetaRecord(taskID string, record *types.SeedPiece) error {
 	pieceRecords, ok := pm.taskPieceMetaRecords.Load(taskID)
 	if !ok {
-		return cdnerrors.ErrDataNotFound
+		return errors.New("task piece meta records of task is not found")
 	}
 	pieceRecordMap := pieceRecords.(*sync.Map)
 	if !ok {
-		return errors.Errorf("pieceRecords type is not sync.Map")
+		return errors.New("pieceRecords type is not sync.Map")
 	}
 	pieceRecordMap.Store(record.PieceNum, record)
 	return nil

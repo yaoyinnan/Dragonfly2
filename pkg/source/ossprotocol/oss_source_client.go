@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"sync"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
@@ -183,15 +182,15 @@ func (osc *ossSourceClient) Transform(header source.Header) source.Header {
 func (osc *ossSourceClient) getClient(header source.Header) (*oss.Client, error) {
 	endpoint := header.Get(endpoint)
 	if stringutils.IsBlank(endpoint) {
-		return nil, errors.Wrapf(cdnerrors.ErrInvalidValue, "endpoint is empty")
+		return nil, errors.New("endpoint is empty")
 	}
 	accessKeyID := header.Get(accessKeyID)
 	if stringutils.IsBlank(accessKeyID) {
-		return nil, errors.Wrapf(cdnerrors.ErrInvalidValue, "accessKeyID is empty")
+		return nil, errors.New("accessKeyID is empty")
 	}
 	accessKeySecret := header.Get(accessKeySecret)
 	if stringutils.IsBlank(accessKeySecret) {
-		return nil, errors.Wrapf(cdnerrors.ErrInvalidValue, "accessKeySecret is empty")
+		return nil, errors.New("accessKeySecret is empty")
 	}
 	clientKey := genClientKey(endpoint, accessKeyID, accessKeySecret)
 	if client, ok := osc.clientMap.Load(clientKey); ok {
@@ -251,8 +250,8 @@ type ossObject struct {
 }
 
 func parseOssObject(url *url.URL) (*ossObject, error) {
-	if url.Scheme != "oss" {
-		return nil, fmt.Errorf("rawUrl: %s is not oss url", url.String())
+	if len(url.Path) < 2 {
+		return nil, errors.New()
 	}
 	return &ossObject{
 		endpoint: url.Path[0:2],

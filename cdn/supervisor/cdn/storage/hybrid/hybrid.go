@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
@@ -358,16 +357,16 @@ func (h *hybridStorageMgr) deleteMemoryFiles(taskID string) error {
 
 func (h *hybridStorageMgr) deleteTaskFiles(taskID string, deleteUploadPath bool, deleteHardLink bool) error {
 	// delete task file data
-	if err := h.diskDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := h.diskDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	// delete memory file
-	if err := h.memoryDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+	if err := h.memoryDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	if deleteUploadPath {
-		if err := h.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+		if err := h.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
@@ -377,21 +376,21 @@ func (h *hybridStorageMgr) deleteTaskFiles(taskID string, deleteUploadPath bool,
 			return err
 		}
 	} else {
-		if err := h.diskDriver.Remove(getHardLinkRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+		if err := h.diskDriver.Remove(getHardLinkRaw(taskID)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		// deleteTaskFiles delete files associated with taskID
-		if err := h.diskDriver.Remove(storage.GetTaskMetadataRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+		if err := h.diskDriver.Remove(storage.GetTaskMetadataRaw(taskID)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		// delete piece meta data
-		if err := h.diskDriver.Remove(storage.GetPieceMetadataRaw(taskID)); err != nil && !cdnerrors.IsFileNotExist(err) {
+		if err := h.diskDriver.Remove(storage.GetPieceMetadataRaw(taskID)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 	// try to clean the parent bucket
 	if err := h.diskDriver.Remove(storage.GetParentRaw(taskID)); err != nil &&
-		!cdnerrors.IsFileNotExist(err) {
+		!os.IsNotExist(err) {
 		logger.WithTaskID(taskID).Warnf("failed to remove parent bucket: %v", err)
 	}
 	return nil

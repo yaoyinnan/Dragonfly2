@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	"d7y.io/dragonfly/v2/cdn/types"
@@ -35,8 +34,23 @@ import (
 )
 
 // Ensure that Manager implements the SeedTaskManager and gcExecutor interfaces
-var _ supervisor.SeedTaskManager = (*Manager)(nil)
-var _ gc.Executor = (*Manager)(nil)
+var (
+	_ supervisor.SeedTaskManager = (*Manager)(nil)
+	_ gc.Executor                = (*Manager)(nil)
+)
+var (
+	errTaskNotFound = errors.New("task not found")
+	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
+	errResourcesLacked = errors.New("resources lacked")
+)
+
+func IsResourcesLacked(err error) bool {
+	return errors.Is(err, errResourcesLacked)
+}
+
+func IsTaskNotFound(err error) bool {
+	return errors.Is(err, errTaskNotFound)
+}
 
 var tracer = otel.Tracer("cdn-task-manager")
 
@@ -92,7 +106,7 @@ func (tm *Manager) triggerCdnSyncAction(ctx context.Context, taskID string) erro
 	task, ok := tm.getTask(taskID)
 	if !ok {
 		synclock.UnLock(taskID, true)
-		return cdnerrors.ErrDataNotFound
+		return errTaskNotFound
 	}
 	if !task.IsFrozen() {
 		span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))

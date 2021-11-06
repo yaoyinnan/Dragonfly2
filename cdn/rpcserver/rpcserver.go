@@ -22,8 +22,8 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/config"
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
@@ -104,7 +104,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	// register task
 	err = css.taskMgr.Register(ctx, registerTask)
 	if err != nil {
-		if cdnerrors.IsResourcesLacked(err) {
+		if task.IsResourcesLacked(err) {
 			err = dferrors.Newf(dfcodes.ResourceLacked, "resources lacked for task(%s): %v", req.TaskId, err)
 			span.RecordError(err)
 			return err
@@ -224,10 +224,10 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 
 func checkPieceTasksRequestParams(req *base.PieceTaskRequest) error {
 	if stringutils.IsBlank(req.TaskId) {
-		return errors.Errorf("taskID is empty")
+		return errors.New("taskID is empty")
 	}
 	if stringutils.IsBlank(req.SrcPid) {
-		return errors.Errorf("src peerID is empty")
+		return errors.New("src peerID is empty")
 	}
 	if req.StartNum < 0 {
 		return errors.Errorf("invalid starNum %d", req.StartNum)

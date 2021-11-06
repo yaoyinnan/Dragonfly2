@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	cdnerrors "d7y.io/dragonfly/v2/cdn/errors"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -50,7 +49,7 @@ func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageMgr Mana
 func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) {
 	freeSpace, err := cleaner.driver.GetFreeSpace()
 	if err != nil {
-		if cdnerrors.IsFileNotExist(err) {
+		if os.IsNotExist(err) {
 			err = cleaner.driver.CreateBaseDir()
 			if err != nil {
 				return nil, err
