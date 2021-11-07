@@ -89,12 +89,12 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 	defer source.UnRegister("http")
 
 	sourceClient.EXPECT().IsSupportRange(gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsExpired(gomock.Any()).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 	sourceClient.EXPECT().Download(gomock.Any()).DoAndReturn(
 		func(request *source.Request) (io.ReadCloser, error) {
 			content, _ := ioutil.ReadFile("../../testdata/cdn/go.html")
 			if request.Header.Get(source.Range) != "" {
-				parsed, _ := rangeutils.ParseRange(request.Header.Get(source.Range))
+				parsed, _ := rangeutils.GetRange(request.Header.Get(source.Range))
 				return ioutil.NopCloser(io.NewSectionReader(strings.NewReader(string(content)), int64(parsed.StartIndex), int64(parsed.EndIndex))), nil
 			}
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
@@ -104,7 +104,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 		func(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
 			content, _ := ioutil.ReadFile("../../testdata/cdn/go.html")
 			if request.Header.Get(source.Range) != "" {
-				parsed, _ := rangeutils.ParseRange(request.Header.Get(source.Range))
+				parsed, _ := rangeutils.GetRange(request.Header.Get(source.Range))
 				return ioutil.NopCloser(io.NewSectionReader(strings.NewReader(string(content)), int64(parsed.StartIndex), int64(parsed.EndIndex))),
 					&source.ExpireInfo{
 						LastModified: "Sun, 06 Jun 2021 12:52:30 GMT",
@@ -123,7 +123,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
 		func(request *source.Request) (int64, error) {
 			if request.Header.Get(source.Range) != "" {
-				parsed, _ := rangeutils.ParseRange(request.Header.Get(source.Range))
+				parsed, _ := rangeutils.GetRange(request.Header.Get(source.Range))
 				return int64(parsed.EndIndex-parsed.StartIndex) + 1, nil
 			}
 			fileInfo, _ := os.Stat("../../testdata/cdn/go.html")

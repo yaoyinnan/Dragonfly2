@@ -93,16 +93,16 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 		ModTime:    time.Time{},
 	}, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndSupportRequest), gomock.Any()).Return(true, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(expiredAndSupportRequest)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest), gomock.Any()).Return(true, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndSupportRequest)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
 }
 

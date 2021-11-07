@@ -97,18 +97,18 @@ func (mr *MockResourceClientMockRecorder) GetLastModifiedMillis(arg0 interface{}
 }
 
 // IsExpired mocks base method.
-func (m *MockResourceClient) IsExpired(arg0 *source.Request) (bool, error) {
+func (m *MockResourceClient) IsExpired(arg0 *source.Request, arg1 *source.ExpireInfo) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsExpired", arg0)
+	ret := m.ctrl.Call(m, "IsExpired", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsExpired indicates an expected call of IsExpired.
-func (mr *MockResourceClientMockRecorder) IsExpired(arg0 interface{}) *gomock.Call {
+func (mr *MockResourceClientMockRecorder) IsExpired(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockResourceClient)(nil).IsExpired), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockResourceClient)(nil).IsExpired), arg0, arg1)
 }
 
 // IsSupportRange mocks base method.

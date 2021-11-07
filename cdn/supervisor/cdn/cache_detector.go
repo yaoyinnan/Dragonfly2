@@ -170,7 +170,7 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 	if err != nil {
 		return nil, errors.Wrapf(err, "read piece meta records")
 	}
-	var breakPoint uint64 = 0
+	var breakPoint int64 = 0
 	pieceMetaRecords := make([]*storage.PieceMetaRecord, 0, len(tempRecords))
 	for index := range tempRecords {
 		if int32(index) != tempRecords[index].PieceNum {

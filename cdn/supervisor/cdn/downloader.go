@@ -32,7 +32,8 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoin
 	var err error
 	breakRange := task.Range
 	if breakPoint > 0 {
-		breakRange, err = getBreakRange(breakPoint, task.SourceFileLength, task.Range)
+		// todo replace task.SourceFileLength with totalSourceFileLength to get BreakRange
+		breakRange, err = getBreakRange(breakPoint, task.Range, task.SourceFileLength)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calculate the breakRange")
 		}
@@ -57,31 +58,16 @@ func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoin
 	return body, err
 }
 
-func getBreakRange(breakPoint int64, sourceFileLength int64, taskRange string) (string, error) {
-	var sourceStartIndex int64 = 0
-	var sourceEndIndex int64 = 0
-	if stringutils.IsBlank(taskRange) {
-		reqRange, err := rangeutils.ParseRange(taskRange)
-		if err != nil {
-			return "", errors.Wrap(err, "parse request range")
-		}
-		sourceStartIndex = int64(reqRange.StartIndex)
-		sourceEndIndex = int64(reqRange.EndIndex)
-	}
-
-	if breakPoint <= 0 {
+func getBreakRange(breakPoint int64, taskRange string, length int64) (string, error) {
+	if breakPoint < 0 {
 		return "", errors.Errorf("breakPoint is illegal, breakPoint: %d", breakPoint)
 	}
-	start := breakPoint + sourceStartIndex
-	if sourceFileLength < 0 {
-		if sourceEndIndex > 0 {
-			return fmt.Sprintf("%d-%d", start, sourceEndIndex), nil
-		}
-		return fmt.Sprintf("%d-", start), nil
+	if stringutils.IsBlank(taskRange) {
+		return fmt.Sprintf("%d-", breakPoint), nil
 	}
-	end := sourceFileLength - 1 + sourceStartIndex
-	if breakPoint > end {
-		return "", fmt.Errorf("start: %d is larger than end: %d", breakPoint, end)
+	requestRange, err := rangeutils.ParseRange(taskRange, length)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%d-%d", start, end), nil
+	return fmt.Sprintf("%d-%d", requestRange.StartIndex+breakPoint, requestRange.EndIndex), nil
 }

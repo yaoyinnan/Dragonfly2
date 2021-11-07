@@ -71,8 +71,8 @@ func checkSeedRequestParams(req *cdnsystem.SeedRequest) error {
 		return errors.Errorf("resource url: %s is invalid", req.Url)
 	}
 	if req.UrlMeta != nil && stringutils.IsBlank(req.UrlMeta.Range) {
-		// todo valid source if support range
-		_, err := rangeutils.ParseRange(req.UrlMeta.Range)
+		// todo check range is valid and source support range
+		_, err := rangeutils.GetRange(req.UrlMeta.Range)
 		if err != nil {
 			return errors.Errorf("request range: %s is valid", req.UrlMeta.Range)
 		}
@@ -126,10 +126,10 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			HostUuid: idgen.CDN(iputils.HostName, int32(css.cfg.ListenPort)),
 			PieceInfo: &base.PieceInfo{
 				PieceNum:    piece.PieceNum,
-				RangeStart:  piece.PieceRange.StartIndex,
+				RangeStart:  uint64(piece.PieceRange.StartIndex),
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
-				PieceOffset: piece.OriginRange.StartIndex,
+				PieceOffset: uint64(piece.OriginRange.StartIndex),
 				PieceStyle:  base.PieceStyle(piece.PieceStyle),
 			},
 			Done: false,
@@ -199,10 +199,10 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		if piece.PieceNum >= req.StartNum && (count < req.Limit || req.Limit == 0) {
 			p := &base.PieceInfo{
 				PieceNum:    piece.PieceNum,
-				RangeStart:  piece.PieceRange.StartIndex,
+				RangeStart:  uint64(piece.PieceRange.StartIndex),
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
-				PieceOffset: piece.OriginRange.StartIndex,
+				PieceOffset: uint64(piece.OriginRange.StartIndex),
 				PieceStyle:  base.PieceStyle(piece.PieceStyle),
 			}
 			pieceInfos = append(pieceInfos, p)

@@ -175,8 +175,8 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 					}
 					// Recycle Buffer
 					bufPool.Put(waitToWriteContent)
-					start := uint64(p.pieceNum) * uint64(p.pieceSize)
-					end := start + uint64(pieceLen) - 1
+					start := int64(p.pieceNum) * int64(p.pieceSize)
+					end := start + int64(pieceLen) - 1
 					pieceRecord := &storage.PieceMetaRecord{
 						PieceNum: p.pieceNum,
 						PieceLen: int32(pieceLen),
