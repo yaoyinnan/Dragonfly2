@@ -50,6 +50,20 @@ var _ supervisor.CDNManager = (*Manager)(nil)
 
 var tracer = otel.Tracer("cdn-server")
 
+var (
+	errTaskNotFound = errors.New("task not found")
+	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
+	errResourcesLacked = errors.New("resources lacked")
+)
+
+func IsResourcesLacked(err error) bool {
+	return errors.Is(err, errResourcesLacked)
+}
+
+func IsTaskNotFound(err error) bool {
+	return errors.Is(err, errTaskNotFound)
+}
+
 // Manager is an implementation of the interface of CDNMgr.
 type Manager struct {
 	cfg             *config.Config
@@ -58,27 +72,31 @@ type Manager struct {
 	cdnLocker       *synclock.LockerPool
 	metadataManager *metadataManager
 	progressMgr     supervisor.SeedProgressManager
+	taskMgr         supervisor.SeedTaskManager
 	cdnReporter     *reporter
 	detector        *cacheDetector
 	writer          *cacheWriter
 }
 
 // NewManager returns a new Manager.
-func NewManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressManager) (supervisor.CDNManager, error) {
-	return newManager(cfg, cacheStore, progressMgr)
+func NewManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressManager, taskMgr supervisor.SeedTaskManager) (supervisor.CDNManager,
+	error) {
+	return newManager(cfg, cacheStore, progressMgr, taskMgr)
 }
 
-func newManager(cfg *config.Config, cacheStore storage.Manager, progressManage supervisor.SeedProgressManager) (*Manager, error) {
+func newManager(cfg *config.Config, cacheStore storage.Manager, progressMgr supervisor.SeedProgressManager,
+	taskMgr supervisor.SeedTaskManager) (*Manager, error) {
 	rateLimiter := ratelimiter.NewRateLimiter(ratelimiter.TransRate(int64(cfg.MaxBandwidth-cfg.SystemReservedBandwidth)), 2)
 	metadataManager := newMetadataManager(cacheStore)
-	cdnReporter := newReporter(progressManage)
+	cdnReporter := newReporter(progressMgr)
 	return &Manager{
 		cfg:             cfg,
 		cacheStore:      cacheStore,
 		limiter:         rateLimiter,
 		metadataManager: metadataManager,
 		cdnReporter:     cdnReporter,
-		progressMgr:     progressManage,
+		progressMgr:     progressMgr,
+		taskMgr:         taskMgr,
 		detector:        newCacheDetector(metadataManager),
 		writer:          newCacheWriter(cdnReporter, metadataManager, cacheStore),
 		cdnLocker:       synclock.NewLockerPool(),

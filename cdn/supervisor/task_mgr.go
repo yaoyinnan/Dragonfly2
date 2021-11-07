@@ -18,8 +18,6 @@
 package supervisor
 
 import (
-	"context"
-
 	"d7y.io/dragonfly/v2/cdn/types"
 )
 
@@ -28,8 +26,8 @@ import (
 // A seedTask corresponds to three files on the disk, which are identified by taskId, the data file meta file piece file
 type SeedTaskManager interface {
 
-	// Register a task corresponding to a downloaded file.
-	Register(ctx context.Context, registerTask *types.SeedTask) error
+	// Add a task corresponding to a downloaded file.
+	Add(registerTask *types.SeedTask) error
 
 	// Get the task Info with specified taskID.
 	Get(taskID string) (*types.SeedTask, bool)
@@ -42,7 +40,4 @@ type SeedTaskManager interface {
 
 	// Delete a task with specified taskID.
 	Delete(taskID string)
-
-	// GetPieces gets the pieces which has been downloaded from source.
-	GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, ok bool)
 }

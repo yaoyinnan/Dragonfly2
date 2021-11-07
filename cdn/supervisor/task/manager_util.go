@@ -17,53 +17,51 @@
 package task
 
 import (
-	"context"
-	"fmt"
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // addOrUpdateTask add a new task or update exist task
-func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.SeedTask) error {
-	var span trace.Span
-	_, span = tracer.Start(ctx, config.SpanAndOrUpdateTask)
-	defer span.End()
+func (tm *Manager) addOrUpdateTask(registerTask *types.SeedTask) error {
 	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
 		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
 			// TODO 校验Header
-			span.AddEvent(config.EventHitUnreachableURL)
 			return errors.Errorf("hit unreachable resource %s cache and interval less than %d", registerTask.TaskURL, tm.cfg.FailAccessInterval)
 		}
-		span.AddEvent(config.EventDeleteUnReachableTask)
 		tm.taskURLUnreachableStore.Delete(registerTask.ID)
 		logger.Debugf("delete taskID: %s from unreachable url list", registerTask.ID)
 	}
-	task := registerTask
-	// using the existing task if it already exists corresponding to taskID
-	if existTask, ok := tm.getTask(registerTask.ID); ok {
-		if !checkSame(existTask, registerTask) {
-			span.RecordError(fmt.Errorf("newTask: %+v, existTask: %+v", registerTask, existTask))
+	if actual, loaded := tm.taskStore.LoadOrStore(registerTask.ID, registerTask); loaded {
+		existTask := actual.(*types.SeedTask)
+		if checkSame(existTask, registerTask) {
 			return errors.Errorf("register task %v is conflict with exist task %v", registerTask, existTask)
 		}
-		task = existTask.Clone()
 	}
+	// using the existing task if it already exists corresponding to taskID
+	synclock.Lock(registerTask.ID, true)
+	task, ok := tm.getTask(registerTask.ID)
+	if !ok {
+		synclock.UnLock(registerTask.ID, true)
+		return errTaskNotFound
+	}
+	if task.SourceFileLength != types.UnKnownSourceFileLen {
+		synclock.UnLock(registerTask.ID, true)
+		return nil
+	}
+	synclock.UnLock(registerTask.ID, true)
+	synclock.Lock(registerTask.ID, false)
+	defer synclock.UnLock(registerTask.ID, false)
 	if task.SourceFileLength != types.UnKnownSourceFileLen {
 		return nil
 	}
-
-	synclock.Lock(registerTask.ID, false)
-	defer synclock.UnLock(registerTask.ID, false)
 	// get sourceContentLength with req.Header
-	span.AddEvent(config.EventRequestSourceFileLength)
 	contentLengthRequest, err := source.NewRequestWithHeader(registerTask.RawURL, registerTask.Header)
 	if err != nil {
 		return errors.Wrap(err, "create content length request")
@@ -77,21 +75,12 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		registerTask.Log().Errorf("get url (%s) content length failed: %v", registerTask.RawURL, err)
 		if source.IsResourceNotReachableError(err) {
 			tm.taskURLUnreachableStore.Store(registerTask, time.Now())
-			return err
 		}
+		return err
 	}
 	// if not support file length header request ,return -1
 	task.SourceFileLength = sourceFileLength
 	task.Log().Debugf("success get file content length: %d", sourceFileLength)
-	if task.SourceFileLength > 0 {
-		ok, err := tm.cdnMgr.TryFreeSpace(registerTask.SourceFileLength)
-		if err != nil {
-			registerTask.Log().Errorf("failed to try free space: %v", err)
-		}
-		if !ok {
-			return errResourcesLacked
-		}
-	}
 
 	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
 	if registerTask.Header != nil {
@@ -103,8 +92,6 @@ func (tm *Manager) addOrUpdateTask(ctx context.Context, registerTask *types.Seed
 		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
 		task.PieceSize = pieceSize
 	}
-	tm.taskStore.Store(task.ID, task)
-	task.Log().Debugf("success add task: %+v", task)
 	return nil
 }
 

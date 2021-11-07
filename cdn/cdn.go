@@ -28,6 +28,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/metrics"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
+	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
@@ -74,8 +75,14 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, errors.Wrapf(err, "init plugins")
 	}
 
+	// Initialize task manager
+	taskMgr, err := task.NewManager(cfg)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create task manager")
+	}
+
 	// Initialize progress manager
-	progressMgr, err := progress.NewManager()
+	progressMgr, err := progress.NewManager(taskMgr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create progress manager")
 	}
@@ -85,28 +92,25 @@ func New(cfg *config.Config) (*Server, error) {
 	if !ok {
 		return nil, fmt.Errorf("can not find storage manager mode %s", cfg.StorageMode)
 	}
+	// Initialize storage manager
+	storageMgr.Initialize(taskMgr)
 
 	// Initialize CDN manager
-	cdnMgr, err := cdn.NewManager(cfg, storageMgr, progressMgr)
+	cdnMgr, err := cdn.NewManager(cfg, storageMgr, progressMgr, taskMgr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create cdn manager")
 	}
 
-	// Initialize task manager
-	taskMgr, err := task.NewManager(cfg, cdnMgr, progressMgr)
+	service, err := supervisor.NewCDNService(taskMgr, cdnMgr, progressMgr)
 	if err != nil {
-		return nil, errors.Wrapf(err, "create task manager")
+		return nil, errors.Wrapf(err, "create cdn service")
 	}
-
-	// Initialize storage manager
-	storageMgr.Initialize(taskMgr)
-
 	// Initialize storage manager
 	var opts []grpc.ServerOption
 	if s.config.Options.Telemetry.Jaeger != "" {
 		opts = append(opts, grpc.ChainUnaryInterceptor(otelgrpc.UnaryServerInterceptor()), grpc.ChainStreamInterceptor(otelgrpc.StreamServerInterceptor()))
 	}
-	grpcServer, err := rpcserver.New(cfg, taskMgr, opts...)
+	grpcServer, err := rpcserver.New(cfg, service, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "create seedServer")
 	}

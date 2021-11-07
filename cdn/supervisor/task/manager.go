@@ -17,7 +17,6 @@
 package task
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -27,9 +26,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/atomic"
 )
 
@@ -38,21 +34,6 @@ var (
 	_ supervisor.SeedTaskManager = (*Manager)(nil)
 	_ gc.Executor                = (*Manager)(nil)
 )
-var (
-	errTaskNotFound = errors.New("task not found")
-	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
-	errResourcesLacked = errors.New("resources lacked")
-)
-
-func IsResourcesLacked(err error) bool {
-	return errors.Is(err, errResourcesLacked)
-}
-
-func IsTaskNotFound(err error) bool {
-	return errors.Is(err, errTaskNotFound)
-}
-
-var tracer = otel.Tracer("cdn-task-manager")
 
 // Manager is an implementation of the interface of supervisor.TaskManager.
 type Manager struct {
@@ -60,109 +41,36 @@ type Manager struct {
 	taskStore               sync.Map
 	accessTimeMap           sync.Map
 	taskURLUnreachableStore sync.Map
-	cdnMgr                  supervisor.CDNManager
-	progressMgr             supervisor.SeedProgressManager
 }
 
 // NewManager returns a new Manager Object.
-func NewManager(cfg *config.Config, cdnMgr supervisor.CDNManager, progressMgr supervisor.SeedProgressManager) (supervisor.SeedTaskManager, error) {
+func NewManager(cfg *config.Config) (supervisor.SeedTaskManager, error) {
 	taskMgr := &Manager{
-		cfg:         cfg,
-		cdnMgr:      cdnMgr,
-		progressMgr: progressMgr,
+		cfg: cfg,
 	}
 	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, taskMgr)
 	return taskMgr, nil
 }
 
-func (tm *Manager) Register(ctx context.Context, registerTask *types.SeedTask) error {
-	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanTaskRegister)
-	defer span.End()
-	taskID := registerTask.ID
+func (tm *Manager) Add(registerTask *types.SeedTask) error {
 	// add a new task or update a exist task
-	err := tm.addOrUpdateTask(ctx, registerTask)
-	if err != nil {
-		span.RecordError(err)
-		return errors.Wrap(err, "add or update seed task")
+	if err := tm.addOrUpdateTask(registerTask); err != nil {
+		return err
 	}
-	// update accessTime for taskId
+	// only update access when add task success
 	tm.accessTimeMap.Store(registerTask.ID, time.Now())
-
-	// trigger CDN
-	if err := tm.triggerCdnSyncAction(ctx, taskID); err != nil {
-		return errors.Wrapf(err, "trigger cdn")
-	}
-	registerTask.Log().Infof("successfully trigger cdn sync action")
-	return nil
-}
-
-// triggerCdnSyncAction
-func (tm *Manager) triggerCdnSyncAction(ctx context.Context, taskID string) error {
-	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanTriggerCDNSyncAction)
-	defer span.End()
-	synclock.Lock(taskID, true)
-	task, ok := tm.getTask(taskID)
-	if !ok {
-		synclock.UnLock(taskID, true)
-		return errTaskNotFound
-	}
-	if !task.IsFrozen() {
-		span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
-		task.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", task.CdnStatus)
-		synclock.UnLock(task.ID, true)
-		return nil
-	}
-	synclock.UnLock(task.ID, true)
-
-	synclock.Lock(task.ID, false)
-	defer synclock.UnLock(task.ID, false)
-	// reconfirm
-	span.SetAttributes(config.AttributeTaskStatus.String(task.CdnStatus))
-	if !task.IsFrozen() {
-		task.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", task.CdnStatus)
-		return nil
-	}
-	if task.IsWait() {
-		tm.progressMgr.InitSeedProgress(ctx, task.ID)
-		task.Log().Infof("successfully init seed progress for task")
-	}
-	err := tm.updateTask(task.ID, &types.SeedTask{
-		CdnStatus: types.TaskInfoCdnStatusRunning,
-	})
-	if err != nil {
-		return errors.Wrapf(err, "update task")
-	}
-	// triggerCDN goroutine
-	go func() {
-		updateTaskInfo, err := tm.cdnMgr.TriggerCDN(ctx, task.Clone())
-		if err != nil {
-			task.Log().Errorf("trigger cdn get error: %v", err)
-		}
-		err = tm.updateTask(task.ID, updateTaskInfo)
-		if err != nil {
-			task.Log().Errorf("failed to update task: %v", err)
-		}
-		go func() {
-			if err := tm.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
-				task.Log().Errorf("failed to publish task: %v", err)
-			}
-
-		}()
-		task.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
-	}()
 	return nil
 }
 
 func (tm *Manager) Get(taskID string) (*types.SeedTask, bool) {
-	task, ok := tm.taskStore.Load(taskID)
-	if !ok {
-		return nil, ok
+	synclock.Lock(taskID, true)
+	defer synclock.UnLock(taskID, true)
+	// only update access when get task success
+	if task, ok := tm.getTask(taskID); ok {
+		tm.accessTimeMap.Store(taskID, time.Now())
+		return task, true
 	}
-	// update accessTime for taskID
-	tm.accessTimeMap.Store(taskID, time.Now())
-	return task.(*types.SeedTask), true
+	return nil, false
 }
 
 // Update the info of task.
@@ -170,12 +78,16 @@ func (tm *Manager) Update(taskID string, taskInfo *types.SeedTask) error {
 	synclock.Lock(taskID, false)
 	defer synclock.UnLock(taskID, false)
 
-	return tm.updateTask(taskID, taskInfo)
+	if err := tm.updateTask(taskID, taskInfo); err != nil {
+		return err
+	}
+	// only update access when update task success
+	tm.accessTimeMap.Store(taskID, time.Now())
+	return nil
 }
 
 func (tm *Manager) Exist(taskID string) (*types.SeedTask, bool) {
-	task, ok := tm.taskStore.Load(taskID)
-	return task.(*types.SeedTask), ok
+	return tm.getTask(taskID)
 }
 
 func (tm *Manager) Delete(taskID string) {
@@ -184,13 +96,6 @@ func (tm *Manager) Delete(taskID string) {
 	tm.accessTimeMap.Delete(taskID)
 	tm.taskURLUnreachableStore.Delete(taskID)
 	tm.taskStore.Delete(taskID)
-	tm.progressMgr.Clear(taskID)
-}
-
-func (tm *Manager) GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, ok bool) {
-	synclock.Lock(taskID, true)
-	defer synclock.UnLock(taskID, true)
-	return tm.progressMgr.GetPieces(ctx, taskID)
 }
 
 const (

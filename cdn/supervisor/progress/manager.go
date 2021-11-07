@@ -40,17 +40,19 @@ var ErrDataNotFound = errors.New("data not found")
 
 type Manager struct {
 	mu                   *synclock.LockerPool
+	taskManager          supervisor.SeedTaskManager
 	seedSubscribers      sync.Map
 	taskPieceMetaRecords sync.Map
 	timeout              time.Duration
 	buffer               int
 }
 
-func NewManager() (supervisor.SeedProgressManager, error) {
+func NewManager(taskManager supervisor.SeedTaskManager) (supervisor.SeedProgressManager, error) {
 	return &Manager{
-		mu:      synclock.NewLockerPool(),
-		timeout: 3 * time.Second,
-		buffer:  4,
+		mu:          synclock.NewLockerPool(),
+		taskManager: taskManager,
+		timeout:     3 * time.Second,
+		buffer:      4,
 	}, nil
 }
 
@@ -98,6 +100,7 @@ func (pm *Manager) WatchSeedProgress(ctx context.Context, task *types.SeedTask) 
 }
 
 func (pm *Manager) PublishPiece(ctx context.Context, taskID string, record *types.SeedPiece) error {
+	pm.taskManager.Get(taskID)
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(record)
 	span.AddEvent(config.EventPublishPiece, trace.WithAttributes(config.AttributeSeedPiece.String(string(recordBytes))))

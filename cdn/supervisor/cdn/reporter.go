@@ -29,6 +29,7 @@ import (
 
 type reporter struct {
 	progressManager supervisor.SeedProgressManager
+	taskManager     supervisor.SeedTaskManager
 }
 
 const (
