@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"sync"
 
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-http-utils/headers"
 	"github.com/pkg/errors"
@@ -43,28 +43,28 @@ const (
 var _ source.ResourceClient = (*ossSourceClient)(nil)
 
 func init() {
-	sourceClient := NewOSSSourceClient()
+	sourceClient := newOSSSourceClient()
 	source.Register(ossClient, sourceClient, adaptor)
 }
 
 func adaptor(request *source.Request) *source.Request {
 	clonedRequest := request.Clone(request.Context())
 	if request.Header.Get(source.Range) != "" {
-		clonedRequest.Header.Set(headers.Range, fmt.Sprintf("bytes=%s", request.Header.Get(source.Range)))
+		clonedRequest.Header.Set(oss.HTTPHeaderRange, fmt.Sprintf("bytes=%s", request.Header.Get(source.Range)))
 		clonedRequest.Header.Del(source.Range)
 	}
 	if request.Header.Get(source.LastModified) != "" {
-		clonedRequest.Header.Set(headers.LastModified, request.Header.Get(source.LastModified))
+		clonedRequest.Header.Set(oss.HTTPHeaderLastModified, request.Header.Get(source.LastModified))
 		clonedRequest.Header.Del(source.LastModified)
 	}
 	if request.Header.Get(source.ETag) != "" {
-		clonedRequest.Header.Set(headers.ETag, request.Header.Get(source.ETag))
+		clonedRequest.Header.Set(oss.HTTPHeaderEtag, request.Header.Get(source.ETag))
 		clonedRequest.Header.Del(source.ETag)
 	}
 	return clonedRequest
 }
 
-func NewOSSSourceClient(opts ...OssSourceClientOption) source.ResourceClient {
+func newOSSSourceClient(opts ...OssSourceClientOption) *ossSourceClient {
 	sourceClient := &ossSourceClient{
 		clientMap: sync.Map{},
 		accessMap: sync.Map{},
@@ -77,106 +77,125 @@ func NewOSSSourceClient(opts ...OssSourceClientOption) source.ResourceClient {
 
 type OssSourceClientOption func(p *ossSourceClient)
 
-// ossSourceClient is an implementation of the interface of SourceClient.
+// ossSourceClient is an implementation of the interface of source.ResourceClient.
 type ossSourceClient struct {
 	// endpoint_accessKeyID_accessKeySecret -> ossClient
 	clientMap sync.Map
 	accessMap sync.Map
 }
 
-func (osc *ossSourceClient) TransformToConcreteHeader(header source.Header) source.Header {
-	clonedHeader := header.Clone()
-	if clonedHeader.Get(source.Range) != "" {
-		clonedHeader.Set(headers.Range, fmt.Sprintf("bytes=%s", clonedHeader.Get(source.Range)))
-	}
-	if clonedHeader.Get(source.LastModified) != "" {
-		clonedHeader.Set(headers.LastModified, clonedHeader.Get(source.LastModified))
-	}
-	if clonedHeader.Get(source.ETag) != "" {
-		clonedHeader.Set(headers.ETag, clonedHeader.Get(source.ETag))
-	}
-	return clonedHeader
-}
-
-func (osc *ossSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
-	panic("implement me")
-}
-
-func (osc *ossSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
-	panic("implement me")
-}
-
 func (osc *ossSourceClient) GetContentLength(request *source.Request) (int64, error) {
-	resHeader, err := osc.getMeta(request)
+	client, err := osc.getClient(request.Header)
 	if err != nil {
 		return types.UnKnownSourceFileLen, err
 	}
-
-	contentLen, err := strconv.ParseInt(resHeader.Get(oss.HTTPHeaderContentLength), 10, 64)
+	bucket, err := client.Bucket(request.URL.Host)
 	if err != nil {
-		return -1, err
+		return types.UnKnownSourceFileLen, errors.Wrapf(err, "get oss bucket: %s", request.URL.Host)
 	}
-
+	header, err := bucket.GetObjectMeta(request.URL.Path, getOptions(request.Header)...)
+	if err != nil {
+		return types.UnKnownSourceFileLen, errors.Wrapf(err, "get oss object %s meta", request.URL.Path)
+	}
+	contentLen, err := strconv.ParseInt(header.Get(oss.HTTPHeaderContentLength), 10, 64)
+	if err != nil {
+		return types.UnKnownSourceFileLen, errors.Wrapf(err, "parse content-length str to int64")
+	}
 	return contentLen, nil
 }
 
 func (osc *ossSourceClient) IsSupportRange(request *source.Request) (bool, error) {
-	_, err := osc.getMeta(request)
+	if request.Header.Get(oss.HTTPHeaderRange) == "" {
+		request.Header.Set(oss.HTTPHeaderRange, "bytes=0-0")
+	}
+	client, err := osc.getClient(request.Header)
+	if err != nil {
+		return false, errors.Wrap(err, "get oss client")
+	}
+	bucket, err := client.Bucket(request.URL.Host)
+	if err != nil {
+		return false, errors.Wrapf(err, "get oss bucket: %s", request.URL.Host)
+	}
+	exist, err := bucket.IsObjectExist(request.URL.Path, getOptions(request.Header)...)
 	if err != nil {
 		return false, err
+	}
+	if !exist {
+		return false, source.ErrResourceNotReachable
 	}
 	return true, nil
 }
 
-func (osc *ossSourceClient) IsExpired(request *source.Request) (bool, error) {
-	resHeader, err := osc.getMeta(request)
+func (osc *ossSourceClient) IsExpired(request *source.Request, info *source.ExpireInfo) (bool, error) {
+	client, err := osc.getClient(request.Header)
+	if err != nil {
+		return false, errors.Wrap(err, "get oss client")
+	}
+	bucket, err := client.Bucket(request.URL.Host)
+	if err != nil {
+		return false, errors.Wrapf(err, "get oss bucket: %s", request.URL.Host)
+	}
+	resHeader, err := bucket.GetObjectMeta(request.URL.Path, getOptions(request.Header)...)
 	if err != nil {
 		return false, err
 	}
-	return resHeader.Get(oss.HTTPHeaderLastModified) == request.Header.Get(oss.HTTPHeaderLastModified) && resHeader.Get(oss.HTTPHeaderEtag) == request.Header.Get(oss.
-		HTTPHeaderEtag), nil
+	return !(resHeader.Get(oss.HTTPHeaderEtag) == info.ETag || resHeader.Get(oss.HTTPHeaderLastModified) == info.LastModified), nil
+}
+
+func (osc *ossSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
+	client, err := osc.getClient(request.Header)
+	if err != nil {
+		return nil, errors.Wrap(err, "get oss client")
+	}
+	bucket, err := client.Bucket(request.URL.Host)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get oss bucket %s", request.URL.Host)
+	}
+	resp, err := bucket.GetObject(request.URL.Path, getOptions(request.Header)...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get oss object %s", request.URL.Path)
+	}
+	return resp, nil
 }
 
 func (osc *ossSourceClient) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
-	ossObject, err := parseOssObject(request.URL)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "parse oss object from url: %s", request.URL.String())
-	}
 	client, err := osc.getClient(request.Header)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to get client")
+		return nil, nil, errors.Wrapf(err, "get oss client")
 	}
-	bucket, err := client.Bucket(ossObject.bucket)
+	bucket, err := client.Bucket(request.URL.Host)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to get bucket: %s", ossObject.bucket)
+		return nil, nil, errors.Wrapf(err, "get oss bucket: %s", request.URL.Host)
 	}
-	res, err := bucket.GetObject(ossObject.object, getOptions(request.Header)...)
+	objectResult, err := bucket.DoGetObject(&oss.GetObjectRequest{ObjectKey: request.URL.Path}, getOptions(request.Header))
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to get oss Object: %s", ossObject.object)
+		return nil, nil, errors.Wrapf(err, "get oss Object: %s", request.URL.Path)
 	}
-	resp := res.(*oss.Response)
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		return resp.Body, &source.ExpireInfo{
-			LastModified: resp.Headers.Get(headers.LastModified),
-			ETag:         resp.Headers.Get(headers.ETag),
-		}, nil
+	err = source.CheckRespCode(objectResult.Response.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
+	if err != nil {
+		objectResult.Response.Body.Close()
+		return nil, nil, err
 	}
-	resp.Body.Close()
-	return nil, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	return objectResult.Response.Body, &source.ExpireInfo{
+		LastModified: objectResult.Response.Headers.Get(headers.LastModified),
+		ETag:         objectResult.Response.Headers.Get(headers.ETag),
+	}, nil
 }
 
-func (osc *ossSourceClient) Transform(header source.Header) source.Header {
-	clonedHeader := header.Clone()
-	if clonedHeader.Get(source.Range) != "" {
-		clonedHeader.Set(headers.Range, fmt.Sprintf("bytes=%s", clonedHeader.Get(source.Range)))
+func (osc *ossSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
+	client, err := osc.getClient(request.Header)
+	if err != nil {
+		return -1, errors.Wrap(err, "get oss client")
 	}
-	if clonedHeader.Get(source.LastModified) != "" {
-		clonedHeader.Set(headers.LastModified, clonedHeader.Get(source.LastModified))
+	bucket, err := client.Bucket(request.URL.Host)
+	if err != nil {
+		return -1, errors.Wrapf(err, "get oss bucket: %s", request.URL.Host)
 	}
-	if clonedHeader.Get(source.ETag) != "" {
-		clonedHeader.Set(headers.ETag, clonedHeader.Get(source.ETag))
+	respHeader, err := bucket.GetObjectMeta(request.URL.Path, getOptions(request.Header)...)
+	if err != nil {
+		return -1, err
 	}
-	return clonedHeader
+	return timeutils.UnixMillis(respHeader.Get(oss.HTTPHeaderLastModified)), nil
 }
 
 func (osc *ossSourceClient) getClient(header source.Header) (*oss.Client, error) {
@@ -192,7 +211,7 @@ func (osc *ossSourceClient) getClient(header source.Header) (*oss.Client, error)
 	if stringutils.IsBlank(accessKeySecret) {
 		return nil, errors.New("accessKeySecret is empty")
 	}
-	clientKey := genClientKey(endpoint, accessKeyID, accessKeySecret)
+	clientKey := buildClientKey(endpoint, accessKeyID, accessKeySecret)
 	if client, ok := osc.clientMap.Load(clientKey); ok {
 		return client.(*oss.Client), nil
 	}
@@ -200,36 +219,12 @@ func (osc *ossSourceClient) getClient(header source.Header) (*oss.Client, error)
 	if err != nil {
 		return nil, err
 	}
-	osc.clientMap.Store(clientKey, client)
-	return client, nil
+	actual, _ := osc.clientMap.LoadOrStore(clientKey, client)
+	return actual.(*oss.Client), nil
 }
 
-func genClientKey(endpoint, accessKeyID, accessKeySecret string) string {
+func buildClientKey(endpoint, accessKeyID, accessKeySecret string) string {
 	return fmt.Sprintf("%s_%s_%s", endpoint, accessKeyID, accessKeySecret)
-}
-
-func (osc *ossSourceClient) getMeta(request *source.Request) (http.Header, error) {
-	client, err := osc.getClient(request.Header)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get oss client")
-	}
-	ossObject, err := parseOssObject(request.URL)
-	if err != nil {
-		return nil, errors.Wrapf(err, "parse oss object")
-	}
-
-	bucket, err := client.Bucket(ossObject.bucket)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get bucket: %s", ossObject.bucket)
-	}
-	isExist, err := bucket.IsObjectExist(ossObject.object)
-	if err != nil {
-		return nil, errors.Wrapf(err, "prob object: %s if exist", ossObject.object)
-	}
-	if !isExist {
-		return nil, fmt.Errorf("oss object: %s does not exist", ossObject.object)
-	}
-	return bucket.GetObjectMeta(ossObject.object, getOptions(request.Header)...)
 }
 
 func getOptions(header source.Header) []oss.Option {
@@ -241,21 +236,4 @@ func getOptions(header source.Header) []oss.Option {
 		opts = append(opts, oss.SetHeader(key, value))
 	}
 	return opts
-}
-
-type ossObject struct {
-	endpoint string
-	bucket   string
-	object   string
-}
-
-func parseOssObject(url *url.URL) (*ossObject, error) {
-	if len(url.Path) < 2 {
-		return nil, errors.New()
-	}
-	return &ossObject{
-		endpoint: url.Path[0:2],
-		bucket:   url.Host,
-		object:   url.Path[1:],
-	}, nil
 }

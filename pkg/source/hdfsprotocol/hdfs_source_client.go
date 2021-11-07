@@ -38,7 +38,6 @@ const (
 	HDFSClient = "hdfs"
 )
 const (
-	layout = "2006-01-02 15:04:05"
 	// hdfsUseDataNodeHostName set hdfs client whether user hostname connect to datanode
 	hdfsUseDataNodeHostName = "dfs.client.use.datanode.hostname"
 	// hdfsUseDataNodeHostNameValue set value is true
@@ -46,7 +45,7 @@ const (
 )
 
 func init() {
-	source.Register(HDFSClient, NewHDFSSourceClient(), adapter)
+	source.Register(HDFSClient, newHDFSSourceClient(), adapter)
 }
 
 func adapter(request *source.Request) *source.Request {
@@ -101,21 +100,17 @@ func (h *hdfsSourceClient) IsSupportRange(request *source.Request) (bool, error)
 	return true, nil
 }
 
-func (h *hdfsSourceClient) IsExpired(request *source.Request) (bool, error) {
+func (h *hdfsSourceClient) IsExpired(request *source.Request, info *source.ExpireInfo) (bool, error) {
 	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
 		return false, err
 	}
 
-	info, err := hdfsClient.Stat(path)
+	fileInfo, err := hdfsClient.Stat(path)
 	if err != nil {
 		return false, err
 	}
-	t, err := time.ParseInLocation(layout, request.Header.Get(source.LastModified), time.Local)
-	if err != nil {
-		return false, err
-	}
-	return info.ModTime().Format(layout) != t.Format(layout), nil
+	return fileInfo.ModTime().Format(source.LastModifiedLayout) != info.LastModified, nil
 }
 
 func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
@@ -129,7 +124,7 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 	}
 
 	// default read all data when rang is nil
-	var limitReadN int64 = hdfsFile.Stat().Size()
+	var limitReadN = hdfsFile.Stat().Size()
 
 	if request.Header.Get(source.Range) != "" {
 		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
@@ -162,7 +157,7 @@ func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.R
 	fileInfo := hdfsFile.Stat()
 
 	// default read all data when rang is nil
-	var limitReadN int64 = fileInfo.Size()
+	var limitReadN = fileInfo.Size()
 
 	if request.Header.Get(source.Range) != "" {
 		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
@@ -238,7 +233,7 @@ func (h *hdfsSourceClient) getHDFSClientAndPath(url *url.URL) (*hdfs.Client, str
 	return client, url.Path, nil
 }
 
-func NewHDFSSourceClient(opts ...HDFSSourceClientOption) source.ResourceClient {
+func newHDFSSourceClient(opts ...HDFSSourceClientOption) *hdfsSourceClient {
 	sourceClient := &hdfsSourceClient{
 		clientMap: make(map[string]*hdfs.Client),
 	}

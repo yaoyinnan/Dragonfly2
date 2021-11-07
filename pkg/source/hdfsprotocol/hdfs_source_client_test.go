@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 
 	"d7y.io/dragonfly/v2/pkg/source"
 	"github.com/agiledragon/gomonkey"
@@ -52,10 +53,10 @@ const (
 	hdfsNotExistFileContentLength int64 = -1
 )
 
-var fakeHDFSClient *hdfs.Client = &hdfs.Client{}
+var fakeHDFSClient = &hdfs.Client{}
 
 func testBefore() {
-	sourceClient = NewHDFSSourceClient(func(p *hdfsSourceClient) {
+	sourceClient = newHDFSSourceClient(func(p *hdfsSourceClient) {
 		p.clientMap[hdfsExistFileHost] = fakeHDFSClient
 	})
 }
@@ -150,12 +151,15 @@ func TestIsExpired_NoHeader(t *testing.T) {
 	// header not have Last-Modified
 	request, err := source.NewRequest(hdfsExistFileURL)
 	assert.Nil(t, err)
-	expired, err := sourceClient.IsExpired(request)
+	expired, err := sourceClient.IsExpired(request, &source.ExpireInfo{
+		LastModified: hdfsExistFileLastModified,
+		ETag:         "",
+	})
 	assert.Equal(t, true, expired)
 	assert.Nil(t, err)
 }
 func TestIsExpired_LastModifiedExpired(t *testing.T) {
-	lastModified, _ := time.Parse(layout, hdfsExistFileLastModified)
+	lastModified, _ := time.Parse(source.LastModifiedLayout, hdfsExistFileLastModified)
 	var info os.FileInfo = fakeHDFSFileInfo{
 		modtime: lastModified,
 	}
@@ -168,17 +172,19 @@ func TestIsExpired_LastModifiedExpired(t *testing.T) {
 	defer patch.Reset()
 
 	request, err := source.NewRequest(hdfsExistFileURL)
-	request.Header.Add(source.LastModified, "2020-01-01 00:00:00")
 	assert.Nil(t, err)
 	// header have Last-Modified
-	expired, err := sourceClient.IsExpired(request)
+	expired, err := sourceClient.IsExpired(request, &source.ExpireInfo{
+		LastModified: timeutils.Format(time.Date(2020, 01, 01, 0, 0, 0, 0, time.UTC)),
+		ETag:         "",
+	})
 	assert.Equal(t, true, expired)
 	assert.Nil(t, err)
 
 }
 
 func TestIsExpired_LastModifiedNotExpired(t *testing.T) {
-	lastModified, _ := time.Parse(layout, hdfsExistFileLastModified)
+	lastModified, _ := time.Parse(source.LastModifiedLayout, hdfsExistFileLastModified)
 	var info os.FileInfo = fakeHDFSFileInfo{
 		modtime: lastModified,
 	}
@@ -192,9 +198,11 @@ func TestIsExpired_LastModifiedNotExpired(t *testing.T) {
 
 	request, err := source.NewRequest(hdfsExistFileURL)
 	assert.Nil(t, err)
-	request.Header.Add(source.LastModified, hdfsExistFileLastModified)
 	// header have Last-Modified
-	expired, err := sourceClient.IsExpired(request)
+	expired, err := sourceClient.IsExpired(request, &source.ExpireInfo{
+		LastModified: hdfsExistFileLastModified,
+		ETag:         "",
+	})
 	assert.Equal(t, false, expired)
 	assert.Nil(t, err)
 }
@@ -260,7 +268,7 @@ func TestDownload_FileNotExist(t *testing.T) {
 }
 
 func Test_DownloadWithResponseHeader_FileExist_ByRange(t *testing.T) {
-	lastModified, _ := time.Parse(layout, hdfsExistFileLastModified)
+	lastModified, _ := time.Parse(source.LastModifiedLayout, hdfsExistFileLastModified)
 	var reader *hdfs.FileReader = &hdfs.FileReader{}
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
@@ -313,7 +321,7 @@ func TestDownloadWithResponseHeader_FileNotExist(t *testing.T) {
 }
 
 func TestGetLastModifiedMillis_FileExist(t *testing.T) {
-	lastModified, _ := time.Parse(layout, hdfsExistFileLastModified)
+	lastModified, _ := time.Parse(source.LastModifiedLayout, hdfsExistFileLastModified)
 	var info os.FileInfo = fakeHDFSFileInfo{
 		modtime: lastModified,
 	}
@@ -351,7 +359,7 @@ func TestGetLastModifiedMillis_FileNotExist(t *testing.T) {
 }
 
 func TestNewHDFSSourceClient(t *testing.T) {
-	client := NewHDFSSourceClient()
+	client := newHDFSSourceClient()
 	assert.NotNil(t, client)
 
 	options := make([]HDFSSourceClientOption, 0)
@@ -362,7 +370,7 @@ func TestNewHDFSSourceClient(t *testing.T) {
 	}
 	options = append(options, option)
 
-	newHDFSSourceClient := NewHDFSSourceClient(options...)
+	newHDFSSourceClient := newHDFSSourceClient(options...)
 
 	assert.IsType(t, &hdfsSourceClient{}, newHDFSSourceClient)
 

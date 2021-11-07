@@ -94,9 +94,10 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	if err != nil {
 		return nil, errors.Wrapf(err, "create request")
 	}
-	checkExpiredRequest.Header.Add(source.IfModifiedSince, fileMetadata.ExpireInfo[source.LastModified])
-	checkExpiredRequest.Header.Add(source.IfNoneMatch, fileMetadata.ExpireInfo[source.ETag])
-	expired, err := source.IsExpired(checkExpiredRequest)
+	expired, err := source.IsExpired(checkExpiredRequest, &source.ExpireInfo{
+		LastModified: fileMetadata.ExpireInfo[source.LastModified],
+		ETag:         fileMetadata.ExpireInfo[source.ETag],
+	})
 	if err != nil {
 		// If the check fails, the resource is regarded as not expired to prevent the source from being knocked down
 		task.Log().Warnf("failed to check whether the source is expired. To prevent the source from being suspended, "+

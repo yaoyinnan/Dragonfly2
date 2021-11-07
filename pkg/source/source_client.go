@@ -19,7 +19,9 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +37,39 @@ var (
 
 	ErrNoClientFound = errors.New("no source client found")
 )
+
+// UnexpectedStatusCodeError is returned when a source responds with neither an error
+// nor with a status code indicating success.
+type UnexpectedStatusCodeError struct {
+	allowed []int // The expected stats code returned from source
+	got     int   // The actual status code from source
+}
+
+// Error implements interface error
+func (e UnexpectedStatusCodeError) Error() string {
+	var expected []string
+	for _, v := range e.allowed {
+		expected = append(expected, strconv.Itoa(v))
+	}
+	return fmt.Sprintf("status code from source is %s; was expecting %s",
+		strconv.Itoa(e.got), strings.Join(expected, " or "))
+}
+
+// Got is the actual status code returned by source.
+func (e UnexpectedStatusCodeError) Got() int {
+	return e.got
+}
+
+// CheckRespCode returns UnexpectedStatusError if the given response code is not
+// one of the allowed status codes; otherwise nil.
+func CheckRespCode(respCode int, allowed []int) error {
+	for _, v := range allowed {
+		if respCode == v {
+			return nil
+		}
+	}
+	return UnexpectedStatusCodeError{allowed, respCode}
+}
 
 func IsResourceNotReachableError(err error) bool {
 	return errors.Is(err, ErrResourceNotReachable)
@@ -56,7 +91,7 @@ type ResourceClient interface {
 
 	// IsExpired checks if a resource received or stored is the same.
 	// If it fails to get the result, it is considered that the source has not expired, return false and non-nil err to prevent the source from exploding
-	IsExpired(request *Request) (bool, error)
+	IsExpired(request *Request, info *ExpireInfo) (bool, error)
 
 	// Download downloads from source
 	Download(request *Request) (io.ReadCloser, error)
@@ -154,8 +189,8 @@ func (c *client) IsSupportRange(request *Request) (bool, error) {
 	return c.rc.IsSupportRange(c.adapter(request))
 }
 
-func (c *client) IsExpired(request *Request) (bool, error) {
-	return c.rc.IsExpired(c.adapter(request))
+func (c *client) IsExpired(request *Request, info *ExpireInfo) (bool, error) {
+	return c.rc.IsExpired(c.adapter(request), info)
 }
 func (c *client) Download(request *Request) (io.ReadCloser, error) {
 	return c.rc.Download(c.adapter(request))
@@ -198,7 +233,7 @@ func IsSupportRange(request *Request) (bool, error) {
 	return client.IsSupportRange(request)
 }
 
-func IsExpired(request *Request) (bool, error) {
+func IsExpired(request *Request, info *ExpireInfo) (bool, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
 		return false, ErrNoClientFound
@@ -208,21 +243,7 @@ func IsExpired(request *Request) (bool, error) {
 		request = request.WithContext(ctx)
 		defer cancel()
 	}
-
-	//lastModified := timeutils.UnixMillis(expireInfo[source.LastModified])
-	//
-	//eTag := expireInfo[headers.ETag]
-	//if lastModified <= 0 && stringutils.IsBlank(eTag) {
-	//	return true, nil
-	//}
-	//
-	//if lastModified > 0 {
-	//	copied[headers.IfModifiedSince] = expireInfo[headers.LastModified]
-	//}
-	//if !stringutils.IsBlank(eTag) {
-	//	copied[headers.IfNoneMatch] = eTag
-	//}
-	return client.IsExpired(request)
+	return client.IsExpired(request, info)
 }
 
 func GetLastModifiedMillis(request *Request) (int64, error) {

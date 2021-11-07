@@ -29,7 +29,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/go-http-utils/headers"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -97,8 +96,8 @@ type httpSourceClient struct {
 	httpClient *http.Client
 }
 
-// NewHTTPSourceClient returns a new HTTPSourceClientOption.
-func newHTTPSourceClient(opts ...HTTPSourceClientOption) source.ResourceClient {
+// newHTTPSourceClient returns a new HTTPSourceClientOption.
+func newHTTPSourceClient(opts ...HTTPSourceClientOption) *httpSourceClient {
 	client := &httpSourceClient{
 		httpClient: _defaultHTTPClient,
 	}
@@ -122,14 +121,17 @@ func (client *httpSourceClient) GetContentLength(request *source.Request) (int64
 		return types.UnKnownSourceFileLen, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		//similar to proposing another error type to indicate that this error can interact with the URL, but the status code does not meet expectations
-		return types.UnKnownSourceFileLen, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
+	err = source.CheckRespCode(resp.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
+	if err != nil {
+		return types.UnKnownSourceFileLen, err
 	}
 	return resp.ContentLength, nil
 }
 
 func (client *httpSourceClient) IsSupportRange(request *source.Request) (bool, error) {
+	if request.Header.Get(headers.Range) == "" {
+		request.Header.Set(headers.Range, "bytes=0-0")
+	}
 	resp, err := client.doRequest(http.MethodGet, request)
 	if err != nil {
 		return false, err
@@ -138,14 +140,25 @@ func (client *httpSourceClient) IsSupportRange(request *source.Request) (bool, e
 	return resp.StatusCode == http.StatusPartialContent, nil
 }
 
-func (client *httpSourceClient) IsExpired(request *source.Request) (bool, error) {
+func (client *httpSourceClient) IsExpired(request *source.Request, info *source.ExpireInfo) (bool, error) {
+	if info != nil {
+		if request.Header == nil {
+			request.Header = source.Header{}
+		}
+		if info.LastModified != "" {
+			request.Header.Set(headers.IfModifiedSince, info.LastModified)
+		}
+		if info.ETag != "" {
+			request.Header.Set(headers.IfNoneMatch, info.ETag)
+		}
+	}
 	resp, err := client.doRequest(http.MethodGet, request)
-	// send request
 	if err != nil {
 		return false, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode != http.StatusNotModified, nil
+	return !(resp.StatusCode == http.StatusNotModified || (resp.Header.Get(headers.ETag) == info.ETag || resp.Header.Get(headers.LastModified) == info.
+		LastModified)), nil
 }
 
 func (client *httpSourceClient) Download(request *source.Request) (io.ReadCloser, error) {
@@ -153,11 +166,12 @@ func (client *httpSourceClient) Download(request *source.Request) (io.ReadCloser
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		return resp.Body, nil
+	err = source.CheckRespCode(resp.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
 	}
-	defer resp.Body.Close()
-	return nil, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
+	return resp.Body, nil
 }
 
 func (client *httpSourceClient) DownloadWithExpireInfo(request *source.Request) (io.ReadCloser, *source.ExpireInfo, error) {
@@ -165,14 +179,15 @@ func (client *httpSourceClient) DownloadWithExpireInfo(request *source.Request) 
 	if err != nil {
 		return nil, nil, err
 	}
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		return resp.Body, &source.ExpireInfo{
-			LastModified: resp.Header.Get(headers.LastModified),
-			ETag:         resp.Header.Get(headers.ETag),
-		}, nil
+	err = source.CheckRespCode(resp.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
+	if err != nil {
+		resp.Body.Close()
+		return nil, nil, err
 	}
-	defer resp.Body.Close()
-	return nil, nil, errors.Errorf("got unexpect status code %d and status %s", resp.StatusCode, resp.Status)
+	return resp.Body, &source.ExpireInfo{
+		LastModified: resp.Header.Get(headers.LastModified),
+		ETag:         resp.Header.Get(headers.ETag),
+	}, nil
 }
 
 func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (int64, error) {
@@ -181,16 +196,17 @@ func (client *httpSourceClient) GetLastModifiedMillis(request *source.Request) (
 		return -1, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		return timeutils.UnixMillis(resp.Header.Get(headers.LastModified)), nil
+	err = source.CheckRespCode(resp.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
+	if err != nil {
+		return -1, err
 	}
-	return -1, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	return timeutils.UnixMillis(resp.Header.Get(headers.LastModified)), nil
 }
 
 func (client *httpSourceClient) doRequest(method string, request *source.Request) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(request.Context(), method, request.URL.String(), nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "new request")
+		return nil, err
 	}
 	for key, values := range request.Header {
 		for i := range values {
@@ -199,7 +215,7 @@ func (client *httpSourceClient) doRequest(method string, request *source.Request
 	}
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "request source")
+		return nil, err
 	}
 	return resp, nil
 }
