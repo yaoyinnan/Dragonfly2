@@ -23,7 +23,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
@@ -98,11 +97,13 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	registerTask := types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta)
 	// register task
-	pieceChan, err := css.cdnService.RegisterTask(ctx, registerTask)
-	err = dferrors.Newf(dfcodes.CdnTaskRegistryFail, "failed to register seed task(%s): %v", registerTask.ID, err)
-	span.RecordError(err)
+	pieceChan, err := css.cdnService.RegisterTask(ctx, types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
+	if err != nil {
+		err = dferrors.Newf(dfcodes.CdnTaskRegistryFail, "failed to register seed task(%s): %v", req.TaskId, err)
+		span.RecordError(err)
+		return err
+	}
 	peerID := cdnutil.GenCDNPeerID(req.TaskId)
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
@@ -119,9 +120,9 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			Done: false,
 		}
 	}
-	task, ok := css.cdnService.Get(req.TaskId)
+	task, ok := css.cdnService.GetTask(req.TaskId)
 	if !ok {
-		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
+		err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return err
 	}

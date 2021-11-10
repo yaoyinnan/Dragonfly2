@@ -52,7 +52,7 @@ func NewManager(cfg *config.Config) (supervisor.SeedTaskManager, error) {
 	return taskMgr, nil
 }
 
-func (tm *Manager) Add(registerTask *types.SeedTask) error {
+func (tm *Manager) AddOrUpdate(registerTask *types.SeedTask) error {
 	// add a new task or update a exist task
 	if err := tm.addOrUpdateTask(registerTask); err != nil {
 		return err

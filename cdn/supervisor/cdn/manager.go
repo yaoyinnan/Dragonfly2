@@ -50,20 +50,6 @@ var _ supervisor.CDNManager = (*Manager)(nil)
 
 var tracer = otel.Tracer("cdn-server")
 
-var (
-	errTaskNotFound = errors.New("task not found")
-	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
-	errResourcesLacked = errors.New("resources lacked")
-)
-
-func IsResourcesLacked(err error) bool {
-	return errors.Is(err, errResourcesLacked)
-}
-
-func IsTaskNotFound(err error) bool {
-	return errors.Is(err, errTaskNotFound)
-}
-
 // Manager is an implementation of the interface of CDNMgr.
 type Manager struct {
 	cfg             *config.Config

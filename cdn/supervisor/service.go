@@ -24,10 +24,27 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	errTaskNotFound = errors.New("task not found")
+	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
+	errResourcesLacked = errors.New("resources lacked")
+)
+
+func IsResourcesLacked(err error) bool {
+	return errors.Is(err, errResourcesLacked)
+}
+
+func IsTaskNotFound(err error) bool {
+	return errors.Is(err, errTaskNotFound)
+}
+
 type CDNService interface {
+	// RegisterTask
 	RegisterTask(ctx context.Context, registerTask *types.SeedTask) (<-chan *types.SeedPiece, error)
 	// GetPieces
-	GetPieces(context.Context, string) (pieces []*types.SeedPiece, err error)
+	GetPieces(taskID string) (pieces []*types.SeedPiece, err error)
+
+	GetTask(taskID string) (*types.SeedTask, bool)
 }
 
 type cdnService struct {
@@ -36,22 +53,29 @@ type cdnService struct {
 	progressMgr SeedProgressManager
 }
 
+func NewCDNService(taskManager SeedTaskManager, cdnManager CDNManager, progressManager SeedProgressManager) (CDNService, error) {
+	return &cdnService{
+		taskMgr:     taskManager,
+		cdnMgr:      cdnManager,
+		progressMgr: progressManager,
+	}, nil
+}
+
 func (service *cdnService) RegisterTask(ctx context.Context, registerTask *types.SeedTask) (<-chan *types.SeedPiece, error) {
-	if err := service.taskMgr.Add(registerTask); err != nil {
+	if err := service.taskMgr.AddOrUpdate(registerTask); err != nil {
 		return nil, err
 	}
 	if err := service.triggerCdnSyncAction(ctx, registerTask.ID); err != nil {
 		return nil, err
 	}
-	// todo
-	pieceChan, err := service.progressMgr.WatchSeedProgress(ctx, registerTask)
+	pieceChan, err := service.progressMgr.WatchSeedProgress(ctx, registerTask.ID)
 	if err != nil {
 		return nil, err
 	}
 	return pieceChan, nil
 }
 
-// triggerCdnSyncAction
+// triggerCdnSyncAction trigger cdn sync action
 func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID string) error {
 	task, ok := service.taskMgr.Get(taskID)
 	if !ok {
@@ -81,14 +105,9 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		task.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", task.CdnStatus)
 		return nil
 	}
-	if task.IsWait() {
-		service.progressMgr.InitSeedProgress(ctx, task.ID)
-		task.Log().Infof("successfully init seed progress for task")
-	}
 	task.CdnStatus = types.TaskInfoCdnStatusRunning
 	// triggerCDN goroutine
 	go func() {
-
 		updateTaskInfo, err := service.cdnMgr.TriggerCDN(ctx, task.Clone())
 		if err != nil {
 			task.Log().Errorf("trigger cdn get error: %v", err)
@@ -108,21 +127,17 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 	return nil
 }
 
-func (service *cdnService) GetPieces(ctx context.Context, taskID string) (pieces []*types.SeedPiece, err error) {
+func (service *cdnService) GetPieces(taskID string) (pieces []*types.SeedPiece, err error) {
 	if task, ok := service.taskMgr.Get(taskID); !ok {
 		return nil, errors.New("")
 	}
-	if pieces, ok := service.progressMgr.GetPieces(ctx, taskID); !ok {
+	if pieces, ok := service.progressMgr.GetPieces(taskID); !ok {
 		return nil, errors.New("")
 	}
 }
 
-func NewCDNService(taskManager SeedTaskManager, cdnManager CDNManager, progressManager SeedProgressManager) (CDNService, error) {
-	return &cdnService{
-		taskMgr:     taskManager,
-		cdnMgr:      cdnManager,
-		progressMgr: progressManager,
-	}, nil
+func (service *cdnService) GetTask(taskID string) (*types.SeedTask, bool) {
+	return service.taskMgr.Get(taskID)
 }
 
 // trigger CDN

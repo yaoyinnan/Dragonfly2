@@ -26,8 +26,8 @@ import (
 // A seedTask corresponds to three files on the disk, which are identified by taskId, the data file meta file piece file
 type SeedTaskManager interface {
 
-	// Add a task corresponding to a downloaded file.
-	Add(registerTask *types.SeedTask) error
+	// AddOrUpdate add or update a task corresponding to a downloaded file.
+	AddOrUpdate(registerTask *types.SeedTask) error
 
 	// Get the task Info with specified taskID.
 	Get(taskID string) (*types.SeedTask, bool)

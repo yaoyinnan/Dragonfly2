@@ -245,7 +245,7 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 	if freeSpace > 100*unit.GB && freeSpace.ToNumber() > fileLength {
 		return true, nil
 	}
-
+	// TODO Optimize this code by iterating through the task list
 	remainder := atomic.NewInt64(0)
 	r := &storedriver.Raw{
 		WalkFn: func(filePath string, info os.FileInfo, err error) error {
@@ -269,7 +269,7 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 	}
 	s.diskDriver.Walk(r)
 
-	enoughSpace := freeSpace.ToNumber()-remainder.Load() > fileLength
+	enoughSpace := freeSpace.ToNumber()-remainder.Load() > (fileLength + int64(5*unit.GB))
 	if !enoughSpace {
 		s.cleaner.GC("disk", true)
 		remainder.Store(0)
@@ -278,7 +278,7 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		enoughSpace = freeSpace.ToNumber()-remainder.Load() > fileLength
+		enoughSpace = freeSpace.ToNumber()-remainder.Load() > (fileLength + int64(5*unit.GB))
 	}
 	if !enoughSpace {
 		return false, nil

@@ -33,7 +33,7 @@ type CDNManager interface {
 
 	// Delete the cdn meta with specified taskID.
 	// The file on the disk will be deleted when the force is true.
-	Delete(string) error
+	Delete(taskID string) error
 
 	// TryFreeSpace checks if the free space of the storage is larger than the fileLength.
 	TryFreeSpace(fileLength int64) (bool, error)
