@@ -20,7 +20,11 @@ import (
 	"context"
 	"fmt"
 
-	"d7y.io/dragonfly/v2/cdn/cdnutil"
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/types"
@@ -35,10 +39,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
-	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
 )
 
 var tracer = otel.Tracer("cdn-server")
@@ -104,7 +104,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	peerID := cdnutil.GenCDNPeerID(req.TaskId)
+	peerID := idgen.CDNPeerID(css.cfg.AdvertiseIP)
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
 			PeerId:   peerID,
@@ -161,7 +161,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	task, ok := css.cdnService.GetTask(ctx, req.TaskId)
+	task, ok := css.cdnService.GetTask(req.TaskId)
 	if !ok {
 		err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s) from cdn: %v", req.TaskId, err)
 		span.RecordError(err)
@@ -172,7 +172,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	pieces, ok := css.cdnService.GetPieces(ctx, req.TaskId)
+	pieces, ok := css.cdnService.GetPieces(req.TaskId)
 	if !ok {
 		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s) from cdn: %v", task.ID, err)
 		span.RecordError(err)
@@ -196,7 +196,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 	}
 	pp := &base.PiecePacket{
 		TaskId:        req.TaskId,
-		DstPid:        fmt.Sprintf("%s-%s_%s", iputils.HostName, req.TaskId, "CDN"),
+		DstPid:        req.DstPid,
 		DstAddr:       fmt.Sprintf("%s:%d", css.cfg.AdvertiseIP, css.cfg.DownloadPort),
 		PieceInfos:    pieceInfos,
 		TotalPiece:    task.TotalPieceCount,

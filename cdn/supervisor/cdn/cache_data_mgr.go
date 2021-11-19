@@ -20,6 +20,8 @@ import (
 	"io"
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
@@ -28,7 +30,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
-	"github.com/pkg/errors"
 )
 
 // metadataManager manages the meta file and piece meta file of each TaskID.

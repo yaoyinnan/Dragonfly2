@@ -24,12 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"github.com/go-http-utils/headers"
 	"github.com/jarcoal/httpmock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/suite"
+
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
 
 func TestHTTPSourceClientTestSuite(t *testing.T) {

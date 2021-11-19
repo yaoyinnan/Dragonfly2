@@ -19,6 +19,10 @@ package job
 import (
 	"context"
 
+	"github.com/go-playground/validator/v10"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	internaljob "d7y.io/dragonfly/v2/internal/job"
@@ -26,8 +30,9 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	"d7y.io/dragonfly/v2/scheduler/config"
 	"d7y.io/dragonfly/v2/scheduler/core"
-	"github.com/go-playground/validator/v10"
 )
+
+var tracer = otel.Tracer("worker")
 
 type Job interface {
 	Serve() error
@@ -64,7 +69,7 @@ func New(ctx context.Context, cfg *config.JobConfig, clusterID uint, hostname st
 		logger.Errorf("create scheduler job queue error: %v", err)
 		return nil, err
 	}
-	logger.Infof("create global job queue: %v", schedulerJob)
+	logger.Infof("create scheduler job queue: %v", schedulerJob)
 
 	localQueue, err := internaljob.GetSchedulerQueue(clusterID, hostname)
 	if err != nil {
@@ -125,7 +130,12 @@ func (t *job) Stop() {
 	t.localJob.Worker.Quit()
 }
 
-func (t *job) preheat(req string) error {
+func (t *job) preheat(ctx context.Context, req string) error {
+	// machinery can't passing context to worker, refer https://github.com/RichardKnop/machinery/issues/175
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, config.SpanPreheat, trace.WithSpanKind(trace.SpanKindConsumer))
+	defer span.End()
+
 	request := &internaljob.PreheatRequest{}
 	if err := internaljob.UnmarshalRequest(req, request); err != nil {
 		logger.Errorf("unmarshal request err: %v, request body: %s", err, req)
@@ -158,7 +168,7 @@ func (t *job) preheat(req string) error {
 	// Trigger CDN download seeds
 	plogger := logger.WithTaskIDAndURL(taskID, request.URL)
 	plogger.Info("ready to preheat")
-	stream, err := t.service.CDN.GetClient().ObtainSeeds(t.ctx, &cdnsystem.SeedRequest{
+	stream, err := t.service.CDN.GetClient().ObtainSeeds(ctx, &cdnsystem.SeedRequest{
 		TaskId:  taskID,
 		Url:     request.URL,
 		UrlMeta: meta,

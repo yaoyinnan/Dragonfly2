@@ -19,8 +19,11 @@ package handlers
 import (
 	"net/http"
 
-	"d7y.io/dragonfly/v2/manager/types"
 	"github.com/gin-gonic/gin"
+
+	// nolint
+	_ "d7y.io/dragonfly/v2/manager/model"
+	"d7y.io/dragonfly/v2/manager/types"
 )
 
 // @Summary Create SecurityGroup
@@ -41,9 +44,9 @@ func (h *Handlers) CreateSecurityGroup(ctx *gin.Context) {
 		return
 	}
 
-	securityGroup, err := h.service.CreateSecurityGroup(json)
+	securityGroup, err := h.service.CreateSecurityGroup(ctx.Request.Context(), json)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
@@ -68,8 +71,8 @@ func (h *Handlers) DestroySecurityGroup(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.DestroySecurityGroup(params.ID); err != nil {
-		ctx.Error(err)
+	if err := h.service.DestroySecurityGroup(ctx.Request.Context(), params.ID); err != nil {
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
@@ -91,19 +94,19 @@ func (h *Handlers) DestroySecurityGroup(ctx *gin.Context) {
 func (h *Handlers) UpdateSecurityGroup(ctx *gin.Context) {
 	var params types.SecurityGroupParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
 		return
 	}
 
 	var json types.UpdateSecurityGroupRequest
 	if err := ctx.ShouldBindJSON(&json); err != nil {
-		ctx.Error(err)
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
 		return
 	}
 
-	securityGroup, err := h.service.UpdateSecurityGroup(params.ID, json)
+	securityGroup, err := h.service.UpdateSecurityGroup(ctx.Request.Context(), params.ID, json)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
@@ -128,9 +131,9 @@ func (h *Handlers) GetSecurityGroup(ctx *gin.Context) {
 		return
 	}
 
-	securityGroup, err := h.service.GetSecurityGroup(params.ID)
+	securityGroup, err := h.service.GetSecurityGroup(ctx.Request.Context(), params.ID)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
@@ -157,19 +160,13 @@ func (h *Handlers) GetSecurityGroups(ctx *gin.Context) {
 	}
 
 	h.setPaginationDefault(&query.Page, &query.PerPage)
-	securityGroups, err := h.service.GetSecurityGroups(query)
+	securityGroups, count, err := h.service.GetSecurityGroups(ctx.Request.Context(), query)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
-	totalCount, err := h.service.SecurityGroupTotalCount(query)
-	if err != nil {
-		ctx.Error(err)
-		return
-	}
-
-	h.setPaginationLinkHeader(ctx, query.Page, query.PerPage, int(totalCount))
+	h.setPaginationLinkHeader(ctx, query.Page, query.PerPage, int(count))
 	ctx.JSON(http.StatusOK, securityGroups)
 }
 
@@ -192,9 +189,9 @@ func (h *Handlers) AddSchedulerClusterToSecurityGroup(ctx *gin.Context) {
 		return
 	}
 
-	err := h.service.AddSchedulerClusterToSecurityGroup(params.ID, params.SchedulerClusterID)
+	err := h.service.AddSchedulerClusterToSecurityGroup(ctx.Request.Context(), params.ID, params.SchedulerClusterID)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 
@@ -220,9 +217,65 @@ func (h *Handlers) AddCDNClusterToSecurityGroup(ctx *gin.Context) {
 		return
 	}
 
-	err := h.service.AddCDNClusterToSecurityGroup(params.ID, params.CDNClusterID)
+	err := h.service.AddCDNClusterToSecurityGroup(ctx.Request.Context(), params.ID, params.CDNClusterID)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(err) // nolint: errcheck
+		return
+	}
+
+	ctx.Status(http.StatusOK)
+}
+
+// @Summary Add SecurityRule to SecurityGroup
+// @Description Add SecurityRule to SecurityGroup
+// @Tags SecurityGroup
+// @Accept json
+// @Produce json
+// @Param id path string true "id"
+// @Param security_rule_id path string true "security rule id"
+// @Success 200
+// @Failure 400
+// @Failure 404
+// @Failure 500
+// @Router /security-groups/{id}/security-rules/{security_rule_id} [put]
+func (h *Handlers) AddSecurityRuleToSecurityGroup(ctx *gin.Context) {
+	var params types.AddSecurityRuleToSecurityGroupParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
+		return
+	}
+
+	err := h.service.AddSecurityRuleToSecurityGroup(ctx.Request.Context(), params.ID, params.SecurityRuleID)
+	if err != nil {
+		ctx.Error(err) // nolint: errcheck
+		return
+	}
+
+	ctx.Status(http.StatusOK)
+}
+
+// @Summary Destroy SecurityRule to SecurityGroup
+// @Description Destroy SecurityRule to SecurityGroup
+// @Tags SecurityGroup
+// @Accept json
+// @Produce json
+// @Param id path string true "id"
+// @Param security_rule_id path string true "security rule id"
+// @Success 200
+// @Failure 400
+// @Failure 404
+// @Failure 500
+// @Router /security-groups/{id}/security-rules/{security_rule_id} [delete]
+func (h *Handlers) DestroySecurityRuleToSecurityGroup(ctx *gin.Context) {
+	var params types.AddSecurityRuleToSecurityGroupParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
+		return
+	}
+
+	err := h.service.DestroySecurityRuleToSecurityGroup(ctx.Request.Context(), params.ID, params.SecurityRuleID)
+	if err != nil {
+		ctx.Error(err) // nolint: errcheck
 		return
 	}
 

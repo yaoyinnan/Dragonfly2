@@ -21,9 +21,14 @@ import (
 	"fmt"
 	"io"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	schedulerserver "d7y.io/dragonfly/v2/pkg/rpc/scheduler/server"
@@ -32,9 +37,6 @@ import (
 	"d7y.io/dragonfly/v2/scheduler/config"
 	"d7y.io/dragonfly/v2/scheduler/core"
 	"d7y.io/dragonfly/v2/scheduler/supervisor"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
 )
 
 var tracer = otel.Tracer("scheduler-server")
@@ -70,7 +72,8 @@ func (s *server) RegisterPeerTask(ctx context.Context, request *scheduler.PeerTa
 		span.RecordError(err)
 		return
 	}
-	taskID := s.service.GenerateTaskID(request.Url, request.UrlMeta, request.PeerId)
+
+	taskID := idgen.TaskID(request.Url, request.UrlMeta)
 	span.SetAttributes(config.AttributeTaskID.String(taskID))
 	task := s.service.GetOrCreateTask(ctx, supervisor.NewTask(taskID, request.Url, request.UrlMeta))
 	if task.IsFail() {

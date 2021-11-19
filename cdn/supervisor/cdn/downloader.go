@@ -21,11 +21,12 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
-	"github.com/pkg/errors"
 )
 
 func (cm *Manager) download(ctx context.Context, task *types.SeedTask, breakPoint int64) (io.ReadCloser, error) {

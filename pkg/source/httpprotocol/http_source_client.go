@@ -25,10 +25,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-http-utils/headers"
+
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
-	"github.com/go-http-utils/headers"
 )
 
 const (

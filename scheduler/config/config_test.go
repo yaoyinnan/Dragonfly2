@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	dc "d7y.io/dragonfly/v2/internal/dynconfig"
 	"github.com/mitchellh/mapstructure"
-	"github.com/stretchr/testify/assert"
 	testifyassert "github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
+
+	dc "d7y.io/dragonfly/v2/internal/dynconfig"
 )
 
 func TestSchedulerConfig_Load(t *testing.T) {
@@ -39,10 +39,8 @@ func TestSchedulerConfig_Load(t *testing.T) {
 			CDNDirPath: "tmp",
 		},
 		Scheduler: &SchedulerConfig{
-			ABTest:     true,
-			AEvaluator: "a-evaluator",
-			BEvaluator: "b-evaluator",
-			WorkerNum:  8,
+			Algorithm: "default",
+			WorkerNum: 8,
 		},
 		Server: &ServerConfig{
 			IP:   "127.0.0.1",
@@ -72,7 +70,7 @@ func TestSchedulerConfig_Load(t *testing.T) {
 				BackendDB: 2,
 			},
 		},
-		Metrics: &RestConfig{
+		Metrics: &MetricsConfig{
 			Addr: ":8000",
 		},
 		DisableCDN: true,
@@ -81,8 +79,13 @@ func TestSchedulerConfig_Load(t *testing.T) {
 	schedulerConfigYAML := &Config{}
 	contentYAML, _ := ioutil.ReadFile("./testdata/scheduler.yaml")
 	var dataYAML map[string]interface{}
-	yaml.Unmarshal(contentYAML, &dataYAML)
-	mapstructure.Decode(dataYAML, &schedulerConfigYAML)
+	if err := yaml.Unmarshal(contentYAML, &dataYAML); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mapstructure.Decode(dataYAML, &schedulerConfigYAML); err != nil {
+		t.Fatal(err)
+	}
 	assert.True(reflect.DeepEqual(config, schedulerConfigYAML))
 }
 
@@ -105,7 +108,7 @@ func TestConvert(t *testing.T) {
 				},
 			},
 			expect: func(t *testing.T, cfg *Config, err error) {
-				assert := assert.New(t)
+				assert := testifyassert.New(t)
 				assert.Equal("127.0.0.1", cfg.Job.Redis.Host)
 			},
 		},
@@ -122,7 +125,7 @@ func TestConvert(t *testing.T) {
 				},
 			},
 			expect: func(t *testing.T, cfg *Config, err error) {
-				assert := assert.New(t)
+				assert := testifyassert.New(t)
 				assert.Equal("111.111.11.1", cfg.Job.Redis.Host)
 			},
 		},
@@ -139,7 +142,7 @@ func TestConvert(t *testing.T) {
 				},
 			},
 			expect: func(t *testing.T, cfg *Config, err error) {
-				assert := assert.New(t)
+				assert := testifyassert.New(t)
 				assert.Equal("111.111.11.1", cfg.Job.Redis.Host)
 			},
 		},
@@ -156,7 +159,7 @@ func TestConvert(t *testing.T) {
 				},
 			},
 			expect: func(t *testing.T, cfg *Config, err error) {
-				assert := assert.New(t)
+				assert := testifyassert.New(t)
 				assert.Equal("", cfg.Job.Redis.Host)
 			},
 		},
@@ -173,7 +176,7 @@ func TestConvert(t *testing.T) {
 				},
 			},
 			expect: func(t *testing.T, cfg *Config, err error) {
-				assert := assert.New(t)
+				assert := testifyassert.New(t)
 				assert.Equal("localhost", cfg.Job.Redis.Host)
 			},
 		},

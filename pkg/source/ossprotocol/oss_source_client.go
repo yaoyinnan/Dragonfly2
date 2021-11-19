@@ -17,19 +17,21 @@
 package ossprotocol
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 
-	"d7y.io/dragonfly/v2/cdn/types"
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/util/stringutils"
-	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-http-utils/headers"
 	"github.com/pkg/errors"
+
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
+	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 
 const ossClient = "oss"

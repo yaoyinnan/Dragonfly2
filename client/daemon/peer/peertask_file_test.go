@@ -19,7 +19,6 @@ package peer
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -27,18 +26,18 @@ import (
 	"testing"
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/cdnutil"
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
-
 	"github.com/golang/mock/gomock"
 	testifyassert "github.com/stretchr/testify/assert"
 
+	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/client/clientutil"
 	"d7y.io/dragonfly/v2/client/config"
 	"d7y.io/dragonfly/v2/client/daemon/test"
+	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	"d7y.io/dragonfly/v2/pkg/source"
 	sourceMock "d7y.io/dragonfly/v2/pkg/source/mock"
+	rangers "d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
 
 func TestFilePeerTask_BackSource_WithContentLength(t *testing.T) {

@@ -26,11 +26,12 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/statutils"
-	"github.com/stretchr/testify/suite"
 )
 
 func TestLocalDriverTestSuite(t *testing.T) {

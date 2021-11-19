@@ -21,10 +21,11 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 	dc "d7y.io/dragonfly/v2/internal/dynconfig"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
-	"github.com/pkg/errors"
 )
 
 type Config struct {
@@ -35,16 +36,14 @@ type Config struct {
 	Manager      *ManagerConfig   `yaml:"manager" mapstructure:"manager"`
 	Host         *HostConfig      `yaml:"host" mapstructure:"host"`
 	Job          *JobConfig       `yaml:"job" mapstructure:"job"`
-	Metrics      *RestConfig      `yaml:"metrics" mapstructure:"metrics"`
+	Metrics      *MetricsConfig   `yaml:"metrics" mapstructure:"metrics"`
 	DisableCDN   bool             `yaml:"disableCDN" mapstructure:"disableCDN"`
 }
 
 func New() *Config {
 	return &Config{
 		Scheduler: &SchedulerConfig{
-			ABTest:               false,
-			AEvaluator:           "",
-			BEvaluator:           "",
+			Algorithm:            "default",
 			WorkerNum:            runtime.GOMAXPROCS(0),
 			BackSourceCount:      3,
 			AccessWindow:         3 * time.Minute,
@@ -81,8 +80,6 @@ func New() *Config {
 						SecurityGroup: "",
 						Location:      "",
 						IDC:           "",
-						NetTopology:   "",
-						LoadLimit:     100,
 					},
 				},
 			},
@@ -180,9 +177,7 @@ type DynConfig struct {
 }
 
 type SchedulerConfig struct {
-	ABTest          bool   `yaml:"abtest" mapstructure:"abtest"`
-	AEvaluator      string `yaml:"aevaluator" mapstructure:"aevaluator"`
-	BEvaluator      string `yaml:"bevaluator" mapstructure:"bevaluator"`
+	Algorithm       string `yaml:"algorithm" mapstructure:"algorithm"`
 	WorkerNum       int    `yaml:"workerNum" mapstructure:"workerNum"`
 	BackSourceCount int32  `yaml:"backSourceCount" mapstructure:"backSourceCount"`
 	// AccessWindow should less than CDN task expireTime
@@ -211,8 +206,9 @@ type GCConfig struct {
 	TaskTTI        time.Duration `yaml:"taskTTI" mapstructure:"taskTTI"`
 }
 
-type RestConfig struct {
-	Addr string `yaml:"addr" mapstructure:"addr"`
+type MetricsConfig struct {
+	Addr           string `yaml:"addr" mapstructure:"addr"`
+	EnablePeerHost bool   `yaml:"enablePeerHost" mapstructure:"enablePeerHost"`
 }
 
 type HostConfig struct {

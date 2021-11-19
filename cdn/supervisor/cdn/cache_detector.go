@@ -24,14 +24,15 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/trace"
+
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
-	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // cacheDetector detect task cache

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+//go:generate mockgen -destination ./mocks/cdn_mock.go -package mocks d7y.io/dragonfly/v2/scheduler/supervisor CDNDynmaicClient
 
 package supervisor
 
@@ -25,19 +26,19 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
-	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/client"
 	cdnclient "d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/client"
 	"d7y.io/dragonfly/v2/scheduler/config"
-	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -123,7 +124,7 @@ func (c *cdn) StartSeedTask(ctx context.Context, task *Task) (*Peer, error) {
 	return c.receivePiece(ctx, task, stream)
 }
 
-func (c *cdn) receivePiece(ctx context.Context, task *Task, stream *client.PieceSeedStream) (*Peer, error) {
+func (c *cdn) receivePiece(ctx context.Context, task *Task, stream *cdnclient.PieceSeedStream) (*Peer, error) {
 	span := trace.SpanFromContext(ctx)
 	var initialized bool
 	var cdnPeer *Peer
@@ -215,6 +216,7 @@ func (c *cdn) initCDNPeer(ctx context.Context, task *Task, ps *cdnsystem.PieceSe
 
 	peer.SetStatus(PeerStatusRunning)
 	c.peerManager.Add(peer)
+	peer.Task.Log().Debugf("cdn peer %s has been added", peer.ID)
 	return peer, nil
 }
 
@@ -307,8 +309,16 @@ func (dc *cdnDynmaicClient) OnNotify(data *config.DynconfigData) {
 func cdnsToHosts(cdns []*config.CDN) map[string]*Host {
 	hosts := map[string]*Host{}
 	for _, cdn := range cdns {
+		var options []HostOption
+		if config, ok := cdn.GetCDNClusterConfig(); ok {
+			options = []HostOption{
+				WithNetTopology(config.NetTopology),
+				WithTotalUploadLoad(int32(config.LoadLimit)),
+			}
+		}
+
 		id := idgen.CDN(cdn.HostName, cdn.Port)
-		hosts[id] = NewCDNHost(id, cdn.IP, cdn.HostName, cdn.Port, cdn.DownloadPort, cdn.SecurityGroup, cdn.Location, cdn.IDC, cdn.NetTopology, cdn.LoadLimit)
+		hosts[id] = NewCDNHost(id, cdn.IP, cdn.HostName, cdn.Port, cdn.DownloadPort, cdn.SecurityGroup, cdn.Location, cdn.IDC, options...)
 	}
 
 	return hosts

@@ -24,15 +24,16 @@ import (
 	"io"
 	"sync"
 
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
+
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
-	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 )
 
 type piece struct {

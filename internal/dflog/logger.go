@@ -27,6 +27,7 @@ var (
 	CoreLogger       *zap.SugaredLogger
 	GrpcLogger       *zap.SugaredLogger
 	GcLogger         *zap.SugaredLogger
+	JobLogger        *zap.SugaredLogger
 	KeepAliveLogger  *zap.SugaredLogger
 	StatPeerLogger   *zap.Logger
 	StatSeedLogger   *zap.Logger
@@ -46,6 +47,7 @@ func init() {
 		SetStatPeerLogger(log)
 		SetStatSeedLogger(log)
 		SetDownloadLogger(log)
+		SetJobLogger(sugar)
 	}
 }
 
@@ -76,6 +78,10 @@ func SetDownloadLogger(log *zap.Logger) {
 func SetGrpcLogger(log *zap.SugaredLogger) {
 	GrpcLogger = log
 	grpclog.SetLoggerV2(&zapGrpc{GrpcLogger})
+}
+
+func SetJobLogger(log *zap.SugaredLogger) {
+	JobLogger = log
 }
 
 type SugaredLoggerOnWith struct {
@@ -148,6 +154,10 @@ func Info(args ...interface{}) {
 
 func Warnf(template string, args ...interface{}) {
 	CoreLogger.Warnf(template, args...)
+}
+
+func Warn(args ...interface{}) {
+	CoreLogger.Warn(args...)
 }
 
 func Errorf(template string, args ...interface{}) {
