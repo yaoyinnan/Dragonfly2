@@ -141,7 +141,7 @@ func (m *clientManager) Register(scheme string, resourceClient ResourceClient, a
 	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
 		return errors.Errorf("client with scheme %s already exist, current client: %#v", scheme, client)
 	}
-	m.clients[strings.ToLower(scheme)] = &client{
+	m.clients[strings.ToLower(scheme)] = &clientWrapper{
 		adapter: adaptor,
 		hooks:   hooks,
 		rc:      resourceClient,
@@ -181,32 +181,32 @@ type Hook interface {
 	AfterResponse(response *Response) error
 }
 
-type client struct {
+type clientWrapper struct {
 	adapter requestAdapter
 	hooks   []Hook
 	rc      ResourceClient
 }
 
-func (c *client) GetContentLength(request *Request) (int64, error) {
+func (c *clientWrapper) GetContentLength(request *Request) (int64, error) {
 	return c.rc.GetContentLength(c.adapter(request))
 }
 
-func (c *client) IsSupportRange(request *Request) (bool, error) {
+func (c *clientWrapper) IsSupportRange(request *Request) (bool, error) {
 	return c.rc.IsSupportRange(c.adapter(request))
 }
 
-func (c *client) IsExpired(request *Request, info *ExpireInfo) (bool, error) {
+func (c *clientWrapper) IsExpired(request *Request, info *ExpireInfo) (bool, error) {
 	return c.rc.IsExpired(c.adapter(request), info)
 }
-func (c *client) Download(request *Request) (io.ReadCloser, error) {
+func (c *clientWrapper) Download(request *Request) (io.ReadCloser, error) {
 	return c.rc.Download(c.adapter(request))
 }
 
-func (c *client) DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error) {
+func (c *clientWrapper) DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error) {
 	return c.rc.DownloadWithExpireInfo(c.adapter(request))
 }
 
-func (c *client) GetLastModifiedMillis(request *Request) (int64, error) {
+func (c *clientWrapper) GetLastModifiedMillis(request *Request) (int64, error) {
 	return c.rc.GetLastModifiedMillis(c.adapter(request))
 }
 
