@@ -21,20 +21,23 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"github.com/pkg/errors"
 )
 
 var (
 	// ErrResourceNotReachable represents the url resource is a not reachable.
 	ErrResourceNotReachable = errors.New("resource is not reachable")
 
+	// ErrNoClientFound represents no source client to resolve url
 	ErrNoClientFound = errors.New("no source client found")
 )
 
@@ -75,7 +78,7 @@ func IsResourceNotReachableError(err error) bool {
 	return errors.Is(err, ErrResourceNotReachable)
 }
 
-func IsNoClientFound(err error) bool {
+func IsNoClientFoundError(err error) bool {
 	return errors.Is(err, ErrNoClientFound)
 }
 
@@ -87,10 +90,12 @@ type ResourceClient interface {
 	GetContentLength(request *Request) (int64, error)
 
 	// IsSupportRange checks if resource supports breakpoint continuation
+	// return false if response status is not StatusPartialContent
 	IsSupportRange(request *Request) (bool, error)
 
 	// IsExpired checks if a resource received or stored is the same.
-	// If it fails to get the result, it is considered that the source has not expired, return false and non-nil err to prevent the source from exploding
+	// return false and non-nil err to prevent the source from exploding if
+	// fails to get the result, it is considered that the source has not expired
 	IsExpired(request *Request, info *ExpireInfo) (bool, error)
 
 	// Download downloads from source
@@ -105,7 +110,7 @@ type ResourceClient interface {
 
 type ClientManager interface {
 	// Register a source client with scheme
-	Register(scheme string, resourceClient ResourceClient, adapter requestAdapter, hook ...Hook)
+	Register(scheme string, resourceClient ResourceClient, adapter requestAdapter, hook ...Hook) error
 
 	// UnRegister a source client from manager
 	UnRegister(scheme string)
@@ -130,17 +135,18 @@ func NewManager() ClientManager {
 	}
 }
 
-func (m *clientManager) Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) {
+func (m *clientManager) Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
-		logger.Infof("replace client %#v with %#v for scheme %s", client, resourceClient, scheme)
+		return errors.Errorf("client with scheme %s already exist, current client: %#v", scheme, client)
 	}
 	m.clients[strings.ToLower(scheme)] = &client{
 		adapter: adaptor,
 		hooks:   hooks,
 		rc:      resourceClient,
 	}
+	return nil
 }
 
 func (m *clientManager) UnRegister(scheme string) {
@@ -152,19 +158,19 @@ func (m *clientManager) UnRegister(scheme string) {
 	delete(m.clients, strings.ToLower(scheme))
 }
 
-func Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) {
-	_defaultManager.Register(scheme, resourceClient, adaptor, hooks...)
-}
-
-func UnRegister(scheme string) {
-	_defaultManager.UnRegister(scheme)
-}
-
 func (m *clientManager) GetClient(scheme string) (ResourceClient, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	client, ok := m.clients[strings.ToLower(scheme)]
 	return client, ok
+}
+
+func Register(scheme string, resourceClient ResourceClient, adaptor requestAdapter, hooks ...Hook) error {
+	return _defaultManager.Register(scheme, resourceClient, adaptor, hooks...)
+}
+
+func UnRegister(scheme string) {
+	_defaultManager.UnRegister(scheme)
 }
 
 type requestAdapter func(request *Request) *Request
@@ -273,6 +279,26 @@ func DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error
 		return nil, nil, ErrNoClientFound
 	}
 	return client.DownloadWithExpireInfo(request)
+}
+
+// getSourceClient get a source client from source manager with specified schema.
+func (m *clientManager) getSourceClient(rawURL string) (ResourceClient, error) {
+	logger.Debugf("current clients: %#v", m.clients)
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	client, ok := m.clients[strings.ToLower(parsedURL.Scheme)]
+	m.mu.RUnlock()
+	if !ok || client == nil {
+		client, err = m.loadSourcePlugin(strings.ToLower(parsedURL.Scheme))
+		if err == nil && client != nil {
+			return client, nil
+		}
+		return nil, errors.Errorf("can not find client for supporting url %s, clients:%v", rawURL, m.clients)
+	}
+	return client, nil
 }
 
 func (m *clientManager) loadSourcePlugin(scheme string) (ResourceClient, error) {

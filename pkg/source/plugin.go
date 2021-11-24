@@ -19,6 +19,7 @@ package source
 import (
 	"errors"
 
+	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/dfplugin"
 )
 
@@ -28,15 +29,24 @@ const (
 
 func LoadPlugin(scheme string) (ResourceClient, error) {
 	// TODO init option
+	logger.Debugf("try to load source plugin: %s", scheme)
 	client, meta, err := dfplugin.Load(dfplugin.PluginTypeResource, scheme, map[string]string{})
 	if err != nil {
+		logger.Errorf("load source plugin error: %s", err)
 		return nil, err
 	}
+
 	if meta[pluginMetadataScheme] != scheme {
-		return nil, errors.New("support scheme not match")
+		logger.Errorf("load source plugin error: support scheme not match")
+		return nil, errors.New("support schema not match")
 	}
-	if rc, ok := client.(ResourceClient); ok {
-		return rc, err
+
+	rc, ok := client.(ResourceClient)
+	if !ok {
+		logger.Errorf("invalid client, not a ResourceClient")
+		return nil, errors.New("invalid client, not a ResourceClient")
 	}
-	return nil, errors.New("invalid client, not a ResourceClient")
+
+	logger.Debugf("loaded source plugin %s", scheme)
+	return rc, nil
 }
