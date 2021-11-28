@@ -24,12 +24,12 @@ import (
 	"strings"
 	"time"
 
-	"d7y.io/dragonfly/v2/pkg/util/fileutils"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/pkg/unit"
+	"d7y.io/dragonfly/v2/pkg/util/fileutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 

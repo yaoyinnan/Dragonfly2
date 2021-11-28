@@ -22,50 +22,53 @@ import (
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 
-// addOrUpdateTask add a new task or update exist task
-func (tm *Manager) addOrUpdateTask(registerTask *types.SeedTask) error {
+// addOrUpdateTask adds a new task or update exist task
+func (tm *manager) addOrUpdateTask(registerTask *SeedTask) (update bool, err error) {
+	update = false
+	synclock.Lock(registerTask.ID, true)
 	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
 		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
+			synclock.UnLock(registerTask.ID, true)
 			// TODO 校验Header
-			return errors.Errorf("hit unreachable resource %s cache and interval less than %d", registerTask.TaskURL, tm.cfg.FailAccessInterval)
+			return update, errors.Errorf("hit unreachable resource %s cache and interval less than %d", registerTask.TaskURL, tm.cfg.FailAccessInterval)
 		}
 		tm.taskURLUnreachableStore.Delete(registerTask.ID)
 		logger.Debugf("delete taskID: %s from unreachable url list", registerTask.ID)
 	}
 	if actual, loaded := tm.taskStore.LoadOrStore(registerTask.ID, registerTask); loaded {
-		existTask := actual.(*types.SeedTask)
+		update = true
+		existTask := actual.(*SeedTask)
 		if checkSame(existTask, registerTask) {
-			return errors.Errorf("register task %v is conflict with exist task %v", registerTask, existTask)
+			synclock.UnLock(registerTask.ID, true)
+			return update, errors.Errorf("register task %v is conflict with exist task %v", registerTask, existTask)
 		}
 	}
 	// using the existing task if it already exists corresponding to taskID
-	synclock.Lock(registerTask.ID, true)
 	task, ok := tm.getTask(registerTask.ID)
 	if !ok {
 		synclock.UnLock(registerTask.ID, true)
-		return errTaskNotFound
+		return update, errTaskNotFound
 	}
-	if task.SourceFileLength != types.UnKnownSourceFileLen {
+	if task.SourceFileLength != UnKnownSourceFileLen {
 		synclock.UnLock(registerTask.ID, true)
-		return nil
+		return update, nil
 	}
 	synclock.UnLock(registerTask.ID, true)
 	synclock.Lock(registerTask.ID, false)
 	defer synclock.UnLock(registerTask.ID, false)
-	if task.SourceFileLength != types.UnKnownSourceFileLen {
-		return nil
+	if task.SourceFileLength != UnKnownSourceFileLen {
+		return update, nil
 	}
 	// get sourceContentLength with req.Header
 	contentLengthRequest, err := source.NewRequestWithHeader(registerTask.RawURL, registerTask.Header)
 	if err != nil {
-		return errors.Wrap(err, "create content length request")
+		return update, errors.Wrap(err, "create content length request")
 	}
 	// add range info
 	if stringutils.IsBlank(registerTask.Range) {
@@ -77,7 +80,7 @@ func (tm *Manager) addOrUpdateTask(registerTask *types.SeedTask) error {
 		if source.IsResourceNotReachableError(err) {
 			tm.taskURLUnreachableStore.Store(registerTask, time.Now())
 		}
-		return err
+		return update, err
 	}
 	// if not support file length header request ,return -1
 	task.SourceFileLength = sourceFileLength
@@ -93,11 +96,11 @@ func (tm *Manager) addOrUpdateTask(registerTask *types.SeedTask) error {
 		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
 		task.PieceSize = pieceSize
 	}
-	return nil
+	return update, nil
 }
 
-// updateTask update task
-func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) error {
+// updateTask updates task
+func (tm *manager) updateTask(taskID string, updateTaskInfo *SeedTask) error {
 	if updateTaskInfo == nil {
 		return errors.New("updateTaskInfo is nil")
 	}
@@ -111,12 +114,16 @@ func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) err
 		return errTaskNotFound
 	}
 
-	if task.IsSuccess() && !updateTaskInfo.IsSuccess() {
-		task.Log().Warnf("origin task status is success, but update task status is %s, return origin task", task.CdnStatus)
+	if !updateTaskInfo.IsSuccess() {
+		if task.IsSuccess() {
+			task.Log().Warnf("origin task status is success, but update task status is %s, return origin task", task.CdnStatus)
+			return nil
+		}
+		task.CdnStatus = updateTaskInfo.CdnStatus
 		return nil
 	}
 
-	// only update the task info when the new CDNStatus equals success
+	// only update the task info when the updateTaskInfo CDNStatus equals success
 	// and the origin CDNStatus not equals success.
 	if updateTaskInfo.CdnFileLength > 0 {
 		task.CdnFileLength = updateTaskInfo.CdnFileLength
@@ -136,17 +143,17 @@ func (tm *Manager) updateTask(taskID string, updateTaskInfo *types.SeedTask) err
 	return nil
 }
 
-// getTask get task from taskStore and convert it to *types.SeedTask type
-func (tm *Manager) getTask(taskID string) (*types.SeedTask, bool) {
+// getTask get task from taskStore and convert it to *SeedTask type
+func (tm *manager) getTask(taskID string) (*SeedTask, bool) {
 	task, ok := tm.taskStore.Load(taskID)
 	if !ok {
 		return nil, false
 	}
-	return task.(*types.SeedTask), true
+	return task.(*SeedTask), true
 }
 
 // getTaskAccessTime get access time of task and convert it to time.Time type
-func (tm *Manager) getTaskAccessTime(taskID string) (time.Time, bool) {
+func (tm *manager) getTaskAccessTime(taskID string) (time.Time, bool) {
 	access, ok := tm.accessTimeMap.Load(taskID)
 	if !ok {
 		return time.Time{}, false
@@ -155,7 +162,7 @@ func (tm *Manager) getTaskAccessTime(taskID string) (time.Time, bool) {
 }
 
 // getTaskUnreachableTime get unreachable time of task and convert it to time.Time type
-func (tm *Manager) getTaskUnreachableTime(taskID string) (time.Time, bool) {
+func (tm *manager) getTaskUnreachableTime(taskID string) (time.Time, bool) {
 	unreachableTime, ok := tm.taskURLUnreachableStore.Load(taskID)
 	if !ok {
 		return time.Time{}, false
@@ -163,8 +170,8 @@ func (tm *Manager) getTaskUnreachableTime(taskID string) (time.Time, bool) {
 	return unreachableTime.(time.Time), true
 }
 
-// checkSame check task1 is same with task2
-func checkSame(task1, task2 *types.SeedTask) bool {
+// checkSame check if task1 is same with task2
+func checkSame(task1, task2 *SeedTask) bool {
 	if task1 == task2 {
 		return true
 	}

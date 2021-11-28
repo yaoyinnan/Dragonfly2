@@ -23,7 +23,6 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/plugins"
-	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
@@ -39,8 +38,8 @@ import (
 
 func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 	type fields struct {
-		taskMgr supervisor.SeedTaskManager
-		cfg     *config.Config
+		taskManager task.Manager
+		cfg         *config.Config
 	}
 	type args struct {
 		ctx context.Context
@@ -58,8 +57,8 @@ func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			css := &server{
-				taskMgr: tt.fields.taskMgr,
-				cfg:     tt.fields.cfg,
+				taskManager: tt.fields.taskManager,
+				cfg:         tt.fields.cfg,
 			}
 			gotPiecePacket, err := css.GetPieceTasks(tt.args.ctx, tt.args.req)
 			if (err != nil) != tt.wantErr {
@@ -78,31 +77,31 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 	if err := plugins.Initialize(cfg.Plugins); err != nil {
 		t.Fatal(err, "Initialize plugins")
 	}
-	progressMgr, err := progress.NewManager()
+	progressManager, err := progress.NewManager()
 	if err != nil {
 		t.Fatal(err, "create progress manager")
 	}
 
 	// Initialize storage manager
-	storageMgr, ok := storage.Get(cfg.StorageMode)
+	storageManager, ok := storage.Get(cfg.StorageMode)
 	if !ok {
 		t.Fatal(err, "create storage")
 	}
 
 	// Initialize CDN manager
-	cdnMgr, err := cdn.NewManager(cfg, storageMgr, progressMgr)
+	cdnMa, err := cdn.NewManager(cfg, storageManager, progressManager)
 	if err != nil {
 		t.Fatal(err, "create cdn manager")
 	}
 
 	// Initialize task manager
-	taskMgr, err := task.NewManager(cfg, cdnMgr, progressMgr)
+	taskManager, err := task.NewManager(cfg, cdnManager, progressManager)
 	if err != nil {
 		t.Fatal(err, "create task manager")
 	}
 	type fields struct {
-		taskMgr supervisor.SeedTaskManager
-		cfg     *config.Config
+		taskManager task.Manager
+		cfg         *config.Config
 	}
 	type args struct {
 		ctx context.Context
@@ -119,8 +118,8 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 		{
 			name: "testObtain",
 			fields: fields{
-				taskMgr: taskMgr,
-				cfg:     cfg,
+				taskManager: taskManager,
+				cfg:         cfg,
 			},
 			args: args{
 				ctx: context.Background(),
@@ -144,8 +143,8 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 		for i := 0; i < tt.testCount; i++ {
 			t.Run(tt.name, func(t *testing.T) {
 				css := &server{
-					taskMgr: tt.fields.taskMgr,
-					cfg:     tt.fields.cfg,
+					taskManager: tt.fields.taskManager,
+					cfg:         tt.fields.cfg,
 				}
 				go func() {
 					for range tt.args.psc {

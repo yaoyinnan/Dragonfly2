@@ -52,6 +52,7 @@ const (
 	CdnError            base.Code = 6000
 	CdnTaskRegistryFail base.Code = 6001
 	CdnTaskDownloadFail base.Code = 6002
+	CdnResourceLack     base.Code = 6003
 	CdnTaskNotFound     base.Code = 6404
 
 	// manager response error 7000-7999

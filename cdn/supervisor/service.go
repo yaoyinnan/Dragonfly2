@@ -19,13 +19,15 @@ package supervisor
 import (
 	"context"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
+	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"github.com/pkg/errors"
 )
 
 var (
-	errTaskNotFound = errors.New("task not found")
 	// errResourcesLacked represents a lack of resources, for example, the disk does not have enough space.
 	errResourcesLacked = errors.New("resources lacked")
 )
@@ -34,41 +36,39 @@ func IsResourcesLacked(err error) bool {
 	return errors.Is(err, errResourcesLacked)
 }
 
-func IsTaskNotFound(err error) bool {
-	return errors.Is(err, errTaskNotFound)
-}
-
 type CDNService interface {
-	// RegisterTask
-	RegisterTask(ctx context.Context, registerTask *types.SeedTask) (<-chan *types.SeedPiece, error)
-	// GetPieces
+	// RegisterSeedTask registers seed task
+	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *types.SeedPiece, error)
+
+	// GetPieces returns pieces associated with taskID, which are sorted by pieceNum
 	GetPieces(taskID string) (pieces []*types.SeedPiece, err error)
 
-	GetTask(taskID string) (*types.SeedTask, bool)
+	// GetSeedTask returns seed task associated with taskID
+	GetSeedTask(taskID string) (seedTask *task.SeedTask, err error)
 }
 
 type cdnService struct {
-	taskMgr     SeedTaskManager
-	cdnMgr      CDNManager
-	progressMgr SeedProgressManager
+	taskManager     task.Manager
+	cdnManager      cdn.Manager
+	progressManager progress.Manager
 }
 
-func NewCDNService(taskManager SeedTaskManager, cdnManager CDNManager, progressManager SeedProgressManager) (CDNService, error) {
+func NewCDNService(taskManager task.Manager, cdnManager cdn.Manager, progressManager progress.Manager) (CDNService, error) {
 	return &cdnService{
-		taskMgr:     taskManager,
-		cdnMgr:      cdnManager,
-		progressMgr: progressManager,
+		taskManager:     taskManager,
+		cdnManager:      cdnManager,
+		progressManager: progressManager,
 	}, nil
 }
 
-func (service *cdnService) RegisterTask(ctx context.Context, registerTask *types.SeedTask) (<-chan *types.SeedPiece, error) {
-	if err := service.taskMgr.AddOrUpdate(registerTask); err != nil {
+func (service *cdnService) RegisterTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *types.SeedPiece, error) {
+	if err := service.taskManager.AddOrUpdate(registerTask); err != nil {
 		return nil, err
 	}
 	if err := service.triggerCdnSyncAction(ctx, registerTask.ID); err != nil {
 		return nil, err
 	}
-	pieceChan, err := service.progressMgr.WatchSeedProgress(ctx, registerTask.ID)
+	pieceChan, err := service.progressManager.WatchSeedProgress(ctx, registerTask.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,71 +77,71 @@ func (service *cdnService) RegisterTask(ctx context.Context, registerTask *types
 
 // triggerCdnSyncAction trigger cdn sync action
 func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID string) error {
-	task, ok := service.taskMgr.Get(taskID)
-	if !ok {
-		return errTaskNotFound
+	seedTask, err := service.taskManager.Get(taskID)
+	if err != nil {
+		return err
 	}
 	synclock.Lock(taskID, true)
-	if task.SourceFileLength > 0 {
-		ok, err := service.cdnMgr.TryFreeSpace(task.SourceFileLength)
+	if seedTask.SourceFileLength > 0 {
+		ok, err := service.cdnManager.TryFreeSpace(seedTask.SourceFileLength)
 		if err != nil {
-			task.Log().Errorf("failed to try free space: %v", err)
+			seedTask.Log().Errorf("failed to try free space: %v", err)
 		}
 		if !ok {
 			return errResourcesLacked
 		}
 	}
-	if !task.IsFrozen() {
-		task.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", task.CdnStatus)
-		synclock.UnLock(task.ID, true)
+	if !seedTask.IsFrozen() {
+		seedTask.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", seedTask.CdnStatus)
+		synclock.UnLock(seedTask.ID, true)
 		return nil
 	}
-	synclock.UnLock(task.ID, true)
+	synclock.UnLock(seedTask.ID, true)
 
-	synclock.Lock(task.ID, false)
-	defer synclock.UnLock(task.ID, false)
+	synclock.Lock(seedTask.ID, false)
+	defer synclock.UnLock(seedTask.ID, false)
 	// reconfirm
-	if !task.IsFrozen() {
-		task.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", task.CdnStatus)
+	if !seedTask.IsFrozen() {
+		seedTask.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", seedTask.CdnStatus)
 		return nil
 	}
-	task.CdnStatus = types.TaskInfoCdnStatusRunning
+	seedTask.CdnStatus = task.TaskInfoCdnStatusRunning
 	// triggerCDN goroutine
 	go func() {
-		updateTaskInfo, err := service.cdnMgr.TriggerCDN(ctx, task.Clone())
+		updateTaskInfo, err := service.cdnManager.TriggerCDN(ctx, seedTask.Clone())
 		if err != nil {
-			task.Log().Errorf("trigger cdn get error: %v", err)
+			seedTask.Log().Errorf("trigger cdn get error: %v", err)
 		}
-		err = service.taskMgr.Update(task.ID, updateTaskInfo)
+		err = service.taskManager.Update(seedTask.ID, updateTaskInfo)
 		if err != nil {
-			task.Log().Errorf("failed to update task: %v", err)
+			seedTask.Log().Errorf("failed to update task: %v", err)
 		}
 		go func() {
-			if err := service.progressMgr.PublishTask(ctx, task.ID, updateTaskInfo); err != nil {
-				task.Log().Errorf("failed to publish task: %v", err)
+			if err := service.progressManager.PublishTask(ctx, seedTask.ID, updateTaskInfo); err != nil {
+				seedTask.Log().Errorf("failed to publish task: %v", err)
 			}
 
 		}()
-		task.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
+		seedTask.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
 	}()
 	return nil
 }
 
 func (service *cdnService) GetPieces(taskID string) (pieces []*types.SeedPiece, err error) {
-	if task, ok := service.taskMgr.Get(taskID); !ok {
-		return nil, errors.New("")
+	if seedTask, err := service.taskManager.Get(taskID); err != nil {
+		return nil, err
 	}
-	if pieces, ok := service.progressMgr.GetPieces(taskID); !ok {
+	if pieces, ok := service.progressManager.GetPieces(taskID); !ok {
 		return nil, errors.New("")
 	}
 }
 
-func (service *cdnService) GetTask(taskID string) (*types.SeedTask, bool) {
-	return service.taskMgr.Get(taskID)
+func (service *cdnService) GetSeedTask(taskID string) (*task.SeedTask, error) {
+	return service.taskManager.Get(taskID)
 }
 
 // trigger CDN
-if err := c.cdnMgr.TriggerCDN(ctx, task); err != nil {
+if err := c.cdnManager.TriggerCDN(ctx, task); err != nil {
 return errors.Wrapf(err, "trigger cdn")
 }
 if task.IsResourcesLacked(err) {

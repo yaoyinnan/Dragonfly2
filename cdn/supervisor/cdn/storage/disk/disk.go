@@ -25,36 +25,32 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.uber.org/atomic"
-
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
-	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
-	"d7y.io/dragonfly/v2/cdn/types"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/fileutils"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.uber.org/atomic"
 )
 
-const StorageMode = storage.DiskStorageMode
+const _disk = "disk"
 
 var (
-	_ gc.Executor     = (*diskStorageMgr)(nil)
-	_ storage.Manager = (*diskStorageMgr)(nil)
+	_ gc.Executor     = (*diskStorageManager)(nil)
+	_ storage.Manager = (*diskStorageManager)(nil)
+	_ storage.Builder = (*diskStorageBuilder)(nil)
 )
 
-func init() {
-	if err := storage.Register(StorageMode, newStorageManager); err != nil {
-		logger.CoreLogger.Error(err)
-	}
-}
+type diskStorageBuilder struct{}
 
-func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
+func (b *diskStorageBuilder) Build(cfg storage.Config, taskManager task.Manager) (storage.Manager, error) {
+	// TODO apply default
 	driverNames := make([]string, len(cfg.DriverConfigs))
 	for k := range cfg.DriverConfigs {
 		driverNames = append(driverNames, k)
@@ -67,22 +63,32 @@ func newStorageManager(cfg *storage.Config) (storage.Manager, error) {
 		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", cfg)
 	}
 
-	storageMgr := &diskStorageMgr{
-		cfg:        cfg,
-		diskDriver: diskDriver,
+	storageManager := &diskStorageManager{
+		cfg:         &cfg,
+		diskDriver:  diskDriver,
+		taskManager: taskManager,
 	}
-	gc.Register("diskStorage", cfg.GCInitialDelay, cfg.GCInterval, storageMgr)
-	return storageMgr, nil
+	gc.Register("diskStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
+	return storageManager, nil
 }
 
-type diskStorageMgr struct {
-	cfg        *storage.Config
-	diskDriver storedriver.Driver
-	cleaner    *storage.Cleaner
-	taskMgr    supervisor.SeedTaskManager
+func (*diskStorageBuilder) Name() string {
+	return _disk
 }
 
-func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
+func init() {
+	// TODO add support OS
+	storage.Register(&diskStorageBuilder{})
+}
+
+type diskStorageManager struct {
+	cfg         *storage.Config
+	diskDriver  storedriver.Driver
+	cleaner     *storage.Cleaner
+	taskManager task.Manager
+}
+
+func (s *diskStorageManager) applyDefaults() *storage.GCConfig {
 	totalSpace, err := s.diskDriver.GetTotalSpace()
 	if err != nil {
 		logger.GcLogger.With("type", "disk").Errorf("get total space of disk: %v", err)
@@ -99,21 +105,21 @@ func (s *diskStorageMgr) getDefaultGcConfig() *storage.GCConfig {
 	}
 }
 
-func (s *diskStorageMgr) Initialize(taskMgr supervisor.SeedTaskManager) {
-	s.taskMgr = taskMgr
+func (s *diskStorageManager) Initialize(taskManager task.Manager) {
+	s.taskManager = taskManager
 	diskGcConfig := s.cfg.DriverConfigs[local.DiskDriverName].GCConfig
 	if diskGcConfig == nil {
-		diskGcConfig = s.getDefaultGcConfig()
+		diskGcConfig = s.applyDefaults()
 		logger.GcLogger.With("type", "disk").Warnf("disk gc config is nil, use default gcConfig: %v", diskGcConfig)
 	}
-	s.cleaner, _ = storage.NewStorageCleaner(diskGcConfig, s.diskDriver, s, taskMgr)
+	s.cleaner, _ = storage.NewStorageCleaner(diskGcConfig, s.diskDriver, s, taskManager)
 }
 
-func (s *diskStorageMgr) AppendPieceMetadata(taskID string, pieceRecord *storage.PieceMetaRecord) error {
+func (s *diskStorageManager) AppendPieceMetadata(taskID string, pieceRecord *storage.PieceMetaRecord) error {
 	return s.diskDriver.PutBytes(storage.GetAppendPieceMetadataRaw(taskID), []byte(pieceRecord.String()+"\n"))
 }
 
-func (s *diskStorageMgr) ReadPieceMetaRecords(taskID string) ([]*storage.PieceMetaRecord, error) {
+func (s *diskStorageManager) ReadPieceMetaRecords(taskID string) ([]*storage.PieceMetaRecord, error) {
 	readBytes, err := s.diskDriver.GetBytes(storage.GetPieceMetadataRaw(taskID))
 	if err != nil {
 		return nil, err
@@ -130,7 +136,7 @@ func (s *diskStorageMgr) ReadPieceMetaRecords(taskID string) ([]*storage.PieceMe
 	return result, nil
 }
 
-func (s *diskStorageMgr) GC() error {
+func (s *diskStorageManager) GC() error {
 	logger.GcLogger.With("type", "disk").Info("start the disk storage gc job")
 	gcTaskIDs, err := s.cleaner.GC("disk", false)
 	if err != nil {
@@ -140,7 +146,7 @@ func (s *diskStorageMgr) GC() error {
 	for _, taskID := range gcTaskIDs {
 		synclock.Lock(taskID, false)
 		// try to ensure the taskID is not using again
-		if _, exist := s.taskMgr.Exist(taskID); exist {
+		if _, exist := s.taskManager.Exist(taskID); exist {
 			synclock.UnLock(taskID, false)
 			continue
 		}
@@ -156,14 +162,14 @@ func (s *diskStorageMgr) GC() error {
 	return nil
 }
 
-func (s *diskStorageMgr) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
+func (s *diskStorageManager) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
 	raw := storage.GetDownloadRaw(taskID)
 	raw.Offset = offset
 	raw.Length = len
 	return s.diskDriver.Put(raw, data)
 }
 
-func (s *diskStorageMgr) ReadFileMetadata(taskID string) (*storage.FileMetadata, error) {
+func (s *diskStorageManager) ReadFileMetadata(taskID string) (*storage.FileMetadata, error) {
 	bytes, err := s.diskDriver.GetBytes(storage.GetTaskMetadataRaw(taskID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get metadata bytes")
@@ -176,7 +182,7 @@ func (s *diskStorageMgr) ReadFileMetadata(taskID string) (*storage.FileMetadata,
 	return metadata, nil
 }
 
-func (s *diskStorageMgr) WriteFileMetadata(taskID string, metadata *storage.FileMetadata) error {
+func (s *diskStorageManager) WriteFileMetadata(taskID string, metadata *storage.FileMetadata) error {
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return errors.Wrapf(err, "marshal metadata")
@@ -184,7 +190,7 @@ func (s *diskStorageMgr) WriteFileMetadata(taskID string, metadata *storage.File
 	return s.diskDriver.PutBytes(storage.GetTaskMetadataRaw(taskID), data)
 }
 
-func (s *diskStorageMgr) WritePieceMetaRecords(taskID string, records []*storage.PieceMetaRecord) error {
+func (s *diskStorageManager) WritePieceMetaRecords(taskID string, records []*storage.PieceMetaRecord) error {
 	recordStrs := make([]string, 0, len(records))
 	for i := range records {
 		recordStrs = append(recordStrs, records[i].String())
@@ -195,19 +201,19 @@ func (s *diskStorageMgr) WritePieceMetaRecords(taskID string, records []*storage
 	return s.diskDriver.PutBytes(pieceRaw, []byte(strings.Join(recordStrs, "\n")))
 }
 
-func (s *diskStorageMgr) ReadPieceMetaBytes(taskID string) ([]byte, error) {
+func (s *diskStorageManager) ReadPieceMetaBytes(taskID string) ([]byte, error) {
 	return s.diskDriver.GetBytes(storage.GetPieceMetadataRaw(taskID))
 }
 
-func (s *diskStorageMgr) ReadDownloadFile(taskID string) (io.ReadCloser, error) {
+func (s *diskStorageManager) ReadDownloadFile(taskID string) (io.ReadCloser, error) {
 	return s.diskDriver.Get(storage.GetDownloadRaw(taskID))
 }
 
-func (s *diskStorageMgr) StatDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
+func (s *diskStorageManager) StatDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
 	return s.diskDriver.Stat(storage.GetDownloadRaw(taskID))
 }
 
-func (s *diskStorageMgr) CreateUploadLink(taskID string) error {
+func (s *diskStorageManager) CreateUploadLink(taskID string) error {
 	// create a soft link from the upload file to the download file
 	if err := fileutils.SymbolicLink(s.diskDriver.GetPath(storage.GetDownloadRaw(taskID)),
 		s.diskDriver.GetPath(storage.GetUploadRaw(taskID))); err != nil {
@@ -216,7 +222,7 @@ func (s *diskStorageMgr) CreateUploadLink(taskID string) error {
 	return nil
 }
 
-func (s *diskStorageMgr) DeleteTask(taskID string) error {
+func (s *diskStorageManager) DeleteTask(taskID string) error {
 	if err := s.diskDriver.Remove(storage.GetTaskMetadataRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -236,11 +242,11 @@ func (s *diskStorageMgr) DeleteTask(taskID string) error {
 	return nil
 }
 
-func (s *diskStorageMgr) ResetRepo(task *types.SeedTask) error {
-	return s.DeleteTask(task.ID)
+func (s *diskStorageManager) ResetRepo(seedTask *task.SeedTask) error {
+	return s.DeleteTask(seedTask.ID)
 }
 
-func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
+func (s *diskStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
 	freeSpace, err := s.diskDriver.GetFreeSpace()
 	if err != nil {
 		return false, err
@@ -254,13 +260,13 @@ func (s *diskStorageMgr) TryFreeSpace(fileLength int64) (bool, error) {
 		WalkFn: func(filePath string, info os.FileInfo, err error) error {
 			if fileutils.IsRegular(filePath) {
 				taskID := strings.Split(path.Base(filePath), ".")[0]
-				task, exist := s.taskMgr.Exist(taskID)
+				seedTask, exist := s.taskManager.Exist(taskID)
 				if exist {
 					var totalLen int64 = 0
-					if task.CdnFileLength > 0 {
-						totalLen = task.CdnFileLength
+					if seedTask.CdnFileLength > 0 {
+						totalLen = seedTask.CdnFileLength
 					} else {
-						totalLen = task.SourceFileLength
+						totalLen = seedTask.SourceFileLength
 					}
 					if totalLen > 0 {
 						remainder.Add(totalLen - info.Size())

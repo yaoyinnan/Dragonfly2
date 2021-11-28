@@ -28,13 +28,13 @@ import (
 	"testing"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	storageMock "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/mock"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	sourceMock "d7y.io/dragonfly/v2/pkg/source/mock"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
@@ -56,38 +56,38 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
 		return request
 	})
-	storageMgr := storageMock.NewMockManager(ctrl)
-	cacheDataManager := newMetadataManager(storageMgr)
+	storageManager := storageMock.NewMockManager(ctrl)
+	cacheDataManager := newMetadataManager(storageManager)
 	suite.detector = newCacheDetector(cacheDataManager)
-	storageMgr.EXPECT().ReadFileMetadata(fullExpiredCache.taskID).Return(fullExpiredCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetadata(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetadata(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetadata(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.fileMeta, nil).AnyTimes()
-	storageMgr.EXPECT().ReadFileMetadata(noCache.taskID).Return(noCache.fileMeta, os.ErrNotExist).AnyTimes()
-	storageMgr.EXPECT().ReadDownloadFile(fullNoExpiredCache.taskID).DoAndReturn(
+	storageManager.EXPECT().ReadFileMetadata(fullExpiredCache.taskID).Return(fullExpiredCache.fileMeta, nil).AnyTimes()
+	storageManager.EXPECT().ReadFileMetadata(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
+	storageManager.EXPECT().ReadFileMetadata(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()
+	storageManager.EXPECT().ReadFileMetadata(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.fileMeta, nil).AnyTimes()
+	storageManager.EXPECT().ReadFileMetadata(noCache.taskID).Return(noCache.fileMeta, os.ErrNotExist).AnyTimes()
+	storageManager.EXPECT().ReadDownloadFile(fullNoExpiredCache.taskID).DoAndReturn(
 		func(taskID string) (io.ReadCloser, error) {
 			content, err := ioutil.ReadFile("../../testdata/cdn/go.html")
 			suite.Nil(err)
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
 		}).AnyTimes()
-	storageMgr.EXPECT().ReadDownloadFile(partialNotSupportRangeCache.taskID).DoAndReturn(
+	storageManager.EXPECT().ReadDownloadFile(partialNotSupportRangeCache.taskID).DoAndReturn(
 		func(taskID string) (io.ReadCloser, error) {
 			content, err := ioutil.ReadFile("../../testdata/cdn/go.html")
 			suite.Nil(err)
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
 		}).AnyTimes()
-	storageMgr.EXPECT().ReadDownloadFile(partialSupportRangeCache.taskID).DoAndReturn(
+	storageManager.EXPECT().ReadDownloadFile(partialSupportRangeCache.taskID).DoAndReturn(
 		func(taskID string) (io.ReadCloser, error) {
 			content, err := ioutil.ReadFile("../../testdata/cdn/go.html")
 			suite.Nil(err)
 			return ioutil.NopCloser(strings.NewReader(string(content))), nil
 		}).AnyTimes()
-	storageMgr.EXPECT().ReadDownloadFile(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
-	storageMgr.EXPECT().ReadPieceMetaRecords(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.pieces, nil).AnyTimes()
-	storageMgr.EXPECT().ReadPieceMetaRecords(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.pieces, nil).AnyTimes()
-	storageMgr.EXPECT().ReadPieceMetaRecords(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.pieces, nil).AnyTimes()
-	storageMgr.EXPECT().ReadPieceMetaRecords(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
-	storageMgr.EXPECT().StatDownloadFile(fullNoExpiredCache.taskID).Return(&storedriver.StorageInfo{
+	storageManager.EXPECT().ReadDownloadFile(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
+	storageManager.EXPECT().ReadPieceMetaRecords(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.pieces, nil).AnyTimes()
+	storageManager.EXPECT().ReadPieceMetaRecords(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.pieces, nil).AnyTimes()
+	storageManager.EXPECT().ReadPieceMetaRecords(partialSupportRangeCache.taskID).Return(partialSupportRangeCache.pieces, nil).AnyTimes()
+	storageManager.EXPECT().ReadPieceMetaRecords(noCache.taskID).Return(nil, os.ErrNotExist).AnyTimes()
+	storageManager.EXPECT().StatDownloadFile(fullNoExpiredCache.taskID).Return(&storedriver.StorageInfo{
 		Path:       "",
 		Size:       9789,
 		CreateTime: time.Time{},
@@ -266,7 +266,7 @@ func newPartialFileMeta(taskID string, URL string) *storage.FileMetadata {
 
 func (suite *CacheDetectorTestSuite) TestDetectCache() {
 	type args struct {
-		task *types.SeedTask
+		task *task.SeedTask
 	}
 	tests := []struct {
 		name    string
@@ -277,7 +277,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 		{
 			name: "no cache",
 			args: args{
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:      noCacheTask,
 					RawURL:  noExpiredAndSupportURL,
 					TaskURL: noExpiredAndSupportURL,
@@ -289,7 +289,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 		{
 			name: "partial cache and support range",
 			args: args{
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:               partialAndSupportCacheTask,
 					RawURL:           noExpiredAndSupportURL,
 					TaskURL:          noExpiredAndSupportURL,
@@ -307,7 +307,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 		{
 			name: "partial cache and not support range",
 			args: args{
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:               partialAndNotSupportCacheTask,
 					RawURL:           noExpiredAndNotSupportURL,
 					TaskURL:          noExpiredAndNotSupportURL,
@@ -321,7 +321,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 		{
 			name: "full cache and not expire",
 			args: args{
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:               fullCacheNotExpiredTask,
 					RawURL:           noExpiredAndNotSupportURL,
 					TaskURL:          noExpiredAndNotSupportURL,
@@ -339,7 +339,7 @@ func (suite *CacheDetectorTestSuite) TestDetectCache() {
 		{
 			name: "full cache and expired",
 			args: args{
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:      fullCacheExpiredTask,
 					RawURL:  expiredAndSupportURL,
 					TaskURL: expiredAndNotSupportURL,

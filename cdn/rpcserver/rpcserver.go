@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -27,7 +28,6 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/internal/dfcodes"
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -44,9 +44,9 @@ import (
 var tracer = otel.Tracer("cdn-server")
 
 type server struct {
-	*grpc.Server
-	cdnService supervisor.CDNService
+	rpcServer  *grpc.Server
 	cfg        *config.Config
+	cdnService supervisor.CDNService
 }
 
 // New returns a new Manager Object.
@@ -55,8 +55,8 @@ func New(cfg *config.Config, cdnService supervisor.CDNService, opts ...grpc.Serv
 		cdnService: cdnService,
 		cfg:        cfg,
 	}
-	svr.Server = cdnserver.New(svr, opts...)
-	return svr.Server, nil
+	svr.rpcServer = cdnserver.New(svr, opts...)
+	return svr.rpcServer, nil
 }
 
 // checkSeedRequestParams check the params of SeedRequest.
@@ -97,46 +97,59 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	// register task
-	pieceChan, err := css.cdnService.RegisterTask(ctx, types.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
+	// register seed task
+	pieceChan, err := css.cdnService.RegisterSeedTask(ctx, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
 	if err != nil {
+		if supervisor.IsResourcesLacked(err) {
+			err = dferrors.Newf(dfcodes.CdnResourceLack, "failed to register seed task(%s): %v", req.TaskId, err)
+			span.RecordError(err)
+			return err
+		}
 		err = dferrors.Newf(dfcodes.CdnTaskRegistryFail, "failed to register seed task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return err
 	}
 	peerID := idgen.CDNPeerID(css.cfg.AdvertiseIP)
+	hostID := idgen.CDNHostID(hostutils.FQDNHostname, int32(css.cfg.ListenPort))
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
 			PeerId:   peerID,
-			HostUuid: idgen.CDNHostID(hostutils.FQDNHostname, int32(css.cfg.ListenPort)),
+			HostUuid: hostID,
 			PieceInfo: &base.PieceInfo{
 				PieceNum:    piece.PieceNum,
 				RangeStart:  uint64(piece.PieceRange.StartIndex),
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
 				PieceOffset: uint64(piece.OriginRange.StartIndex),
-				PieceStyle:  base.PieceStyle(piece.PieceStyle),
+				PieceStyle:  piece.PieceStyle,
 			},
-			Done: false,
+			Done:            false,
+			ContentLength:   task.UnKnownSourceFileLen,
+			TotalPieceCount: task.UnknownTotalPieceCount,
 		}
 	}
-	task, ok := css.cdnService.GetTask(req.TaskId)
-	if !ok {
-		err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s): %v", req.TaskId, err)
+	seedTask, err := css.cdnService.GetSeedTask(req.TaskId)
+	if err != nil {
+		if task.IsTaskNotFound(err) {
+			err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s): %v", req.TaskId, err)
+			span.RecordError(err)
+			return err
+		}
+		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return err
 	}
-	if !task.IsSuccess() {
-		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status error , status: %s", req.TaskId, task.CdnStatus)
+	if !seedTask.IsSuccess() {
+		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status error , status: %s", req.TaskId, seedTask.CdnStatus)
 		span.RecordError(err)
 		return err
 	}
 	psc <- &cdnsystem.PieceSeed{
 		PeerId:          peerID,
-		HostUuid:        idgen.CDNHostID(hostutils.FQDNHostname, int32(css.cfg.ListenPort)),
+		HostUuid:        hostID,
 		Done:            true,
-		ContentLength:   task.SourceFileLength,
-		TotalPieceCount: task.TotalPieceCount,
+		ContentLength:   seedTask.SourceFileLength,
+		TotalPieceCount: seedTask.TotalPieceCount,
 	}
 	return nil
 }
@@ -161,34 +174,39 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	task, ok := css.cdnService.GetTask(req.TaskId)
-	if !ok {
-		err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s) from cdn: %v", req.TaskId, err)
+	seedTask, err := css.cdnService.GetSeedTask(req.TaskId)
+	if err != nil {
+		if task.IsTaskNotFound(err) {
+			err = dferrors.Newf(dfcodes.CdnTaskNotFound, "failed to get task(%s) from cdn: %v", req.TaskId, err)
+			span.RecordError(err)
+			return nil, err
+		}
+		err = dferrors.Newf(dfcodes.CdnError, "failed to get task(%s): %v", req.TaskId, err)
 		span.RecordError(err)
 		return nil, err
 	}
-	if task.IsError() {
-		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status is FAIL, cdnStatus: %s", task.ID, task.CdnStatus)
+	if seedTask.IsError() {
+		err = dferrors.Newf(dfcodes.CdnTaskDownloadFail, "task(%s) status is FAIL, cdnStatus: %s", seedTask.ID, seedTask.CdnStatus)
 		span.RecordError(err)
 		return nil, err
 	}
-	pieces, ok := css.cdnService.GetPieces(req.TaskId)
-	if !ok {
-		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s) from cdn: %v", task.ID, err)
+	pieces, err := css.cdnService.GetPieces(req.TaskId)
+	if err != nil {
+		err = dferrors.Newf(dfcodes.CdnError, "failed to get pieces of task(%s): %v", seedTask.ID, err)
 		span.RecordError(err)
 		return nil, err
 	}
 	pieceInfos := make([]*base.PieceInfo, 0)
 	var count int32 = 0
 	for _, piece := range pieces {
-		if piece.PieceNum >= req.StartNum && (count < req.Limit || req.Limit == 0) {
+		if piece.PieceNum >= req.StartNum && (count < req.Limit || req.Limit <= 0) {
 			p := &base.PieceInfo{
 				PieceNum:    piece.PieceNum,
 				RangeStart:  uint64(piece.PieceRange.StartIndex),
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
 				PieceOffset: uint64(piece.OriginRange.StartIndex),
-				PieceStyle:  base.PieceStyle(piece.PieceStyle),
+				PieceStyle:  piece.PieceStyle,
 			}
 			pieceInfos = append(pieceInfos, p)
 			count++
@@ -199,9 +217,9 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		DstPid:        req.DstPid,
 		DstAddr:       fmt.Sprintf("%s:%d", css.cfg.AdvertiseIP, css.cfg.DownloadPort),
 		PieceInfos:    pieceInfos,
-		TotalPiece:    task.TotalPieceCount,
-		ContentLength: task.SourceFileLength,
-		PieceMd5Sign:  task.PieceMd5Sign,
+		TotalPiece:    seedTask.TotalPieceCount,
+		ContentLength: seedTask.SourceFileLength,
+		PieceMd5Sign:  seedTask.PieceMd5Sign,
 	}
 	span.SetAttributes(config.AttributePiecePacketResult.String(pp.String()))
 	return pp, nil

@@ -19,14 +19,11 @@ package config
 import (
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
-	"d7y.io/dragonfly/v2/cdn/storedriver/local"
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/hybrid"
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
@@ -60,13 +57,13 @@ func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
 	return map[plugins.PluginType][]*plugins.PluginProperties{
 		plugins.StorageDriverPlugin: {
 			{
-				Name:   local.DiskDriverName,
+				Name:   "disk",
 				Enable: true,
 				Config: &storedriver.Config{
 					BaseDir: DefaultDiskBaseDir,
 				},
 			}, {
-				Name:   local.MemoryDriverName,
+				Name:   "memory",
 				Enable: false,
 				Config: &storedriver.Config{
 					BaseDir: DefaultMemoryBaseDir,
@@ -74,13 +71,13 @@ func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
 			},
 		}, plugins.StorageManagerPlugin: {
 			{
-				Name:   disk.StorageMode,
+				Name:   "disk",
 				Enable: true,
 				Config: &storage.Config{
 					GCInitialDelay: 0 * time.Second,
 					GCInterval:     15 * time.Second,
 					DriverConfigs: map[string]*storage.DriverConfig{
-						local.DiskDriverName: {
+						"disk": {
 							GCConfig: &storage.GCConfig{
 								YoungGCThreshold:  100 * unit.GB,
 								FullGCThreshold:   5 * unit.GB,
@@ -90,13 +87,13 @@ func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
 					},
 				},
 			}, {
-				Name:   hybrid.StorageMode,
+				Name:   "hybrid",
 				Enable: false,
 				Config: &storage.Config{
 					GCInitialDelay: 0 * time.Second,
 					GCInterval:     15 * time.Second,
 					DriverConfigs: map[string]*storage.DriverConfig{
-						local.DiskDriverName: {
+						"disk": {
 							GCConfig: &storage.GCConfig{
 								YoungGCThreshold:  100 * unit.GB,
 								FullGCThreshold:   5 * unit.GB,
@@ -104,7 +101,7 @@ func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
 								IntervalThreshold: 2 * time.Hour,
 							},
 						},
-						local.MemoryDriverName: {
+						"memory": {
 							GCConfig: &storage.GCConfig{
 								YoungGCThreshold:  100 * unit.GB,
 								FullGCThreshold:   5 * unit.GB,

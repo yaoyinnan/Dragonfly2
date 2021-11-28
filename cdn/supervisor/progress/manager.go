@@ -14,41 +14,64 @@
  * limitations under the License.
  */
 
+//go:generate mockgen -destination ./mock/mock_progress_mgr.go -package mock d7y.io/dragonfly/v2/cdn/supervisor/progress SeedProgressManager
+
 package progress
 
 import (
 	"container/list"
 	"context"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
 	"d7y.io/dragonfly/v2/cdn/config"
-	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 )
 
-var _ supervisor.SeedProgressManager = (*Manager)(nil)
+// SeedProgressManager as an interface defines all operations about seed progress
+type SeedProgressManager interface {
+
+	// InitSeedProgress init task seed progress
+	InitSeedProgress(ctx context.Context, taskID string)
+
+	// WatchSeedProgress watch task seed progress
+	WatchSeedProgress(ctx context.Context, taskID string) (<-chan *types.SeedPiece, error)
+
+	// PublishPiece publish piece seed
+	PublishPiece(ctx context.Context, taskID string, piece *types.SeedPiece) error
+
+	// PublishTask publish task seed
+	PublishTask(ctx context.Context, taskID string, task *task.SeedTask) error
+
+	// GetPieces get pieces by taskID
+	GetPieces(taskID string) (records []*types.SeedPiece, ok bool)
+
+	// Clear meta info of task
+	Clear(taskID string)
+}
+
+var _ Manager = (*manager)(nil)
 
 var ErrDataNotFound = errors.New("data not found")
 
 type Manager struct {
 	mu                   *synclock.LockerPool
-	taskManager          supervisor.SeedTaskManager
+	taskManager          task.Manager
 	seedSubscribers      sync.Map
 	taskPieceMetaRecords sync.Map
 	timeout              time.Duration
 	buffer               int
 }
 
-func NewManager(taskManager supervisor.SeedTaskManager) (supervisor.SeedProgressManager, error) {
+func NewManager(taskManager task.Manager) (Manager, error) {
 	return &Manager{
 		mu:          synclock.NewLockerPool(),
 		taskManager: taskManager,
@@ -57,7 +80,7 @@ func NewManager(taskManager supervisor.SeedTaskManager) (supervisor.SeedProgress
 	}, nil
 }
 
-func (pm *Manager) InitSeedProgress(ctx context.Context, taskID string) {
+func (pm *manager) InitSeedProgress(ctx context.Context, taskID string) {
 	span := trace.SpanFromContext(ctx)
 	span.AddEvent(config.EventInitSeedProgress)
 	if _, loaded := pm.seedSubscribers.LoadOrStore(taskID, list.New()); loaded {

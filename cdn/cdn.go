@@ -77,32 +77,42 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	// Initialize task manager
-	taskMgr, err := task.NewManager(cfg)
+	taskManager, err := task.NewManager(task.Config{
+		GCInitialDelay:     cfg.GCInitialDelay,
+		GCMetaInterval:     cfg.GCMetaInterval,
+		TaskExpireTime:     cfg.TaskExpireTime,
+		FailAccessInterval: cfg.FailAccessInterval,
+	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "create task manager")
 	}
 
 	// Initialize progress manager
-	progressMgr, err := progress.NewManager(taskMgr)
+	progressManager, err := progress.NewManager(taskManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create progress manager")
 	}
 
 	// Initialize storage manager
-	storageMgr, ok := storage.Get(cfg.StorageMode)
-	if !ok {
+	storageManagerBuilder := storage.Get(cfg.StorageMode)
+	if storageManagerBuilder == nil {
 		return nil, fmt.Errorf("can not find storage manager mode %s", cfg.StorageMode)
 	}
-	// Initialize storage manager
-	storageMgr.Initialize(taskMgr)
-
+	storageManager, err := storageManagerBuilder.Build(storage.Config{
+		GCInitialDelay: 0,
+		GCInterval:     0,
+		DriverConfigs:  nil,
+	}, taskManager)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create storage manager")
+	}
 	// Initialize CDN manager
-	cdnMgr, err := cdn.NewManager(cfg, storageMgr, progressMgr, taskMgr)
+	cdnManager, err := cdn.NewManager(cfg, storageManager, progressManager, taskManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create cdn manager")
 	}
 
-	service, err := supervisor.NewCDNService(taskMgr, cdnMgr, progressMgr)
+	service, err := supervisor.NewCDNService(taskManager, cdnManager, progressManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create cdn service")
 	}

@@ -22,28 +22,28 @@ import (
 	"strings"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
-	"d7y.io/dragonfly/v2/cdn/supervisor"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
 
 type Cleaner struct {
-	cfg        *GCConfig
-	driver     storedriver.Driver
-	taskMgr    supervisor.SeedTaskManager
-	storageMgr Manager
+	cfg            *GCConfig
+	driver         storedriver.Driver
+	taskManager    task.Manager
+	storageManager Manager
 }
 
-func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageMgr Manager, taskMgr supervisor.SeedTaskManager) (*Cleaner, error) {
+func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner, error) {
 	return &Cleaner{
-		cfg:        cfg,
-		driver:     driver,
-		taskMgr:    taskMgr,
-		storageMgr: storageMgr,
+		cfg:            cfg,
+		driver:         driver,
+		taskManager:    taskManager,
+		storageManager: storageManager,
 	}, nil
 }
 
@@ -100,7 +100,7 @@ func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) 
 		walkTaskIds[taskID] = true
 
 		// we should return directly when success to get info which means it is being used
-		if _, exist := cleaner.taskMgr.Exist(taskID); exist {
+		if _, exist := cleaner.taskManager.Exist(taskID); exist {
 			return nil
 		}
 
@@ -110,7 +110,7 @@ func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) 
 			return nil
 		}
 
-		metadata, err := cleaner.storageMgr.ReadFileMetadata(taskID)
+		metadata, err := cleaner.storageManager.ReadFileMetadata(taskID)
 		if err != nil || metadata == nil {
 			logger.GcLogger.With("type", storagePattern).Debugf("taskID: %s, failed to get metadata: %v", taskID, err)
 			gcTaskIDs = append(gcTaskIDs, taskID)
@@ -142,7 +142,7 @@ func (cleaner *Cleaner) sortInert(gapTasks, intervalTasks *treemap.Map, metadata
 
 	if metadata.Interval > 0 &&
 		gap <= metadata.Interval+(int64(cleaner.cfg.IntervalThreshold.Seconds())*int64(time.Millisecond)) {
-		info, err := cleaner.storageMgr.StatDownloadFile(metadata.TaskID)
+		info, err := cleaner.storageManager.StatDownloadFile(metadata.TaskID)
 		if err != nil {
 			return err
 		}

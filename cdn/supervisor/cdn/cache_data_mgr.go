@@ -20,11 +20,11 @@ import (
 	"io"
 	"sort"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
@@ -38,32 +38,32 @@ type metadataManager struct {
 	cacheLocker *synclock.LockerPool
 }
 
-func newMetadataManager(storeMgr storage.Manager) *metadataManager {
+func newMetadataManager(storageManager storage.Manager) *metadataManager {
 	return &metadataManager{
-		storeMgr,
+		storageManager,
 		synclock.NewLockerPool(),
 	}
 }
 
 // writeFileMetadataByTask stores metadata of task
-func (mm *metadataManager) writeFileMetadataByTask(task *types.SeedTask) (*storage.FileMetadata, error) {
-	mm.cacheLocker.Lock(task.ID, false)
-	defer mm.cacheLocker.UnLock(task.ID, false)
+func (mm *metadataManager) writeFileMetadataByTask(seedTask *task.SeedTask) (*storage.FileMetadata, error) {
+	mm.cacheLocker.Lock(seedTask.ID, false)
+	defer mm.cacheLocker.UnLock(seedTask.ID, false)
 	metadata := &storage.FileMetadata{
-		TaskID:          task.ID,
-		TaskURL:         task.TaskURL,
-		PieceSize:       task.PieceSize,
-		SourceFileLen:   task.SourceFileLength,
+		TaskID:          seedTask.ID,
+		TaskURL:         seedTask.TaskURL,
+		PieceSize:       seedTask.PieceSize,
+		SourceFileLen:   seedTask.SourceFileLength,
 		AccessTime:      getCurrentTimeMillisFunc(),
-		CdnFileLength:   task.CdnFileLength,
-		Digest:          task.Digest,
-		Tag:             task.Tag,
-		TotalPieceCount: task.TotalPieceCount,
-		Range:           task.Range,
-		Filter:          task.Filter,
+		CdnFileLength:   seedTask.CdnFileLength,
+		Digest:          seedTask.Digest,
+		Tag:             seedTask.Tag,
+		TotalPieceCount: seedTask.TotalPieceCount,
+		Range:           seedTask.Range,
+		Filter:          seedTask.Filter,
 	}
 
-	if err := mm.storage.WriteFileMetadata(task.ID, metadata); err != nil {
+	if err := mm.storage.WriteFileMetadata(seedTask.ID, metadata); err != nil {
 		return nil, errors.Wrapf(err, "write task metadata file")
 	}
 
@@ -193,10 +193,10 @@ func (mm *metadataManager) readDownloadFile(taskID string) (io.ReadCloser, error
 	return mm.storage.ReadDownloadFile(taskID)
 }
 
-func (mm *metadataManager) resetRepo(task *types.SeedTask) error {
-	mm.cacheLocker.Lock(task.ID, false)
-	defer mm.cacheLocker.UnLock(task.ID, false)
-	return mm.storage.ResetRepo(task)
+func (mm *metadataManager) resetRepo(seedTask *task.SeedTask) error {
+	mm.cacheLocker.Lock(seedTask.ID, false)
+	defer mm.cacheLocker.UnLock(seedTask.ID, false)
+	return mm.storage.ResetRepo(seedTask)
 }
 
 func (mm *metadataManager) writeDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
@@ -32,7 +33,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/mock"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -48,7 +48,7 @@ func TestCDNManagerSuite(t *testing.T) {
 
 type CDNManagerTestSuite struct {
 	workHome string
-	cm       *Manager
+	cm       Manager
 	suite.Suite
 }
 
@@ -56,15 +56,15 @@ func (suite *CDNManagerTestSuite) SetupSuite() {
 	suite.workHome, _ = ioutil.TempDir("/tmp", "cdn-ManagerTestSuite-")
 	fmt.Printf("workHome: %s", suite.workHome)
 	suite.Nil(plugins.Initialize(NewPlugins(suite.workHome)))
-	storeMgr, ok := storage.Get(config.DefaultStorageMode)
+	storagerManager, ok := storage.Get(config.DefaultStorageMode)
 	if !ok {
 		suite.Failf("failed to get storage mode %s", config.DefaultStorageMode)
 	}
 	ctrl := gomock.NewController(suite.T())
-	progressMgr := mock.NewMockSeedProgressManager(ctrl)
-	progressMgr.EXPECT().PublishPiece(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(98 * 2)
-	progressMgr.EXPECT().PublishPiece(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(98 * 2)
-	suite.cm, _ = newManager(config.New(), storeMgr, progressMgr)
+	progressManager := mock.NewMockSeedProgressManager(ctrl)
+	progressManager.EXPECT().PublishPiece(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(98 * 2)
+	progressManager.EXPECT().PublishPiece(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(98 * 2)
+	suite.cm, _ = newManager(config.New(), storagerManager, progressManager)
 }
 
 var (
@@ -134,12 +134,12 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 
 	tests := []struct {
 		name       string
-		sourceTask *types.SeedTask
-		targetTask *types.SeedTask
+		sourceTask *task.SeedTask
+		targetTask *task.SeedTask
 	}{
 		{
 			name: "trigger_md5",
-			sourceTask: &types.SeedTask{
+			sourceTask: &task.SeedTask{
 				ID:               md5TaskID,
 				RawURL:           dragonflyRawURL,
 				TaskURL:          urlutils.FilterURLParam(dragonflyRawURL, []string{"a", "b"}),
@@ -147,13 +147,13 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    0,
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
-				CdnStatus:        types.TaskInfoCdnStatusRunning,
+				CdnStatus:        task.TaskInfoCdnStatusRunning,
 				TotalPieceCount:  0,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "",
 				PieceMd5Sign:     "",
 			},
-			targetTask: &types.SeedTask{
+			targetTask: &task.SeedTask{
 				ID:               md5TaskID,
 				RawURL:           dragonflyRawURL,
 				TaskURL:          urlutils.FilterURLParam(dragonflyRawURL, []string{"a", "b"}),
@@ -161,7 +161,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    9789,
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
-				CdnStatus:        types.TaskInfoCdnStatusSuccess,
+				CdnStatus:        task.TaskInfoCdnStatusSuccess,
 				TotalPieceCount:  0,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "md5:f1e2488bba4d1267948d9e2f7008571c",
@@ -170,7 +170,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 		},
 		{
 			name: "trigger_sha256",
-			sourceTask: &types.SeedTask{
+			sourceTask: &task.SeedTask{
 				ID:               sha256TaskID,
 				RawURL:           dragonflyRawURL,
 				TaskURL:          urlutils.FilterURLParam(dragonflyRawURL, []string{"a", "b"}),
@@ -178,13 +178,13 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    0,
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
-				CdnStatus:        types.TaskInfoCdnStatusRunning,
+				CdnStatus:        task.TaskInfoCdnStatusRunning,
 				TotalPieceCount:  0,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "",
 				PieceMd5Sign:     "",
 			},
-			targetTask: &types.SeedTask{
+			targetTask: &task.SeedTask{
 				ID:               sha256TaskID,
 				RawURL:           dragonflyRawURL,
 				TaskURL:          urlutils.FilterURLParam(dragonflyRawURL, []string{"a", "b"}),
@@ -192,7 +192,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    9789,
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
-				CdnStatus:        types.TaskInfoCdnStatusSuccess,
+				CdnStatus:        task.TaskInfoCdnStatusSuccess,
 				TotalPieceCount:  0,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",

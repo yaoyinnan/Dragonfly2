@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	types "d7y.io/dragonfly/v2/cdn/types"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -16,6 +17,10 @@ import (
 type MockSeedTaskManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockSeedTaskManagerMockRecorder
+}
+
+func (m *MockSeedTaskManager) AddOrUpdate(registerTask *task.SeedTask) (bool, error) {
+	panic("implement me")
 }
 
 // MockSeedTaskManagerMockRecorder is the mock recorder for MockSeedTaskManager.
@@ -48,10 +53,10 @@ func (mr *MockSeedTaskManagerMockRecorder) Delete(arg0 interface{}) *gomock.Call
 }
 
 // Exist mocks base method.
-func (m *MockSeedTaskManager) Exist(arg0 string) (*types.SeedTask, bool) {
+func (m *MockSeedTaskManager) Exist(arg0 string) (*task.SeedTask, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Exist", arg0)
-	ret0, _ := ret[0].(*types.SeedTask)
+	ret0, _ := ret[0].(*task.SeedTask)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -63,11 +68,11 @@ func (mr *MockSeedTaskManagerMockRecorder) Exist(arg0 interface{}) *gomock.Call 
 }
 
 // Get mocks base method.
-func (m *MockSeedTaskManager) Get(arg0 string) (*types.SeedTask, bool) {
+func (m *MockSeedTaskManager) Get(arg0 string) (*task.SeedTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0)
-	ret0, _ := ret[0].(*types.SeedTask)
-	ret1, _ := ret[1].(bool)
+	ret0, _ := ret[0].(*task.SeedTask)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
@@ -93,7 +98,7 @@ func (mr *MockSeedTaskManagerMockRecorder) GetPieces(arg0, arg1 interface{}) *go
 }
 
 // Register mocks base method.
-func (m *MockSeedTaskManager) Register(arg0 context.Context, arg1 *types.SeedTask) error {
+func (m *MockSeedTaskManager) Register(arg0 context.Context, arg1 *task.SeedTask) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Register", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -107,7 +112,7 @@ func (mr *MockSeedTaskManagerMockRecorder) Register(arg0, arg1 interface{}) *gom
 }
 
 // Update mocks base method.
-func (m *MockSeedTaskManager) Update(arg0 string, arg1 *types.SeedTask) error {
+func (m *MockSeedTaskManager) Update(arg0 string, arg1 *task.SeedTask) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", arg0, arg1)
 	ret0, _ := ret[0].(error)

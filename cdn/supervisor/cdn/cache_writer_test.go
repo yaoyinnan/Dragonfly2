@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/stretchr/testify/suite"
 
 	"d7y.io/dragonfly/v2/cdn/config"
@@ -35,7 +36,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/unit"
 )
@@ -86,14 +86,14 @@ func (suite *CacheWriterTestSuite) SetupSuite() {
 	suite.workHome, _ = ioutil.TempDir("/tmp", "cdn-CacheWriterDetectorTestSuite-")
 	suite.T().Log("workHome:", suite.workHome)
 	suite.Nil(plugins.Initialize(NewPlugins(suite.workHome)))
-	storeMgr, ok := storage.Get(config.DefaultStorageMode)
-	if !ok {
-		suite.Failf("failed to get storage mode %s", config.DefaultStorageMode)
+	storageManager, err := storage.Get(config.DefaultStorageMode).Build()
+	if err != nil {
+		suite.Failf("failed to create storage mode %s", config.DefaultStorageMode)
 	}
-	cacheDataManager := newMetadataManager(storeMgr)
-	progressMgr, _ := progress.NewManager()
-	cdnReporter := newReporter(progressMgr)
-	suite.writer = newCacheWriter(cdnReporter, cacheDataManager, storeMgr)
+	cacheDataManager := newMetadataManager(storageManager)
+	progressManager, _ := progress.NewManager()
+	cdnReporter := newReporter(progressManager)
+	suite.writer = newCacheWriter(cdnReporter, cacheDataManager, storageManager)
 }
 
 func (suite *CacheWriterTestSuite) TearDownSuite() {
@@ -110,7 +110,7 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 	contentLen := int64(len(content))
 	type args struct {
 		reader     *limitreader.LimitReader
-		task       *types.SeedTask
+		task       *task.SeedTask
 		breakPoint int64
 	}
 
@@ -124,7 +124,7 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 			name: "write with nil detectResult",
 			args: args{
 				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:        "5806501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
 					PieceSize: 50,
 				},
@@ -140,7 +140,7 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 			name: "write with non nil detectResult",
 			args: args{
 				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:        "5816501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e9e",
 					PieceSize: 50,
 				},
@@ -156,7 +156,7 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 			name: "write with task length",
 			args: args{
 				reader: limitreader.NewLimitReader(bufio.NewReader(strings.NewReader(string(content))), 100),
-				task: &types.SeedTask{
+				task: &task.SeedTask{
 					ID:               "5826501c3bb92f0b645918c5a4b15495a63259e3e0363008f97e186509e93",
 					PieceSize:        50,
 					SourceFileLength: contentLen,

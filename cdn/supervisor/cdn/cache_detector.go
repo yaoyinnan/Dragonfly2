@@ -24,12 +24,12 @@ import (
 	"io"
 	"io/ioutil"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"
@@ -58,17 +58,17 @@ func newCacheDetector(metadataManager *metadataManager) *cacheDetector {
 	}
 }
 
-func (cd *cacheDetector) detectCache(ctx context.Context, task *types.SeedTask, fileDigest hash.Hash) (result *cacheResult, err error) {
+func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTask, fileDigest hash.Hash) (result *cacheResult, err error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanDetectCache)
 	defer span.End()
 	defer func() {
 		span.SetAttributes(config.AttributeDetectCacheResult.String(result.String()))
 	}()
-	result, err = cd.doDetect(ctx, task, fileDigest)
+	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {
-		task.Log().Infof("detect cache failed, start reset storage cache: %v", err)
-		metadata, err := cd.resetCache(task)
+		seedTask.Log().Infof("detect cache failed, start reset storage cache: %v", err)
+		metadata, err := cd.resetCache(seedTask)
 		if err != nil {
 			return nil, errors.Wrapf(err, "reset cache failed")
 		}
@@ -76,22 +76,22 @@ func (cd *cacheDetector) detectCache(ctx context.Context, task *types.SeedTask, 
 			fileMetadata: metadata,
 		}
 	}
-	if err := cd.metadataManager.updateAccessTime(task.ID, getCurrentTimeMillisFunc()); err != nil {
-		task.Log().Warnf("failed to update task access time ")
+	if err := cd.metadataManager.updateAccessTime(seedTask.ID, getCurrentTimeMillisFunc()); err != nil {
+		seedTask.Log().Warnf("failed to update task access time ")
 	}
 	return result, nil
 }
 
 // doDetect do the actual detect action which detects file metadata and pieces metadata of specific task
-func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fileDigest hash.Hash) (*cacheResult, error) {
-	fileMetadata, err := cd.metadataManager.readFileMetadata(task.ID)
+func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, fileDigest hash.Hash) (*cacheResult, error) {
+	fileMetadata, err := cd.metadataManager.readFileMetadata(seedTask.ID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read file metadata")
 	}
-	if ok, cause := checkMetadata(task, fileMetadata); !ok {
+	if ok, cause := checkMetadata(seedTask, fileMetadata); !ok {
 		return nil, errors.Errorf("fileMetadata has been modified: %s", cause)
 	}
-	checkExpiredRequest, err := source.NewRequestWithHeader(task.RawURL, task.Header)
+	checkExpiredRequest, err := source.NewRequestWithHeader(seedTask.RawURL, seedTask.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create request")
 	}
@@ -101,21 +101,21 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 	})
 	if err != nil {
 		// If the check fails, the resource is regarded as not expired to prevent the source from being knocked down
-		task.Log().Warnf("failed to check whether the source is expired. To prevent the source from being suspended, "+
+		seedTask.Log().Warnf("failed to check whether the source is expired. To prevent the source from being suspended, "+
 			"assume that the source is not expired: %v", err)
 	}
-	task.Log().Debugf("task expired result: %t", expired)
+	seedTask.Log().Debugf("task expired result: %t", expired)
 	if expired {
-		return nil, errors.Errorf("resource %s has expired", task.TaskURL)
+		return nil, errors.Errorf("resource %s has expired", seedTask.TaskURL)
 	}
 	// not expired
 	if fileMetadata.Finish {
 		// quickly detect the cache situation through the metadata
-		return cd.detectByReadMetaFile(task.ID, fileMetadata)
+		return cd.detectByReadMetaFile(seedTask.ID, fileMetadata)
 	}
 	// check if the resource supports range request. if so,
 	// detect the cache situation by reading piece meta and data file
-	checkSupportRangeRequest, err := source.NewRequestWithHeader(task.RawURL, task.Header)
+	checkSupportRangeRequest, err := source.NewRequestWithHeader(seedTask.RawURL, seedTask.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create check support range request")
 	}
@@ -125,9 +125,9 @@ func (cd *cacheDetector) doDetect(ctx context.Context, task *types.SeedTask, fil
 		return nil, errors.Wrap(err, "check if support range")
 	}
 	if !supportRange {
-		return nil, errors.Errorf("resource %s is not support range request", task.TaskURL)
+		return nil, errors.Errorf("resource %s is not support range request", seedTask.TaskURL)
 	}
-	return cd.detectByReadFile(task.ID, fileMetadata, fileDigest)
+	return cd.detectByReadFile(seedTask.ID, fileMetadata, fileDigest)
 }
 
 // detectByReadMetaFile detect cache by read metadata and pieceMeta files of specific task
@@ -208,13 +208,13 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 }
 
 // resetCache file
-func (cd *cacheDetector) resetCache(task *types.SeedTask) (*storage.FileMetadata, error) {
-	err := cd.metadataManager.resetRepo(task)
+func (cd *cacheDetector) resetCache(seedTask *task.SeedTask) (*storage.FileMetadata, error) {
+	err := cd.metadataManager.resetRepo(seedTask)
 	if err != nil {
 		return nil, err
 	}
 	// initialize meta data file
-	return cd.metadataManager.writeFileMetadataByTask(task)
+	return cd.metadataManager.writeFileMetadataByTask(seedTask)
 }
 
 /*
@@ -222,38 +222,38 @@ func (cd *cacheDetector) resetCache(task *types.SeedTask) (*storage.FileMetadata
 */
 
 // checkMetadata check whether meta file is modified
-func checkMetadata(task *types.SeedTask, metadata *storage.FileMetadata) (bool, string) {
-	if task == nil || metadata == nil {
-		return false, fmt.Sprintf("task or metadata is nil, task: %v, metadata: %v", task, metadata)
+func checkMetadata(seedTask *task.SeedTask, metadata *storage.FileMetadata) (bool, string) {
+	if seedTask == nil || metadata == nil {
+		return false, fmt.Sprintf("task or metadata is nil, task: %v, metadata: %v", seedTask, metadata)
 	}
 
-	if metadata.TaskID != task.ID {
-		return false, fmt.Sprintf("metadata TaskID(%s) is not equals with task ID(%s)", metadata.TaskID, task.ID)
+	if metadata.TaskID != seedTask.ID {
+		return false, fmt.Sprintf("metadata TaskID(%s) is not equals with task ID(%s)", metadata.TaskID, seedTask.ID)
 	}
 
-	if metadata.TaskURL != task.TaskURL {
-		return false, fmt.Sprintf("metadata taskURL(%s) is not equals with task taskURL(%s)", metadata.TaskURL, task.TaskURL)
+	if metadata.TaskURL != seedTask.TaskURL {
+		return false, fmt.Sprintf("metadata taskURL(%s) is not equals with task taskURL(%s)", metadata.TaskURL, seedTask.TaskURL)
 	}
 
-	if metadata.PieceSize != task.PieceSize {
-		return false, fmt.Sprintf("metadata piece size(%d) is not equals with task piece size(%d)", metadata.PieceSize, task.PieceSize)
+	if metadata.PieceSize != seedTask.PieceSize {
+		return false, fmt.Sprintf("metadata piece size(%d) is not equals with task piece size(%d)", metadata.PieceSize, seedTask.PieceSize)
 	}
 
-	if task.Range != metadata.Range {
-		return false, fmt.Sprintf("metadata range(%s) is not equals with task range(%s)", metadata.Range, task.Range)
+	if seedTask.Range != metadata.Range {
+		return false, fmt.Sprintf("metadata range(%s) is not equals with task range(%s)", metadata.Range, seedTask.Range)
 	}
 
-	if task.Digest != metadata.Digest {
+	if seedTask.Digest != metadata.Digest {
 		return false, fmt.Sprintf("meta digest(%s) is not equals with task request digest(%s)",
-			metadata.SourceRealDigest, task.Digest)
+			metadata.SourceRealDigest, seedTask.Digest)
 	}
 
-	if task.Tag != metadata.Tag {
-		return false, fmt.Sprintf("metadata tag(%s) is not equals with task tag(%s)", metadata.Range, task.Range)
+	if seedTask.Tag != metadata.Tag {
+		return false, fmt.Sprintf("metadata tag(%s) is not equals with task tag(%s)", metadata.Range, seedTask.Range)
 	}
 
-	if task.Filter != metadata.Filter {
-		return false, fmt.Sprintf("metadata filter(%s) is not equals with task filter(%s)", metadata.Filter, task.Filter)
+	if seedTask.Filter != metadata.Filter {
+		return false, fmt.Sprintf("metadata filter(%s) is not equals with task filter(%s)", metadata.Filter, seedTask.Filter)
 	}
 	return true, ""
 }
