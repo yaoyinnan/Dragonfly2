@@ -19,18 +19,18 @@ package cdn
 import (
 	"context"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
 type reporter struct {
-	progressManager supervisor.SeedProgressManager
-	taskManager     supervisor.SeedTaskManager
+	progressManager progress.Manager
+	taskManager     task.Manager
 }
 
 const (
@@ -38,7 +38,7 @@ const (
 	DownloaderReport = "download"
 )
 
-func newReporter(publisher supervisor.SeedProgressManager) *reporter {
+func newReporter(publisher progress.Manager) *reporter {
 	return &reporter{
 		progressManager: publisher,
 	}
@@ -71,8 +71,8 @@ func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, re
 /*
 	helper functions
 */
-func convertPieceMeta2SeedPiece(record *storage.PieceMetaRecord) *types.SeedPiece {
-	return &types.SeedPiece{
+func convertPieceMeta2SeedPiece(record *storage.PieceMetaRecord) *progress.SeedPiece {
+	return &progress.SeedPiece{
 		PieceStyle:  record.PieceStyle,
 		PieceNum:    record.PieceNum,
 		PieceMd5:    record.Md5,

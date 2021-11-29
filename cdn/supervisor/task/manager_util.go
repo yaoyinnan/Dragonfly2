@@ -21,83 +21,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"d7y.io/dragonfly/v2/cdn/cdnutil"
-	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
-
-// addOrUpdateTask adds a new task or update exist task
-func (tm *manager) addOrUpdateTask(registerTask *SeedTask) (update bool, err error) {
-	update = false
-	synclock.Lock(registerTask.ID, true)
-	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
-		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
-			synclock.UnLock(registerTask.ID, true)
-			// TODO 校验Header
-			return update, errors.Errorf("hit unreachable resource %s cache and interval less than %d", registerTask.TaskURL, tm.cfg.FailAccessInterval)
-		}
-		tm.taskURLUnreachableStore.Delete(registerTask.ID)
-		logger.Debugf("delete taskID: %s from unreachable url list", registerTask.ID)
-	}
-	if actual, loaded := tm.taskStore.LoadOrStore(registerTask.ID, registerTask); loaded {
-		update = true
-		existTask := actual.(*SeedTask)
-		if checkSame(existTask, registerTask) {
-			synclock.UnLock(registerTask.ID, true)
-			return update, errors.Errorf("register task %v is conflict with exist task %v", registerTask, existTask)
-		}
-	}
-	// using the existing task if it already exists corresponding to taskID
-	task, ok := tm.getTask(registerTask.ID)
-	if !ok {
-		synclock.UnLock(registerTask.ID, true)
-		return update, errTaskNotFound
-	}
-	if task.SourceFileLength != UnKnownSourceFileLen {
-		synclock.UnLock(registerTask.ID, true)
-		return update, nil
-	}
-	synclock.UnLock(registerTask.ID, true)
-	synclock.Lock(registerTask.ID, false)
-	defer synclock.UnLock(registerTask.ID, false)
-	if task.SourceFileLength != UnKnownSourceFileLen {
-		return update, nil
-	}
-	// get sourceContentLength with req.Header
-	contentLengthRequest, err := source.NewRequestWithHeader(registerTask.RawURL, registerTask.Header)
-	if err != nil {
-		return update, errors.Wrap(err, "create content length request")
-	}
-	// add range info
-	if stringutils.IsBlank(registerTask.Range) {
-		contentLengthRequest.Header.Add(source.Range, registerTask.Range)
-	}
-	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
-	if err != nil {
-		registerTask.Log().Errorf("get url (%s) content length failed: %v", registerTask.RawURL, err)
-		if source.IsResourceNotReachableError(err) {
-			tm.taskURLUnreachableStore.Store(registerTask, time.Now())
-		}
-		return update, err
-	}
-	// if not support file length header request ,return -1
-	task.SourceFileLength = sourceFileLength
-	task.Log().Debugf("success get file content length: %d", sourceFileLength)
-
-	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
-	if registerTask.Header != nil {
-		task.Header = registerTask.Header
-	}
-
-	// calculate piece size and update the PieceSize and PieceTotal
-	if registerTask.PieceSize <= 0 {
-		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
-		task.PieceSize = pieceSize
-	}
-	return update, nil
-}
 
 // updateTask updates task
 func (tm *manager) updateTask(taskID string, updateTaskInfo *SeedTask) error {
@@ -170,8 +95,8 @@ func (tm *manager) getTaskUnreachableTime(taskID string) (time.Time, bool) {
 	return unreachableTime.(time.Time), true
 }
 
-// checkSame check if task1 is same with task2
-func checkSame(task1, task2 *SeedTask) bool {
+// IsSame check if task1 is same with task2
+func IsSame(task1, task2 *SeedTask) bool {
 	if task1 == task2 {
 		return true
 	}

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-// Package timeutils provides utilities supplementing the standard 'time' package.
+// Package structutils provides utilities supplementing the standard 'time' package.
+
 package structutils
 
 import (
@@ -32,54 +33,4 @@ func StructToMap(t interface{}) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
-}
-
-func TestComputePieceSize(t *testing.T) {
-	type args struct {
-		length int64
-	}
-	tests := []struct {
-		name string
-		args args
-		want int32
-	}{
-		{
-			name: "length equal 200M and get default piece size",
-			args: args{
-				length: 200 * 1024 * 1024,
-			},
-			want: config.DefaultPieceSize,
-		}, {
-			name: "length smaller than 200M and get default piece size",
-			args: args{
-				length: 100 * 1024 * 1024,
-			},
-			want: config.DefaultPieceSize,
-		}, {
-			name: "length greater than 200M",
-			args: args{
-				length: 205 * 1024 * 1024,
-			},
-			want: config.DefaultPieceSize,
-		}, {
-			name: "length greater than 300M",
-			args: args{
-				length: 310 * 1024 * 1024,
-			},
-			want: config.DefaultPieceSize + 1,
-		}, {
-			name: "length reach piece size limit",
-			args: args{
-				length: 3100 * 1024 * 1024,
-			},
-			want: config.DefaultPieceSizeLimit,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ComputePieceSize(tt.args.length); got != tt.want {
-				t.Errorf("ComputePieceSize() = %v, want %v", got, tt.want)
-			}
-		})
-	}
 }

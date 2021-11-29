@@ -22,23 +22,23 @@ import (
 	"strings"
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
 
 type Cleaner struct {
-	cfg            *GCConfig
+	cfg            GCConfig
 	driver         storedriver.Driver
 	taskManager    task.Manager
 	storageManager Manager
 }
 
-func NewStorageCleaner(cfg *GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner, error) {
+func NewStorageCleaner(cfg GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner, error) {
 	return &Cleaner{
 		cfg:            cfg,
 		driver:         driver,

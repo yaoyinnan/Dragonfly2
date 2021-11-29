@@ -61,9 +61,9 @@ type TaskStorageDriver interface {
 	// Store stores task data to the target path
 	Store(ctx context.Context, req *StoreRequest) error
 
-	ValidateDigest(req *PeerTaskMetaData) error
+	ValidateDigest(req *PeerTaskMetadata) error
 
-	IsInvalid(req *PeerTaskMetaData) (bool, error)
+	IsInvalid(req *PeerTaskMetadata) (bool, error)
 }
 
 // Reclaimer stands storage reclaimer
@@ -441,9 +441,9 @@ func (s *storageManager) cleanIndex(taskID, peerID string) {
 	s.indexTask2PeerTask[taskID] = remain
 }
 
-func (s *storageManager) ValidateDigest(req *PeerTaskMetaData) error {
+func (s *storageManager) ValidateDigest(req *PeerTaskMetadata) error {
 	t, ok := s.LoadTask(
-		PeerTaskMetaData{
+		PeerTaskMetadata{
 			TaskID: req.TaskID,
 			PeerID: req.PeerID,
 		})
@@ -453,9 +453,9 @@ func (s *storageManager) ValidateDigest(req *PeerTaskMetaData) error {
 	return t.(TaskStorageDriver).ValidateDigest(req)
 }
 
-func (s *storageManager) IsInvalid(req *PeerTaskMetaData) (bool, error) {
+func (s *storageManager) IsInvalid(req *PeerTaskMetadata) (bool, error) {
 	t, ok := s.LoadTask(
-		PeerTaskMetaData{
+		PeerTaskMetadata{
 			TaskID: req.TaskID,
 			PeerID: req.PeerID,
 		})

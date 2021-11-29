@@ -23,7 +23,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 
-	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
@@ -183,14 +182,6 @@ func (mm *metadataManager) getPieceMd5Sign(taskID string) (string, []*storage.Pi
 
 func (mm *metadataManager) readFileMetadata(taskID string) (*storage.FileMetadata, error) {
 	return mm.storage.ReadFileMetadata(taskID)
-}
-
-func (mm *metadataManager) statDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
-	return mm.storage.StatDownloadFile(taskID)
-}
-
-func (mm *metadataManager) readDownloadFile(taskID string) (io.ReadCloser, error) {
-	return mm.storage.ReadDownloadFile(taskID)
 }
 
 func (mm *metadataManager) resetRepo(seedTask *task.SeedTask) error {

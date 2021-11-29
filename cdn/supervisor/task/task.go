@@ -18,10 +18,10 @@ package task
 
 import (
 	"strings"
-	"time"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
+	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 )
 
@@ -63,9 +63,6 @@ type SeedTask struct {
 	// PieceMd5Sign Is the SHA256 signature of all pieces md5 signature
 	PieceMd5Sign string `json:"pieceMd5Sign,omitempty"`
 
-	// AccessTime is last access time of task
-	AccessTime time.Time `json:"accessTime,omitempty"`
-
 	// Digest checks integrity of url content, for example md5:xxx or sha256:yyy
 	Digest string `json:"digest,omitempty"`
 
@@ -85,7 +82,6 @@ type SeedTask struct {
 }
 
 const (
-	UnKnownSourceFileLen   = -1
 	UnknownTotalPieceCount = -1
 )
 
@@ -97,14 +93,13 @@ func NewSeedTask(taskID string, rawURL string, urlMeta *base.UrlMeta) *SeedTask 
 		ID:               taskID,
 		RawURL:           rawURL,
 		TaskURL:          urlutils.FilterURLParam(rawURL, strings.Split(urlMeta.Filter, "&")),
-		SourceFileLength: UnKnownSourceFileLen,
+		SourceFileLength: source.UnKnownSourceFileLen,
 		CdnFileLength:    0,
 		PieceSize:        0,
-		CdnStatus:        TaskInfoCdnStatusWaiting,
+		CdnStatus:        StatusWaiting,
 		TotalPieceCount:  UnknownTotalPieceCount,
 		SourceRealDigest: "",
 		PieceMd5Sign:     "",
-		AccessTime:       time.Now(),
 		Digest:           urlMeta.Digest,
 		Tag:              urlMeta.Tag,
 		Range:            urlMeta.Range,
@@ -127,28 +122,28 @@ func (task *SeedTask) Clone() *SeedTask {
 
 // IsSuccess determines that whether the CDNStatus is success.
 func (task *SeedTask) IsSuccess() bool {
-	return task.CdnStatus == TaskInfoCdnStatusSuccess
+	return task.CdnStatus == StatusSuccess
 }
 
 // IsFrozen if task status is frozen
 func (task *SeedTask) IsFrozen() bool {
-	return task.CdnStatus == TaskInfoCdnStatusFailed ||
-		task.CdnStatus == TaskInfoCdnStatusWaiting ||
-		task.CdnStatus == TaskInfoCdnStatusSourceError
+	return task.CdnStatus == StatusFailed ||
+		task.CdnStatus == StatusWaiting ||
+		task.CdnStatus == StatusSourceError
 }
 
 // IsWait if task status is wait
 func (task *SeedTask) IsWait() bool {
-	return task.CdnStatus == TaskInfoCdnStatusWaiting
+	return task.CdnStatus == StatusWaiting
 }
 
 // IsError if task status if fail
 func (task *SeedTask) IsError() bool {
-	return task.CdnStatus == TaskInfoCdnStatusFailed || task.CdnStatus == TaskInfoCdnStatusSourceError
+	return task.CdnStatus == StatusFailed || task.CdnStatus == StatusSourceError
 }
 
 func (task *SeedTask) IsDone() bool {
-	return task.CdnStatus == TaskInfoCdnStatusFailed || task.CdnStatus == TaskInfoCdnStatusSuccess || task.CdnStatus == TaskInfoCdnStatusSourceError
+	return task.CdnStatus == StatusFailed || task.CdnStatus == StatusSuccess || task.CdnStatus == StatusSourceError
 }
 
 func (task *SeedTask) UpdateStatus(cdnStatus string) {
@@ -172,18 +167,18 @@ func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
 
 const (
 
-	// TaskInfoCdnStatusWaiting captures enum value "WAITING"
-	TaskInfoCdnStatusWaiting string = "WAITING"
+	// StatusWaiting captures enum value "WAITING"
+	StatusWaiting string = "WAITING"
 
-	// TaskInfoCdnStatusRunning captures enum value "RUNNING"
-	TaskInfoCdnStatusRunning string = "RUNNING"
+	// StatusRunning captures enum value "RUNNING"
+	StatusRunning string = "RUNNING"
 
-	// TaskInfoCdnStatusFailed captures enum value "FAILED"
-	TaskInfoCdnStatusFailed string = "FAILED"
+	// StatusFailed captures enum value "FAILED"
+	StatusFailed string = "FAILED"
 
-	// TaskInfoCdnStatusSuccess captures enum value "SUCCESS"
-	TaskInfoCdnStatusSuccess string = "SUCCESS"
+	// StatusSuccess captures enum value "SUCCESS"
+	StatusSuccess string = "SUCCESS"
 
-	// TaskInfoCdnStatusSourceError captures enum value "SOURCE_ERROR"
-	TaskInfoCdnStatusSourceError string = "SOURCE_ERROR"
+	// StatusSourceError captures enum value "SOURCE_ERROR"
+	StatusSourceError string = "SOURCE_ERROR"
 )

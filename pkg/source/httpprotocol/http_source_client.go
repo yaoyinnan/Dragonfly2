@@ -27,7 +27,6 @@ import (
 
 	"github.com/go-http-utils/headers"
 
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
@@ -119,12 +118,12 @@ func WithHTTPClient(client *http.Client) HTTPSourceClientOption {
 func (client *httpSourceClient) GetContentLength(request *source.Request) (int64, error) {
 	resp, err := client.doRequest(http.MethodGet, request)
 	if err != nil {
-		return types.UnKnownSourceFileLen, err
+		return source.UnKnownSourceFileLen, err
 	}
 	defer resp.Body.Close()
 	err = source.CheckRespCode(resp.StatusCode, []int{http.StatusOK, http.StatusPartialContent})
 	if err != nil {
-		return types.UnKnownSourceFileLen, err
+		return source.UnKnownSourceFileLen, err
 	}
 	return resp.ContentLength, nil
 }

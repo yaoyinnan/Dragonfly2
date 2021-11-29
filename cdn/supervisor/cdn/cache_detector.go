@@ -19,6 +19,7 @@ package cdn
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
@@ -38,6 +39,7 @@ import (
 // cacheDetector detect task cache
 type cacheDetector struct {
 	metadataManager *metadataManager
+	storageManager  storage.Manager
 }
 
 // cacheResult cache result of detect
@@ -48,13 +50,18 @@ type cacheResult struct {
 }
 
 func (result *cacheResult) String() string {
-	return fmt.Sprintf("{breakNum: %d, pieceMetaRecords: %+v, fileMetadata: %+v}", result.breakPoint, result.pieceMetaRecords, result.fileMetadata)
+	bytes, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("marshal cacheResult failed: %v", err)
+	}
+	return string(bytes)
 }
 
 // newCacheDetector create a new cache detector
-func newCacheDetector(metadataManager *metadataManager) *cacheDetector {
+func newCacheDetector(metadataManager *metadataManager, storageManager storage.Manager) *cacheDetector {
 	return &cacheDetector{
 		metadataManager: metadataManager,
+		storageManager:  storageManager,
 	}
 }
 
@@ -67,7 +74,9 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 	}()
 	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {
-		seedTask.Log().Infof("detect cache failed, start reset storage cache: %v", err)
+		if err != storage.ErrTaskNotPersisted {
+			seedTask.Log().Infof("detect cache failed, reset storage cache: %v", err)
+		}
 		metadata, err := cd.resetCache(seedTask)
 		if err != nil {
 			return nil, errors.Wrapf(err, "reset cache failed")
@@ -84,6 +93,9 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 
 // doDetect do the actual detect action which detects file metadata and pieces metadata of specific task
 func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, fileDigest hash.Hash) (*cacheResult, error) {
+	if _, err := cd.storageManager.StatDownloadFile(seedTask.ID); err != nil {
+		return nil, err
+	}
 	fileMetadata, err := cd.metadataManager.readFileMetadata(seedTask.ID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read file metadata")
@@ -91,7 +103,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, 
 	if ok, cause := checkMetadata(seedTask, fileMetadata); !ok {
 		return nil, errors.Errorf("fileMetadata has been modified: %s", cause)
 	}
-	checkExpiredRequest, err := source.NewRequestWithHeader(seedTask.RawURL, seedTask.Header)
+	checkExpiredRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create request")
 	}
@@ -115,7 +127,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, 
 	}
 	// check if the resource supports range request. if so,
 	// detect the cache situation by reading piece meta and data file
-	checkSupportRangeRequest, err := source.NewRequestWithHeader(seedTask.RawURL, seedTask.Header)
+	checkSupportRangeRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create check support range request")
 	}
@@ -145,7 +157,7 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 	if fileMetadata.PieceMd5Sign != "" && md5Sign != fileMetadata.PieceMd5Sign {
 		return nil, errors.Errorf("piece md5 sign is inconsistent, expected is %s, but got %s", fileMetadata.PieceMd5Sign, md5Sign)
 	}
-	storageInfo, err := cd.metadataManager.statDownloadFile(taskID)
+	storageInfo, err := cd.storageManager.StatDownloadFile(taskID)
 	if err != nil {
 		return nil, errors.Wrap(err, "stat download file info")
 	}
@@ -162,7 +174,7 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 
 // parseByReadFile detect cache by read pieceMeta and data files of task
 func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileMetadata, fileDigest hash.Hash) (*cacheResult, error) {
-	reader, err := cd.metadataManager.readDownloadFile(taskID)
+	reader, err := cd.storageManager.ReadDownloadFile(taskID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read download data file")
 	}
@@ -199,9 +211,9 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 	//		fileMd5:          fileMd5,
 	//	}, nil
 	//}
-	// TODO 整理数据文件 truncate breakpoint之后的数据内容
+	// TODO 整理数据文件 truncate breakpoint 之后的数据内容
 	return &cacheResult{
-		breakPoint:       int64(breakPoint),
+		breakPoint:       breakPoint,
 		pieceMetaRecords: pieceMetaRecords,
 		fileMetadata:     metadata,
 	}, nil

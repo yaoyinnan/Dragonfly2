@@ -210,7 +210,11 @@ func (s *diskStorageManager) ReadDownloadFile(taskID string) (io.ReadCloser, err
 }
 
 func (s *diskStorageManager) StatDownloadFile(taskID string) (*storedriver.StorageInfo, error) {
-	return s.diskDriver.Stat(storage.GetDownloadRaw(taskID))
+	storageInfo, err := s.diskDriver.Stat(storage.GetDownloadRaw(taskID))
+	if err != nil && os.IsNotExist(err) {
+		return nil, storage.ErrTaskNotPersisted
+	}
+	return storageInfo, err
 }
 
 func (s *diskStorageManager) CreateUploadLink(taskID string) error {

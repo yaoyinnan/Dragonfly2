@@ -27,3 +27,22 @@ type Config struct {
 	// default: 200 MB, in format of G(B)/g/M(B)/m/K(B)/k/B, pure number will also be parsed as Byte.
 	MaxBandwidth unit.Bytes `yaml:"maxBandwidth" mapstructure:"maxBandwidth"`
 }
+
+func (c Config) applyDefaults() Config {
+	if c.SystemReservedBandwidth == 0 {
+		c.SystemReservedBandwidth = DefaultSystemReservedBandwidth
+	}
+	if c.MaxBandwidth == 0 {
+		c.MaxBandwidth = DefaultMaxBandwidth
+	}
+	return c
+}
+
+const (
+	// DefaultSystemReservedBandwidth is the default network bandwidth reserved for system software.
+	// unit: MB/s
+	DefaultSystemReservedBandwidth = 20 * unit.MB
+	// DefaultMaxBandwidth is the default network bandwidth that cdn can use.
+	// unit: MB/s
+	DefaultMaxBandwidth = 1 * unit.GB
+)

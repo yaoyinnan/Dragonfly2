@@ -412,7 +412,7 @@ func (pm *pieceManager) DownloadSource(ctx context.Context, pt Task, request *sc
 
 	if err := pm.storageManager.UpdateTask(ctx,
 		&storage.UpdateTaskRequest{
-			PeerTaskMetaData: storage.PeerTaskMetaData{
+			PeerTaskMetadata: storage.PeerTaskMetadata{
 				PeerID: pt.GetPeerID(),
 				TaskID: pt.GetTaskID(),
 			},

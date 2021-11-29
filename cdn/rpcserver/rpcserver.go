@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"d7y.io/dragonfly/v2/pkg/source"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -43,16 +44,16 @@ import (
 var tracer = otel.Tracer("cdn-server")
 
 type server struct {
-	rpcServer  *grpc.Server
-	cfg        *config.Config
-	cdnService supervisor.CDNService
+	rpcServer *grpc.Server
+	cfg       *config.Config
+	service   supervisor.CDNService
 }
 
 // New returns a new Manager Object.
 func New(cfg *config.Config, cdnService supervisor.CDNService, opts ...grpc.ServerOption) (*grpc.Server, error) {
 	svr := &server{
-		cdnService: cdnService,
-		cfg:        cfg,
+		service: cdnService,
+		cfg:     cfg,
 	}
 	svr.rpcServer = cdnserver.New(svr, opts...)
 	return svr.rpcServer, nil
@@ -97,7 +98,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		return err
 	}
 	// register seed task
-	pieceChan, err := css.cdnService.RegisterSeedTask(ctx, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
+	pieceChan, err := css.service.RegisterSeedTask(ctx, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
 	if err != nil {
 		if supervisor.IsResourcesLacked(err) {
 			err = dferrors.Newf(base.Code_ResourceLacked, "resources lacked for task(%s): %v", req.TaskId, err)
@@ -123,11 +124,11 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 				PieceStyle:  piece.PieceStyle,
 			},
 			Done:            false,
-			ContentLength:   task.UnKnownSourceFileLen,
+			ContentLength:   source.UnKnownSourceFileLen,
 			TotalPieceCount: task.UnknownTotalPieceCount,
 		}
 	}
-	seedTask, err := css.cdnService.GetSeedTask(req.TaskId)
+	seedTask, err := css.service.GetSeedTask(req.TaskId)
 	if err != nil {
 		err = dferrors.Newf(base.Code_CDNError, "failed to get task(%s): %v", req.TaskId, err)
 		if task.IsTaskNotFound(err) {
@@ -174,7 +175,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	seedTask, err := css.cdnService.GetSeedTask(req.TaskId)
+	seedTask, err := css.service.GetSeedTask(req.TaskId)
 	if err != nil {
 		if task.IsTaskNotFound(err) {
 			err = dferrors.Newf(base.Code_CDNTaskNotFound, "failed to get task(%s): %v", req.TaskId, err)
@@ -190,7 +191,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		span.RecordError(err)
 		return nil, err
 	}
-	pieces, err := css.cdnService.GetPieces(req.TaskId)
+	pieces, err := css.service.GetSeedPieces(req.TaskId)
 	if err != nil {
 		err = dferrors.Newf(base.Code_CDNError, "failed to get pieces of task(%s) from cdn: %v", seedTask.ID, err)
 		span.RecordError(err)

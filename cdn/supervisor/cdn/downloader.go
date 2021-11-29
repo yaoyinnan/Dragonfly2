@@ -41,7 +41,7 @@ func (cm *manager) download(ctx context.Context, seedTask *task.SeedTask, breakP
 	}
 	seedTask.Log().Infof("start download url %s at range: %d-%d: with header: %+v", seedTask.RawURL, breakPoint,
 		seedTask.SourceFileLength, seedTask.Range)
-	downloadRequest, err := source.NewRequestWithHeader(seedTask.RawURL, seedTask.Header)
+	downloadRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
 	if err != nil {
 		return nil, errors.Wrap(err, "create download request")
 	}

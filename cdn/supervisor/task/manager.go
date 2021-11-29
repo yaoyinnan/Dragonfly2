@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-//go:generate mockgen -destination ./mock/mock_task_manager.go -package mock d7y.io/dragonfly/v2/cdn/supervisor/task SeedTaskManager
+//go:generate mockgen -destination ../mocks/task/mock_task_manager.go -package task d7y.io/dragonfly/v2/cdn/supervisor/task Manager
+
 package task
 
 import (
 	"sync"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
+	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 	"github.com/pkg/errors"
 )
 
@@ -34,33 +38,37 @@ type Manager interface {
 
 	// AddOrUpdate update existing task info for the key if present.
 	// Otherwise, it stores and returns the given value.
-	// The loaded result is true if the value was loaded, false if stored.
-	AddOrUpdate(registerTask *SeedTask) (bool, error)
+	// The isUpdate result is true if the value was updated, false if added.
+	AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err error)
 
 	// Get returns the task info with specified taskID, or nil if no
 	// value is present.
 	// The ok result indicates whether value was found in the taskManager.
-	Get(taskID string) (*SeedTask, error)
+	Get(taskID string) (seedTask *SeedTask, err error)
 
 	// Update the task info with specified taskID and updateTask
-	Update(taskID string, updateTask *SeedTask) error
+	Update(taskID string, updateTask *SeedTask) (err error)
 
 	// Exist check task existence with specified taskID.
 	// returns the task info with specified taskID, or nil if no value is present.
 	// The ok result indicates whether value was found in the taskManager.
-	Exist(taskID string) (*SeedTask, bool)
+	Exist(taskID string) (seedTask *SeedTask, ok bool)
 
 	// Delete a task with specified taskID.
 	Delete(taskID string)
 }
 
-// Ensure that manager implements the SeedTaskManager and gcExecutor interfaces
+// Ensure that manager implements the Manager and gc.Executor interfaces
 var (
 	_ Manager     = (*manager)(nil)
 	_ gc.Executor = (*manager)(nil)
 )
 
-var errTaskNotFound = errors.New("task is not found")
+var (
+	errTaskNotFound   = errors.New("task is not found")
+	errURLUnreachable = errors.New("url is unreachable")
+	errTaskIDConflict = errors.New("taskID is conflict")
+)
 
 func IsTaskNotFound(err error) bool {
 	return errors.Is(err, errTaskNotFound)
@@ -68,7 +76,7 @@ func IsTaskNotFound(err error) bool {
 
 // manager is an implementation of the interface of Manager.
 type manager struct {
-	cfg                     *Config
+	cfg                     Config
 	taskStore               sync.Map
 	accessTimeMap           sync.Map
 	taskURLUnreachableStore sync.Map
@@ -77,20 +85,75 @@ type manager struct {
 // NewManager returns a new Manager Object.
 func NewManager(cfg Config) (Manager, error) {
 	taskManager := &manager{
-		cfg: &cfg,
+		cfg: cfg.applyDefaults(),
 	}
 	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, taskManager)
 	return taskManager, nil
 }
 
-func (tm *manager) AddOrUpdate(registerTask *SeedTask) (update bool, err error) {
-	// add a new task or update a exist task
-	update, err = tm.addOrUpdateTask(registerTask)
-	// only update access when add task success
-	if err == nil {
-		tm.accessTimeMap.Store(registerTask.ID, time.Now())
+func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err error) {
+	defer func() {
+		if err != nil {
+			tm.accessTimeMap.Store(registerTask.ID, time.Now())
+		}
+	}()
+	synclock.Lock(registerTask.ID, true)
+	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
+		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
+			synclock.UnLock(registerTask.ID, true)
+			// TODO 校验Header
+			return nil, errURLUnreachable
+		}
+		logger.Debugf("delete taskID: %s from unreachable url list", registerTask.ID)
+		tm.taskURLUnreachableStore.Delete(registerTask.ID)
 	}
-	return
+	actual, loaded := tm.taskStore.LoadOrStore(registerTask.ID, registerTask)
+	seedTask = actual.(*SeedTask)
+	if loaded && !IsSame(seedTask, registerTask) {
+		synclock.UnLock(registerTask.ID, true)
+		return nil, errors.Wrapf(errTaskIDConflict, "register task %v is conflict with exist task %v", registerTask, seedTask)
+	}
+	if seedTask.SourceFileLength != source.UnKnownSourceFileLen {
+		synclock.UnLock(registerTask.ID, true)
+		return seedTask, nil
+	}
+	synclock.UnLock(registerTask.ID, true)
+	synclock.Lock(registerTask.ID, false)
+	defer synclock.UnLock(registerTask.ID, false)
+	if seedTask.SourceFileLength != source.UnKnownSourceFileLen {
+		return seedTask, nil
+	}
+	// get sourceContentLength with req.Header
+	contentLengthRequest, err := source.NewRequestWithHeader(registerTask.RawURL, registerTask.Header)
+	if err != nil {
+		return nil, err
+	}
+	// add range info
+	if stringutils.IsBlank(registerTask.Range) {
+		contentLengthRequest.Header.Add(source.Range, registerTask.Range)
+	}
+	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
+	if err != nil {
+		registerTask.Log().Errorf("get url (%s) content length failed: %v", registerTask.RawURL, err)
+		if source.IsResourceNotReachableError(err) {
+			tm.taskURLUnreachableStore.Store(registerTask, time.Now())
+		}
+		return seedTask, err
+	}
+	seedTask.SourceFileLength = sourceFileLength
+	seedTask.Log().Debugf("success get file content length: %d", sourceFileLength)
+
+	// if success to get the information successfully with the req.Header then update the task.UrlMeta to registerTask.UrlMeta.
+	if registerTask.Header != nil {
+		seedTask.Header = registerTask.Header
+	}
+
+	// calculate piece size and update the PieceSize and PieceTotal
+	if registerTask.PieceSize <= 0 {
+		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
+		seedTask.PieceSize = pieceSize
+	}
+	return seedTask, nil
 }
 
 func (tm *manager) Get(taskID string) (*SeedTask, error) {

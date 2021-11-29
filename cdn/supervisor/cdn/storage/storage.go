@@ -24,11 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
+	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
@@ -38,12 +38,16 @@ var (
 	m = make(map[string]Builder)
 )
 
+var (
+	ErrTaskNotPersisted = errors.New("task is not persisted")
+)
+
 type Manager interface {
 
 	// ResetRepo reset the storage of task
 	ResetRepo(task *task.SeedTask) error
 
-	// StatDownloadFile stat download file info
+	// StatDownloadFile stat download file info, if task file is not exist on storage, return errTaskNotPersisted
 	StatDownloadFile(taskID string) (*storedriver.StorageInfo, error)
 
 	// WriteDownloadFile write data to download file

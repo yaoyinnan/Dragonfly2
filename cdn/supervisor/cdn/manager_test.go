@@ -32,7 +32,8 @@ import (
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/supervisor/mock"
+	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
+	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -56,15 +57,19 @@ func (suite *CDNManagerTestSuite) SetupSuite() {
 	suite.workHome, _ = ioutil.TempDir("/tmp", "cdn-ManagerTestSuite-")
 	fmt.Printf("workHome: %s", suite.workHome)
 	suite.Nil(plugins.Initialize(NewPlugins(suite.workHome)))
-	storagerManager, ok := storage.Get(config.DefaultStorageMode)
-	if !ok {
+	storageManagerBuilder := storage.Get(config.DefaultStorageMode)
+	if storageManagerBuilder == nil {
 		suite.Failf("failed to get storage mode %s", config.DefaultStorageMode)
 	}
 	ctrl := gomock.NewController(suite.T())
-	progressManager := mock.NewMockSeedProgressManager(ctrl)
+	taskManager := taskMock.NewMockManager(ctrl)
+	storageManager, err := storageManagerBuilder.Build(storage.Config{}, taskManager)
+	suite.Require().NotNil(err)
+
+	progressManager := progressMock.NewMockManager(ctrl)
 	progressManager.EXPECT().PublishPiece(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(98 * 2)
 	progressManager.EXPECT().PublishPiece(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(98 * 2)
-	suite.cm, _ = newManager(config.New(), storagerManager, progressManager)
+	suite.cm, _ = NewManager(Config{}.applyDefaults(), storageManager, progressManager, taskManager)
 }
 
 var (
@@ -147,7 +152,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    0,
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
-				CdnStatus:        task.TaskInfoCdnStatusRunning,
+				CdnStatus:        task.StatusRunning,
 				TotalPieceCount:  0,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "",
@@ -161,7 +166,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    9789,
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
-				CdnStatus:        task.TaskInfoCdnStatusSuccess,
+				CdnStatus:        task.StatusSuccess,
 				TotalPieceCount:  0,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "md5:f1e2488bba4d1267948d9e2f7008571c",
@@ -178,7 +183,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    0,
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
-				CdnStatus:        task.TaskInfoCdnStatusRunning,
+				CdnStatus:        task.StatusRunning,
 				TotalPieceCount:  0,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "",
@@ -192,7 +197,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				CdnFileLength:    9789,
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
-				CdnStatus:        task.TaskInfoCdnStatusSuccess,
+				CdnStatus:        task.StatusSuccess,
 				TotalPieceCount:  0,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",

@@ -54,7 +54,7 @@ func (mr *MockTaskStorageDriverMockRecorder) GetPieces(ctx, req interface{}) *go
 }
 
 // IsInvalid mocks base method.
-func (m *MockTaskStorageDriver) IsInvalid(req *storage.PeerTaskMetaData) (bool, error) {
+func (m *MockTaskStorageDriver) IsInvalid(req *storage.PeerTaskMetadata) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsInvalid", req)
 	ret0, _ := ret[0].(bool)
@@ -128,7 +128,7 @@ func (mr *MockTaskStorageDriverMockRecorder) UpdateTask(ctx, req interface{}) *g
 }
 
 // ValidateDigest mocks base method.
-func (m *MockTaskStorageDriver) ValidateDigest(req *storage.PeerTaskMetaData) error {
+func (m *MockTaskStorageDriver) ValidateDigest(req *storage.PeerTaskMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateDigest", req)
 	ret0, _ := ret[0].(error)
@@ -298,7 +298,7 @@ func (mr *MockManagerMockRecorder) GetPieces(ctx, req interface{}) *gomock.Call 
 }
 
 // IsInvalid mocks base method.
-func (m *MockManager) IsInvalid(req *storage.PeerTaskMetaData) (bool, error) {
+func (m *MockManager) IsInvalid(req *storage.PeerTaskMetadata) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsInvalid", req)
 	ret0, _ := ret[0].(bool)
@@ -398,7 +398,7 @@ func (mr *MockManagerMockRecorder) UpdateTask(ctx, req interface{}) *gomock.Call
 }
 
 // ValidateDigest mocks base method.
-func (m *MockManager) ValidateDigest(req *storage.PeerTaskMetaData) error {
+func (m *MockManager) ValidateDigest(req *storage.PeerTaskMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateDigest", req)
 	ret0, _ := ret[0].(error)

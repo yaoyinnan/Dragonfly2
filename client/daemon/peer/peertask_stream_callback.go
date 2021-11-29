@@ -155,7 +155,7 @@ func (p *streamPeerTaskCallback) ValidateDigest(pt Task) error {
 		return nil
 	}
 	err := p.ptm.storageManager.ValidateDigest(
-		&storage.PeerTaskMetaData{
+		&storage.PeerTaskMetadata{
 			PeerID: pt.GetPeerID(),
 			TaskID: pt.GetTaskID(),
 		})

@@ -29,7 +29,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"d7y.io/dragonfly/v2/cdn/types"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
@@ -82,11 +81,15 @@ func IsNoClientFoundError(err error) bool {
 	return errors.Is(err, ErrNoClientFound)
 }
 
+const (
+	UnKnownSourceFileLen = -2
+)
+
 // ResourceClient defines the API interface to interact with source.
 type ResourceClient interface {
 
 	// GetContentLength get length of resource content
-	// return types.UnKnownSourceFileLen if response status is not StatusOK and StatusPartialContent
+	// return source.UnKnownSourceFileLen if response status is not StatusOK and StatusPartialContent
 	GetContentLength(request *Request) (int64, error)
 
 	// IsSupportRange checks if resource supports breakpoint continuation
@@ -213,7 +216,7 @@ func (c *clientWrapper) GetLastModifiedMillis(request *Request) (int64, error) {
 func GetContentLength(request *Request) (int64, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return types.UnKnownSourceFileLen, ErrNoClientFound
+		return UnKnownSourceFileLen, ErrNoClientFound
 	}
 	if _, ok := request.Context().Deadline(); !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)

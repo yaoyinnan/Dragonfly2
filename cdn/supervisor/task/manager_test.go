@@ -20,10 +20,9 @@ import (
 	"context"
 	"testing"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"github.com/stretchr/testify/suite"
 
-	"d7y.io/dragonfly/v2/cdn/config"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 )
@@ -39,7 +38,7 @@ type TaskManagerTestSuite struct {
 
 func (suite *TaskManagerTestSuite) TestRegister() {
 	dragonflyURL := "http://dragonfly.io.com?a=a&b=b&c=c"
-	tm, err := NewManager(config.New())
+	tm, err := NewManager(Config{}.applyDefaults())
 	suite.Nil(err)
 	suite.NotNil(tm)
 	type args struct {
@@ -49,7 +48,7 @@ func (suite *TaskManagerTestSuite) TestRegister() {
 	tests := []struct {
 		name          string
 		args          args
-		wantPieceChan <-chan *SeedPiece
+		wantPieceChan <-chan *progress.SeedPiece
 		wantErr       bool
 	}{
 		{

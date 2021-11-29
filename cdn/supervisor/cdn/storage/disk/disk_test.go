@@ -20,12 +20,12 @@ import (
 	"fmt"
 	"testing"
 
+	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/supervisor/mock"
 	"d7y.io/dragonfly/v2/pkg/unit"
 )
 
@@ -41,13 +41,13 @@ type DiskStorageManagerSuite struct {
 func (suite *DiskStorageManagerSuite) TestTryFreeSpace() {
 	ctrl := gomock.NewController(suite.T())
 	diskDriver := storedriver.NewMockDriver(ctrl)
-	taskManager := mock.NewMockSeedTaskManager(ctrl)
+	taskManager := taskMock.NewMockManager(ctrl)
 	suite.m = &diskStorageManager{
 		diskDriver:  diskDriver,
 		taskManager: taskManager,
 	}
 	diskDriver.EXPECT().GetTotalSpace().Return(100*unit.GB, nil)
-	cleaner, _ := storage.NewStorageCleaner(suite.m.getDefaultGcConfig(), diskDriver, suite.m, taskManager)
+	cleaner, _ := storage.NewStorageCleaner(storage.GCConfig{}, diskDriver, suite.m, taskManager)
 	suite.m.cleaner = cleaner
 
 	tests := []struct {

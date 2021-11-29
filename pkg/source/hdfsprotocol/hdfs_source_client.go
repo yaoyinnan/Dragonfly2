@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/colinmarc/hdfs/v2"
 	"github.com/go-http-utils/headers"
 	"github.com/pkg/errors"
@@ -79,11 +80,11 @@ type HDFSSourceClientOption func(p *hdfsSourceClient)
 func (h *hdfsSourceClient) GetContentLength(request *source.Request) (int64, error) {
 	hdfsClient, path, err := h.getHDFSClientAndPath(request.URL)
 	if err != nil {
-		return types.UnKnownSourceFileLen, err
+		return source.UnKnownSourceFileLen, err
 	}
 	info, err := hdfsClient.Stat(path)
 	if err != nil {
-		return types.UnKnownSourceFileLen, err
+		return source.UnKnownSourceFileLen, err
 	}
 	return info.Size(), nil
 }

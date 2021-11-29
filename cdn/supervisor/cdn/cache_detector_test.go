@@ -58,7 +58,7 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 	})
 	storageManager := storageMock.NewMockManager(ctrl)
 	cacheDataManager := newMetadataManager(storageManager)
-	suite.detector = newCacheDetector(cacheDataManager)
+	suite.detector = newCacheDetector(cacheDataManager, storageManager)
 	storageManager.EXPECT().ReadFileMetadata(fullExpiredCache.taskID).Return(fullExpiredCache.fileMeta, nil).AnyTimes()
 	storageManager.EXPECT().ReadFileMetadata(fullNoExpiredCache.taskID).Return(fullNoExpiredCache.fileMeta, nil).AnyTimes()
 	storageManager.EXPECT().ReadFileMetadata(partialNotSupportRangeCache.taskID).Return(partialNotSupportRangeCache.fileMeta, nil).AnyTimes()

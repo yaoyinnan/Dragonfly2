@@ -19,11 +19,9 @@ package config
 import (
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn/plugins"
-	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
@@ -54,66 +52,67 @@ func (c *Config) String() string {
 
 // NewDefaultPlugins creates plugin instants with default values.
 func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
-	return map[plugins.PluginType][]*plugins.PluginProperties{
-		plugins.StorageDriverPlugin: {
-			{
-				Name:   "disk",
-				Enable: true,
-				Config: &storedriver.Config{
-					BaseDir: DefaultDiskBaseDir,
-				},
-			}, {
-				Name:   "memory",
-				Enable: false,
-				Config: &storedriver.Config{
-					BaseDir: DefaultMemoryBaseDir,
-				},
-			},
-		}, plugins.StorageManagerPlugin: {
-			{
-				Name:   "disk",
-				Enable: true,
-				Config: &storage.Config{
-					GCInitialDelay: 0 * time.Second,
-					GCInterval:     15 * time.Second,
-					DriverConfigs: map[string]*storage.DriverConfig{
-						"disk": {
-							GCConfig: &storage.GCConfig{
-								YoungGCThreshold:  100 * unit.GB,
-								FullGCThreshold:   5 * unit.GB,
-								CleanRatio:        1,
-								IntervalThreshold: 2 * time.Hour,
-							}},
-					},
-				},
-			}, {
-				Name:   "hybrid",
-				Enable: false,
-				Config: &storage.Config{
-					GCInitialDelay: 0 * time.Second,
-					GCInterval:     15 * time.Second,
-					DriverConfigs: map[string]*storage.DriverConfig{
-						"disk": {
-							GCConfig: &storage.GCConfig{
-								YoungGCThreshold:  100 * unit.GB,
-								FullGCThreshold:   5 * unit.GB,
-								CleanRatio:        1,
-								IntervalThreshold: 2 * time.Hour,
-							},
-						},
-						"memory": {
-							GCConfig: &storage.GCConfig{
-								YoungGCThreshold:  100 * unit.GB,
-								FullGCThreshold:   5 * unit.GB,
-								CleanRatio:        3,
-								IntervalThreshold: 2 * time.Hour,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	return map[plugins.PluginType][]*plugins.PluginProperties{}
+	//return map[plugins.PluginType][]*plugins.PluginProperties{
+	//	plugins.StorageDriverPlugin: {
+	//		{
+	//			Name:   "disk",
+	//			Enable: true,
+	//			Config: &storedriver.Config{
+	//				BaseDir: DefaultDiskBaseDir,
+	//			},
+	//		}, {
+	//			Name:   "memory",
+	//			Enable: false,
+	//			Config: &storedriver.Config{
+	//				BaseDir: DefaultMemoryBaseDir,
+	//			},
+	//		},
+	//	}, plugins.StorageManagerPlugin: {
+	//		{
+	//			Name:   "disk",
+	//			Enable: true,
+	//			Config: &storage.Config{
+	//				GCInitialDelay: 0 * time.Second,
+	//				GCInterval:     15 * time.Second,
+	//				DriverConfigs: map[string]*storage.DriverConfig{
+	//					"disk": {
+	//						GCConfig: &storage.GCConfig{
+	//							YoungGCThreshold:  100 * unit.GB,
+	//							FullGCThreshold:   5 * unit.GB,
+	//							CleanRatio:        1,
+	//							IntervalThreshold: 2 * time.Hour,
+	//						}},
+	//				},
+	//			},
+	//		}, {
+	//			Name:   "hybrid",
+	//			Enable: false,
+	//			Config: &storage.Config{
+	//				GCInitialDelay: 0 * time.Second,
+	//				GCInterval:     15 * time.Second,
+	//				DriverConfigs: map[string]*storage.DriverConfig{
+	//					"disk": {
+	//						GCConfig: &storage.GCConfig{
+	//							YoungGCThreshold:  100 * unit.GB,
+	//							FullGCThreshold:   5 * unit.GB,
+	//							CleanRatio:        1,
+	//							IntervalThreshold: 2 * time.Hour,
+	//						},
+	//					},
+	//					"memory": {
+	//						GCConfig: &storage.GCConfig{
+	//							YoungGCThreshold:  100 * unit.GB,
+	//							FullGCThreshold:   5 * unit.GB,
+	//							CleanRatio:        3,
+	//							IntervalThreshold: 2 * time.Hour,
+	//						},
+	//					},
+	//				},
+	//			},
+	//		},
+	//	},
+	//}
 }
 
 // NewDefaultBaseProperties creates an base properties instant with default values.

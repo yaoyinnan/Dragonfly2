@@ -22,7 +22,6 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
-	"d7y.io/dragonfly/v2/cdn/types"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"github.com/pkg/errors"
 )
@@ -38,10 +37,10 @@ func IsResourcesLacked(err error) bool {
 
 type CDNService interface {
 	// RegisterSeedTask registers seed task
-	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *types.SeedPiece, error)
+	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *progress.SeedPiece, error)
 
-	// GetPieces returns pieces associated with taskID, which are sorted by pieceNum
-	GetPieces(taskID string) (pieces []*types.SeedPiece, err error)
+	// GetSeedPieces returns pieces associated with taskID, which are sorted by pieceNum
+	GetSeedPieces(taskID string) (pieces []*progress.SeedPiece, err error)
 
 	// GetSeedTask returns seed task associated with taskID
 	GetSeedTask(taskID string) (seedTask *task.SeedTask, err error)
@@ -61,8 +60,8 @@ func NewCDNService(taskManager task.Manager, cdnManager cdn.Manager, progressMan
 	}, nil
 }
 
-func (service *cdnService) RegisterTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *types.SeedPiece, error) {
-	if err := service.taskManager.AddOrUpdate(registerTask); err != nil {
+func (service *cdnService) RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *progress.SeedPiece, error) {
+	if _, err := service.taskManager.AddOrUpdate(registerTask); err != nil {
 		return nil, err
 	}
 	if err := service.triggerCdnSyncAction(ctx, registerTask.ID); err != nil {
@@ -83,11 +82,9 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 	}
 	synclock.Lock(taskID, true)
 	if seedTask.SourceFileLength > 0 {
-		ok, err := service.cdnManager.TryFreeSpace(seedTask.SourceFileLength)
-		if err != nil {
+		if ok, err := service.cdnManager.TryFreeSpace(seedTask.SourceFileLength); err != nil {
 			seedTask.Log().Errorf("failed to try free space: %v", err)
-		}
-		if !ok {
+		} else if !ok {
 			return errResourcesLacked
 		}
 	}
@@ -105,10 +102,10 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		seedTask.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", seedTask.CdnStatus)
 		return nil
 	}
-	seedTask.CdnStatus = task.TaskInfoCdnStatusRunning
+	seedTask.CdnStatus = task.StatusRunning
 	// triggerCDN goroutine
 	go func() {
-		updateTaskInfo, err := service.cdnManager.TriggerCDN(ctx, seedTask.Clone())
+		updateTaskInfo, err := service.cdnManager.TriggerCDN(context.Background(), seedTask.Clone())
 		if err != nil {
 			seedTask.Log().Errorf("trigger cdn get error: %v", err)
 		}
@@ -127,26 +124,10 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 	return nil
 }
 
-func (service *cdnService) GetPieces(taskID string) (pieces []*types.SeedPiece, err error) {
-	if seedTask, err := service.taskManager.Get(taskID); err != nil {
-		return nil, err
-	}
-	if pieces, ok := service.progressManager.GetPieces(taskID); !ok {
-		return nil, errors.New("")
-	}
+func (service *cdnService) GetSeedPieces(taskID string) ([]*progress.SeedPiece, error) {
+	return service.progressManager.GetPieces(taskID)
 }
 
 func (service *cdnService) GetSeedTask(taskID string) (*task.SeedTask, error) {
 	return service.taskManager.Get(taskID)
 }
-
-// trigger CDN
-if err := c.cdnManager.TriggerCDN(ctx, task); err != nil {
-return errors.Wrapf(err, "trigger cdn")
-}
-if task.IsResourcesLacked(err) {
-err = dferrors.Newf(dfcodes.ResourceLacked, "resources lacked for task(%s): %v", registerTask.ID, err)
-span.RecordError(err)
-return err
-}
-registerTask.Log().Infof("successfully trigger cdn sync action")

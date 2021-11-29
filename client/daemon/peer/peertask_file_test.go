@@ -19,6 +19,7 @@ package peer
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -37,7 +38,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	"d7y.io/dragonfly/v2/pkg/source"
 	sourceMock "d7y.io/dragonfly/v2/pkg/source/mock"
-	rangers "d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
 
 func TestFilePeerTask_BackSource_WithContentLength(t *testing.T) {
