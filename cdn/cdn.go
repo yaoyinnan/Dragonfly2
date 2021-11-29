@@ -65,8 +65,7 @@ type Server struct {
 
 // New creates a brand-new server instance.
 func New(cfg *config.Config) (*Server, error) {
-	s := &Server{config: cfg}
-
+	var s = &Server{config: cfg}
 	if ok := storage.IsSupport(cfg.StorageMode); !ok {
 		return nil, fmt.Errorf("os %s is not support storage mode %s", runtime.GOOS, cfg.StorageMode)
 	}

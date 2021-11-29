@@ -36,8 +36,8 @@ import (
 	"d7y.io/dragonfly/v2/pkg/synclock"
 )
 
-// SeedProgressManager as an interface defines all operations about seed progress
-type SeedProgressManager interface {
+// Manager as an interface defines all operations about seed progress
+type Manager interface {
 
 	// InitSeedProgress init task seed progress
 	InitSeedProgress(ctx context.Context, taskID string)
@@ -62,7 +62,7 @@ var _ Manager = (*manager)(nil)
 
 var ErrDataNotFound = errors.New("data not found")
 
-type Manager struct {
+type manager struct {
 	mu                   *synclock.LockerPool
 	taskManager          task.Manager
 	seedSubscribers      sync.Map
@@ -72,7 +72,7 @@ type Manager struct {
 }
 
 func NewManager(taskManager task.Manager) (Manager, error) {
-	return &Manager{
+	return &manager{
 		mu:          synclock.NewLockerPool(),
 		taskManager: taskManager,
 		timeout:     3 * time.Second,
@@ -91,7 +91,7 @@ func (pm *manager) InitSeedProgress(ctx context.Context, taskID string) {
 	}
 }
 
-func (pm *Manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan *types.SeedPiece, error) {
+func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan *types.SeedPiece, error) {
 	span := trace.SpanFromContext(ctx)
 	span.AddEvent(config.EventWatchSeedProgress)
 	logger.Debugf("begin watch taskID %s seed progress", taskID)
@@ -130,7 +130,7 @@ func (pm *Manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	return ch, nil
 }
 
-func (pm *Manager) PublishPiece(ctx context.Context, taskID string, record *types.SeedPiece) {
+func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *types.SeedPiece) {
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(record)
 	span.AddEvent(config.EventPublishPiece, trace.WithAttributes(config.AttributeSeedPiece.String(string(recordBytes))))
@@ -161,7 +161,7 @@ case <-time.After(pm.timeout):
 wg.Wait()
 return nil
 
-func (pm *Manager) Clear(taskID string) {
+func (pm *manager) Clear(taskID string) {
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
 	chanList, ok := pm.getSeedSubscribers(taskID)
@@ -183,11 +183,11 @@ func (pm *Manager) Clear(taskID string) {
 	chanList = nil
 }
 
-func (pm *Manager) GetPieces(taskID string) (records []*types.SeedPiece, ok bool) {
+func (pm *manager) GetPieces(taskID string) (records []*types.SeedPiece, ok bool) {
 	return pm.getPieceMetaRecords(taskID)
 }
 
-func (pm *Manager) getSeedSubscribers(taskID string) (*list.List, bool) {
+func (pm *manager) getSeedSubscribers(taskID string) (*list.List, bool) {
 	subscribers, ok := pm.seedSubscribers.Load(taskID)
 	if !ok {
 		return nil, false
@@ -196,14 +196,14 @@ func (pm *Manager) getSeedSubscribers(taskID string) (*list.List, bool) {
 }
 
 // addPieceMetaRecord
-func (pm *Manager) addPieceMetaRecord(taskID string, record *types.SeedPiece) {
+func (pm *manager) addPieceMetaRecord(taskID string, record *types.SeedPiece) {
 	actual, _ := pm.taskPieceMetaRecords.LoadOrStore(taskID, new(sync.Map))
 	pieceRecordMap := actual.(*sync.Map)
 	pieceRecordMap.Store(record.PieceNum, record)
 }
 
 // getPieceMetaRecords get piece meta records by taskID
-func (pm *Manager) getPieceMetaRecords(taskID string) (records []*types.SeedPiece, ok bool) {
+func (pm *manager) getPieceMetaRecords(taskID string) (records []*types.SeedPiece, ok bool) {
 	pieceRecords, ok := pm.taskPieceMetaRecords.Load(taskID)
 	if !ok {
 		return nil, false
