@@ -23,6 +23,7 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
+	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
 
 type SeedTask struct {
@@ -78,7 +79,19 @@ type SeedTask struct {
 	// Header other url header infos
 	Header map[string]string `json:"header,omitempty"`
 
+	//
+	Pieces map[int32]*PieceInfo
+
 	logger *logger.SugaredLoggerOnWith
+}
+
+type PieceInfo struct {
+	PieceNum    int32             `json:"piece_num"`
+	PieceMd5    string            `json:"piece_md_5"`
+	PieceRange  *rangeutils.Range `json:"piece_range"`
+	OriginRange *rangeutils.Range `json:"origin_range"`
+	PieceLen    int32             `json:"piece_len"`
+	PieceStyle  base.PieceStyle   `json:"piece_style"`
 }
 
 const (
@@ -163,6 +176,11 @@ func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
 		task.logger = logger.WithTaskID(task.ID)
 	}
 	return task.logger
+}
+
+func (task *SeedTask) StartTrigger() {
+	task.CdnStatus = StatusRunning
+	task.Pieces = make(map[int32]*PieceInfo)
 }
 
 const (

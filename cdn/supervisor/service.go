@@ -18,6 +18,7 @@ package supervisor
 
 import (
 	"context"
+	"sort"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
@@ -37,10 +38,10 @@ func IsResourcesLacked(err error) bool {
 
 type CDNService interface {
 	// RegisterSeedTask registers seed task
-	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *progress.SeedPiece, error)
+	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error)
 
 	// GetSeedPieces returns pieces associated with taskID, which are sorted by pieceNum
-	GetSeedPieces(taskID string) (pieces []*progress.SeedPiece, err error)
+	GetSeedPieces(taskID string) (pieces []*task.PieceInfo, err error)
 
 	// GetSeedTask returns seed task associated with taskID
 	GetSeedTask(taskID string) (seedTask *task.SeedTask, err error)
@@ -60,18 +61,14 @@ func NewCDNService(taskManager task.Manager, cdnManager cdn.Manager, progressMan
 	}, nil
 }
 
-func (service *cdnService) RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *progress.SeedPiece, error) {
+func (service *cdnService) RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error) {
 	if _, err := service.taskManager.AddOrUpdate(registerTask); err != nil {
 		return nil, err
 	}
 	if err := service.triggerCdnSyncAction(ctx, registerTask.ID); err != nil {
 		return nil, err
 	}
-	pieceChan, err := service.progressManager.WatchSeedProgress(ctx, registerTask.ID)
-	if err != nil {
-		return nil, err
-	}
-	return pieceChan, nil
+	return service.progressManager.WatchSeedProgress(ctx, registerTask.ID)
 }
 
 // triggerCdnSyncAction trigger cdn sync action
@@ -102,7 +99,8 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		seedTask.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", seedTask.CdnStatus)
 		return nil
 	}
-	seedTask.CdnStatus = task.StatusRunning
+	// TODO InitSeedProgress
+	seedTask.StartTrigger()
 	// triggerCDN goroutine
 	go func() {
 		updateTaskInfo, err := service.cdnManager.TriggerCDN(context.Background(), seedTask.Clone())
@@ -124,8 +122,19 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 	return nil
 }
 
-func (service *cdnService) GetSeedPieces(taskID string) ([]*progress.SeedPiece, error) {
-	return service.progressManager.GetPieces(taskID)
+func (service *cdnService) GetSeedPieces(taskID string) ([]*task.PieceInfo, error) {
+	pieceMap, err := service.taskManager.GetProgress(taskID)
+	if err != nil {
+		return nil, err
+	}
+	pieces := make([]*task.PieceInfo, len(pieceMap))
+	for i := range pieceMap {
+		pieces = append(pieces, pieceMap[i])
+	}
+	sort.Slice(pieces, func(i, j int) bool {
+		return pieces[i].PieceNum < pieces[j].PieceNum
+	})
+	return pieces, nil
 }
 
 func (service *cdnService) GetSeedTask(taskID string) (*task.SeedTask, error) {

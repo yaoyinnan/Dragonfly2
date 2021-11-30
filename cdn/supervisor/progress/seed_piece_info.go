@@ -15,17 +15,3 @@
  */
 
 package progress
-
-import (
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
-)
-
-type SeedPiece struct {
-	PieceStyle  base.PieceStyle   `json:"piece_style"`
-	PieceNum    int32             `json:"piece_num"`
-	PieceMd5    string            `json:"piece_md_5"`
-	PieceRange  *rangeutils.Range `json:"piece_range"`
-	OriginRange *rangeutils.Range `json:"origin_range"`
-	PieceLen    int32             `json:"piece_len"`
-}

@@ -189,8 +189,12 @@ type Config struct {
 	DriverConfigs  map[string]*DriverConfig `yaml:"driverConfigs"`
 }
 
+func (c Config) applyDefault() GCConfig {
+
+}
+
 type DriverConfig struct {
-	GCConfig *GCConfig `yaml:"gcConfig"`
+	GCConfig GCConfig `yaml:"gcConfig"`
 }
 
 // GCConfig gc config
@@ -199,4 +203,20 @@ type GCConfig struct {
 	FullGCThreshold   unit.Bytes    `yaml:"fullGCThreshold"`
 	CleanRatio        int           `yaml:"cleanRatio"`
 	IntervalThreshold time.Duration `yaml:"intervalThreshold"`
+}
+
+func (c GCConfig) applyDefaults() GCConfig {
+	if c.YoungGCThreshold == 0 {
+		c.YoungGCThreshold = DefaultGCInitialDelay
+	}
+	if c.FullGCThreshold == 0 {
+		c.FullGCThreshold = DefaultGCMetaInterval
+	}
+	if c.CleanRatio == 0 {
+		c.CleanRatio = DefaultTaskExpireTime
+	}
+	if c.IntervalThreshold == 0 {
+		c.IntervalThreshold = DefaultFailAccessInterval
+	}
+	return c
 }

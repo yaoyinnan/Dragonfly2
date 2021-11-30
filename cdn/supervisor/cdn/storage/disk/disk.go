@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
-	"d7y.io/dragonfly/v2/cdn/storedriver/local"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
@@ -50,23 +49,25 @@ var (
 type diskStorageBuilder struct{}
 
 func (b *diskStorageBuilder) Build(cfg storage.Config, taskManager task.Manager) (storage.Manager, error) {
-	// TODO apply default
+	if len(cfg.DriverConfigs) != 1 {
+		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", cfg)
+	}
 	driverNames := make([]string, len(cfg.DriverConfigs))
 	for k := range cfg.DriverConfigs {
 		driverNames = append(driverNames, k)
-	}
-	if len(driverNames) != 1 {
-		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", cfg)
 	}
 	diskDriver, ok := storedriver.Get(driverNames[0])
 	if !ok {
 		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", cfg)
 	}
-
 	storageManager := &diskStorageManager{
 		cfg:         &cfg,
 		diskDriver:  diskDriver,
 		taskManager: taskManager,
+	}
+	cleaner, err := storage.NewStorageCleaner(cfg.DriverConfigs[driverNames[0]].GCConfig, diskDriver, storageManager, taskManager)
+	if err != nil {
+		return nil, err
 	}
 	gc.Register("diskStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
 	return storageManager, nil
@@ -105,17 +106,8 @@ func (s *diskStorageManager) applyDefaults() *storage.GCConfig {
 	}
 }
 
-func (s *diskStorageManager) Initialize(taskManager task.Manager) {
-	s.taskManager = taskManager
-	diskGcConfig := s.cfg.DriverConfigs[local.DiskDriverName].GCConfig
-	if diskGcConfig == nil {
-		diskGcConfig = s.applyDefaults()
-		logger.GcLogger.With("type", "disk").Warnf("disk gc config is nil, use default gcConfig: %v", diskGcConfig)
-	}
-	s.cleaner, _ = storage.NewStorageCleaner(diskGcConfig, s.diskDriver, s, taskManager)
-}
-
 func (s *diskStorageManager) AppendPieceMetadata(taskID string, pieceRecord *storage.PieceMetaRecord) error {
+	// TODO json
 	return s.diskDriver.PutBytes(storage.GetAppendPieceMetadataRaw(taskID), []byte(pieceRecord.String()+"\n"))
 }
 
@@ -134,32 +126,6 @@ func (s *diskStorageManager) ReadPieceMetaRecords(taskID string) ([]*storage.Pie
 		result = append(result, record)
 	}
 	return result, nil
-}
-
-func (s *diskStorageManager) GC() error {
-	logger.GcLogger.With("type", "disk").Info("start the disk storage gc job")
-	gcTaskIDs, err := s.cleaner.GC("disk", false)
-	if err != nil {
-		logger.GcLogger.With("type", "disk").Error("failed to get gcTaskIDs")
-	}
-	var realGCCount int
-	for _, taskID := range gcTaskIDs {
-		synclock.Lock(taskID, false)
-		// try to ensure the taskID is not using again
-		if _, exist := s.taskManager.Exist(taskID); exist {
-			synclock.UnLock(taskID, false)
-			continue
-		}
-		realGCCount++
-		if err := s.DeleteTask(taskID); err != nil {
-			logger.GcLogger.With("type", "disk").Errorf("failed to delete disk files with taskID(%s): %v", taskID, err)
-			synclock.UnLock(taskID, false)
-			continue
-		}
-		synclock.UnLock(taskID, false)
-	}
-	logger.GcLogger.With("type", "disk").Infof("at most %d tasks can be cleaned up, actual gc %d tasks", len(gcTaskIDs), realGCCount)
-	return nil
 }
 
 func (s *diskStorageManager) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
@@ -217,10 +183,15 @@ func (s *diskStorageManager) StatDownloadFile(taskID string) (*storedriver.Stora
 	return storageInfo, err
 }
 
-func (s *diskStorageManager) CreateUploadLink(taskID string) error {
+func (s *diskStorageManager) ResetRepo(seedTask *task.SeedTask) error {
+	s.DeleteTask(seedTask.ID)
+	// create download file
+	if _, err := os.Create(s.diskDriver.GetPath(storage.GetDownloadRaw(seedTask.ID))); err != nil {
+		return err
+	}
 	// create a soft link from the upload file to the download file
-	if err := fileutils.SymbolicLink(s.diskDriver.GetPath(storage.GetDownloadRaw(taskID)),
-		s.diskDriver.GetPath(storage.GetUploadRaw(taskID))); err != nil {
+	if err := fileutils.SymbolicLink(s.diskDriver.GetPath(storage.GetDownloadRaw(seedTask.ID)),
+		s.diskDriver.GetPath(storage.GetUploadRaw(seedTask.ID))); err != nil {
 		return err
 	}
 	return nil
@@ -244,10 +215,6 @@ func (s *diskStorageManager) DeleteTask(taskID string) error {
 		logrus.Warnf("taskID: %s failed remove parent bucket: %v", taskID, err)
 	}
 	return nil
-}
-
-func (s *diskStorageManager) ResetRepo(seedTask *task.SeedTask) error {
-	return s.DeleteTask(seedTask.ID)
 }
 
 func (s *diskStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
@@ -305,4 +272,30 @@ func (s *diskStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (s *diskStorageManager) GC() error {
+	logger.GcLogger.With("type", "disk").Info("start the disk storage gc job")
+	gcTaskIDs, err := s.cleaner.GC("disk", false)
+	if err != nil {
+		logger.GcLogger.With("type", "disk").Error("failed to get gcTaskIDs")
+	}
+	var realGCCount int
+	for _, taskID := range gcTaskIDs {
+		synclock.Lock(taskID, false)
+		// try to ensure the taskID is not using again
+		if _, exist := s.taskManager.Exist(taskID); exist {
+			synclock.UnLock(taskID, false)
+			continue
+		}
+		realGCCount++
+		if err := s.DeleteTask(taskID); err != nil {
+			logger.GcLogger.With("type", "disk").Errorf("failed to delete disk files with taskID(%s): %v", taskID, err)
+			synclock.UnLock(taskID, false)
+			continue
+		}
+		synclock.UnLock(taskID, false)
+	}
+	logger.GcLogger.With("type", "disk").Infof("at most %d tasks can be cleaned up, actual gc %d tasks", len(gcTaskIDs), realGCCount)
+	return nil
 }

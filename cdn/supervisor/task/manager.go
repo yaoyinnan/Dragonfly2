@@ -49,6 +49,12 @@ type Manager interface {
 	// Update the task info with specified taskID and updateTask
 	Update(taskID string, updateTask *SeedTask) (err error)
 
+	// UpdateProgress
+	UpdateProgress(taskID string, piece *PieceInfo) (err error)
+
+	// GetProgress
+	GetProgress(taskID string) (map[int32]*PieceInfo, error)
+
 	// Exist check task existence with specified taskID.
 	// returns the task info with specified taskID, or nil if no value is present.
 	// The ok result indicates whether value was found in the taskManager.
@@ -84,11 +90,11 @@ type manager struct {
 
 // NewManager returns a new Manager Object.
 func NewManager(cfg Config) (Manager, error) {
-	taskManager := &manager{
+	manager := &manager{
 		cfg: cfg.applyDefaults(),
 	}
-	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, taskManager)
-	return taskManager, nil
+	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, manager)
+	return manager, nil
 }
 
 func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err error) {
@@ -177,6 +183,31 @@ func (tm *manager) Update(taskID string, taskInfo *SeedTask) error {
 	// only update access when update task success
 	tm.accessTimeMap.Store(taskID, time.Now())
 	return nil
+}
+
+func (tm *manager) UpdateProgress(taskID string, info *PieceInfo) error {
+	synclock.Lock(taskID, false)
+	defer synclock.UnLock(taskID, false)
+
+	seedTask, ok := tm.getTask(taskID)
+	if !ok {
+		return errTaskNotFound
+	}
+	seedTask.Pieces[info.PieceNum] = info
+	// only update access when update task success
+	tm.accessTimeMap.Store(taskID, time.Now())
+	return nil
+}
+
+func (tm *manager) GetProgress(taskID string) (map[int32]*PieceInfo, error) {
+	synclock.Lock(taskID, false)
+	defer synclock.UnLock(taskID, false)
+	seedTask, ok := tm.getTask(taskID)
+	if !ok {
+		return nil, errTaskNotFound
+	}
+	tm.accessTimeMap.Store(taskID, time.Now())
+	return seedTask.Pieces, nil
 }
 
 func (tm *manager) Exist(taskID string) (*SeedTask, bool) {

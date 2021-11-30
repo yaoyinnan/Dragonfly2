@@ -16,44 +16,97 @@
 
 package progress
 
-type Observer interface {
-	Notify(seedPiece *SeedPiece)
-	Receiver() <-chan *SeedPiece
+import (
+	"container/list"
+	"sync"
+
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
+)
+
+type subscriber struct {
+	done      chan struct{}
+	once      sync.Once
+	pieces    map[int32]*task.PieceInfo
+	pieceChan chan *task.PieceInfo
+	cond      *sync.Cond
 }
 
-type observer struct {
-	pieces    []*SeedPiece
-	pieceChan chan *SeedPiece
+func newProgressSubscriber(pieces map[int32]*task.PieceInfo) *subscriber {
+	sub := &subscriber{
+		pieces:    pieces,
+		done:      make(chan struct{}),
+		pieceChan: make(chan *task.PieceInfo, 100),
+		cond:      sync.NewCond(&sync.Mutex{}),
+	}
+	go sub.readLoop()
+	return sub
 }
 
-func (o *observer) Notify(seedPiece *SeedPiece) {
-	o.pieceChan <- seedPiece
+func (sub *subscriber) readLoop() {
+	defer close(sub.pieceChan)
+	for {
+		select {
+		case <-sub.done:
+			return
+		default:
+			sub.cond.L.Lock()
+			for len(sub.pieces) == 0 {
+				sub.cond.Wait()
+			}
+			for i, info := range sub.pieces {
+				sub.pieceChan <- info
+				delete(sub.pieces, i)
+			}
+			sub.cond.L.Unlock()
+		}
+	}
 }
 
-func (o *observer) Receiver() <-chan *SeedPiece {
-	return o.pieceChan
+func (sub *subscriber) Notify(seedPiece *task.PieceInfo) {
+	sub.cond.L.Lock()
+	sub.pieces[seedPiece.PieceNum] = seedPiece
+	sub.cond.L.Unlock()
+	sub.cond.Signal()
 }
 
-type Subject interface {
-	AddObserver(observer Observer)
-
-	RemoveObserver(observer observer)
-
-	NotifyObservers(seedPiece *SeedPiece)
+func (sub *subscriber) Receiver() <-chan *task.PieceInfo {
+	return sub.pieceChan
 }
 
-type subject struct {
-	observers []Observer
+func (sub *subscriber) Close() {
+	sub.once.Do(func() {
+		close(sub.done)
+	})
 }
 
-func (s *subject) AddObserver(observer Observer) {
-	s.observers = append(s.observers, observer)
+type publisher struct {
+	subjectID   string
+	subscribers *list.List
 }
 
-func (s *subject) RemoveObserver(observer observer) {
-	s.observers = append(s.observers[:1], s.observers[2:]...)
+func newProgressPublisher(subjectID string) *publisher {
+	return &publisher{
+		subjectID:   subjectID,
+		subscribers: list.New(),
+	}
 }
 
-func (s *subject) NotifyObservers(seedPiece *SeedPiece) {
+func (pub *publisher) AddSubscriber(sub *subscriber) {
+	pub.subscribers.PushBack(sub)
+}
 
+func (pub *publisher) RemoveSubscriber(sub *subscriber) {
+	sub.Close()
+	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
+		if e.Value == sub {
+			pub.subscribers.Remove(e)
+			return
+		}
+	}
+}
+
+func (pub *publisher) NotifySubscribers(seedPiece *task.PieceInfo) {
+	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
+		e.Value.(*subscriber).Notify(seedPiece)
+	}
 }

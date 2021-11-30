@@ -17,7 +17,6 @@
 package cdn
 
 import (
-	"io"
 	"sort"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
@@ -132,6 +131,10 @@ func (mm *metadataManager) updateStatusAndResult(taskID string, metadata *storag
 	return mm.storage.WriteFileMetadata(taskID, originMetadata)
 }
 
+func (mm *metadataManager) readFileMetadata(taskID string) (*storage.FileMetadata, error) {
+	return mm.storage.ReadFileMetadata(taskID)
+}
+
 // appendPieceMetadata append piece meta info to storage
 func (mm *metadataManager) appendPieceMetadata(taskID string, record *storage.PieceMetaRecord) error {
 	mm.cacheLocker.Lock(taskID, false)
@@ -178,18 +181,4 @@ func (mm *metadataManager) getPieceMd5Sign(taskID string) (string, []*storage.Pi
 		pieceMd5 = append(pieceMd5, piece.Md5)
 	}
 	return digestutils.Sha256(pieceMd5...), pieceMetaRecords, nil
-}
-
-func (mm *metadataManager) readFileMetadata(taskID string) (*storage.FileMetadata, error) {
-	return mm.storage.ReadFileMetadata(taskID)
-}
-
-func (mm *metadataManager) resetRepo(seedTask *task.SeedTask) error {
-	mm.cacheLocker.Lock(seedTask.ID, false)
-	defer mm.cacheLocker.UnLock(seedTask.ID, false)
-	return mm.storage.ResetRepo(seedTask)
-}
-
-func (mm *metadataManager) writeDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
-	return mm.storage.WriteDownloadFile(taskID, offset, len, data)
 }
