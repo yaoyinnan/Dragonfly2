@@ -83,13 +83,14 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create request")
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
+	source.UnRegister("http")
 	require.Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
-	sourceClient.EXPECT().GetContentLength(gomock.Eq(request)).DoAndReturn(
+	sourceClient.EXPECT().GetContentLength(source.RequestEq(request.URL.String())).DoAndReturn(
 		func(request *source.Request) (int64, error) {
 			return int64(len(testBytes)), nil
 		})
-	sourceClient.EXPECT().Download(gomock.Eq(request)).DoAndReturn(
+	sourceClient.EXPECT().Download(source.RequestEq(request.URL.String())).DoAndReturn(
 		func(request *source.Request) (io.ReadCloser, error) {
 			return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
 		})
@@ -190,15 +191,16 @@ func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
+	source.UnRegister("http")
 	require.Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create reqeust")
-	sourceClient.EXPECT().GetContentLength(gomock.Eq(request)).DoAndReturn(
+	sourceClient.EXPECT().GetContentLength(source.RequestEq(request.URL.String())).DoAndReturn(
 		func(request *source.Request) (int64, error) {
 			return -1, nil
 		})
-	sourceClient.EXPECT().Download(gomock.Eq(request)).DoAndReturn(
+	sourceClient.EXPECT().Download(source.RequestEq(request.URL.String())).DoAndReturn(
 		func(request *source.Request) (io.ReadCloser, error) {
 			return ioutil.NopCloser(bytes.NewBuffer(testBytes)), nil
 		})

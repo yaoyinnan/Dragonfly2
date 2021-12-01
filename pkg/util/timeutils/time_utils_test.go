@@ -132,8 +132,8 @@ func TestSecondsUnixTime(t *testing.T) {
 		},
 		{
 			name: "convert now",
-			args: time.Now().UnixNano(),
-			want: time.Unix(time.Now().Unix(), (time.Now().UnixNano()-time.Now().Unix()*int64(time.Second))/int64(time.Millisecond)*int64(time.Millisecond)),
+			args: time.Now().Unix(),
+			want: time.Unix(time.Now().Unix(), 0),
 		},
 	}
 	for _, tt := range tests {

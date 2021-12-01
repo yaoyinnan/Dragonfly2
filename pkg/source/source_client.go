@@ -142,7 +142,9 @@ func (m *clientManager) Register(scheme string, resourceClient ResourceClient, a
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if client, ok := m.clients[strings.ToLower(scheme)]; ok {
-		return errors.Errorf("client with scheme %s already exist, current client: %#v", scheme, client)
+		if client.(*clientWrapper).rc != resourceClient {
+			return errors.Errorf("client with scheme %s already exist, current client: %#v", scheme, client)
+		}
 	}
 	m.clients[strings.ToLower(scheme)] = &clientWrapper{
 		adapter: adaptor,

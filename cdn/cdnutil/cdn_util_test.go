@@ -54,7 +54,7 @@ func TestComputePieceSize(t *testing.T) {
 			args: args{
 				length: 310 * 1024 * 1024,
 			},
-			want: config.DefaultPieceSize + 1,
+			want: config.DefaultPieceSize + 1*1024*1024,
 		}, {
 			name: "length reach piece size limit",
 			args: args{

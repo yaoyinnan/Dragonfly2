@@ -39,7 +39,7 @@ func (c *client) IsSupportRange(request *source.Request) (bool, error) {
 	return false, nil
 }
 
-func (c *client) IsExpired(request *source.Request) (bool, error) {
+func (c *client) IsExpired(request *source.Request, info *source.ExpireInfo) (bool, error) {
 	panic("implement me")
 }
 

@@ -214,6 +214,7 @@ func TestStreamPeerTask_BackSource_Partial_WithContentLength(t *testing.T) {
 		})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
+	source.UnRegister("http")
 	require.Nil(t, source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
 	sourceClient.EXPECT().GetContentLength(gomock.Any()).DoAndReturn(
