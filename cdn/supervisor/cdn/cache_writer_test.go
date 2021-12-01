@@ -26,9 +26,6 @@ import (
 	"testing"
 	"time"
 
-	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
-	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
@@ -37,6 +34,9 @@ import (
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
+	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
 	"d7y.io/dragonfly/v2/pkg/unit"
 )
