@@ -44,7 +44,9 @@ var _ source.ResourceClient = (*ossSourceClient)(nil)
 
 func init() {
 	sourceClient := newOSSSourceClient()
-	source.Register(ossClient, sourceClient, adaptor)
+	if err := source.Register(ossClient, sourceClient, adaptor); err != nil {
+		panic(err)
+	}
 }
 
 func adaptor(request *source.Request) *source.Request {

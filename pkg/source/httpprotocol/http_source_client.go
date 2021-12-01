@@ -70,11 +70,16 @@ func init() {
 	}
 	sc := newHTTPSourceClient()
 
-	source.Register(HTTPClient, sc, adapter)
-	source.Register(HTTPSClient, sc, adapter)
+	if err := source.Register(HTTPClient, sc, Adapter); err != nil {
+		panic(err)
+	}
+
+	if err := source.Register(HTTPSClient, sc, Adapter); err != nil {
+		panic(err)
+	}
 }
 
-func adapter(request *source.Request) *source.Request {
+func Adapter(request *source.Request) *source.Request {
 	clonedRequest := request.Clone(request.Context())
 	if request.Header.Get(source.Range) != "" {
 		clonedRequest.Header.Set(headers.Range, fmt.Sprintf("bytes=%s", request.Header.Get(source.Range)))

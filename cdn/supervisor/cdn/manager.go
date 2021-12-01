@@ -99,6 +99,17 @@ func NewManager(cfg Config, cacheStore storage.Manager, progressManager progress
 }
 
 func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*task.SeedTask, error) {
+	updateTaskInfo, err := cm.doTrigger(ctx, seedTask)
+	if err != nil {
+		seedTask.Log().Errorf("failed to trigger cdn: %v", err)
+		// todo source not reach error SOURCE_ERROR
+		updateTaskInfo = getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed)
+	}
+	err = cm.progressManager.PublishTask(ctx, seedTask.ID, updateTaskInfo)
+	return updateTaskInfo, err
+}
+
+func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*task.SeedTask, error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanTriggerCDN)
 	defer span.End()
@@ -115,14 +126,15 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 	// first: detect Cache
 	detectResult, err := cm.detector.detectCache(ctx, seedTask, fileDigest)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed), errors.Wrap(err, "detect task cache")
+		return nil, errors.Wrap(err, "detect task cache")
 	}
 	span.SetAttributes(config.AttributeCacheResult.String(detectResult.String()))
 	seedTask.Log().Infof("detects cache result: %+v", detectResult)
 	// second: report detect result
 	err = cm.cdnReporter.reportDetectResult(ctx, seedTask.ID, detectResult)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed), errors.Wrapf(err, "report detect cache result")
+		seedTask.Log().Errorf("failed to report detect cache result: %v", err)
+		return nil, errors.Wrapf(err, "report detect cache result")
 	}
 	// full cache
 	if detectResult.breakPoint == -1 {
@@ -141,7 +153,7 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 	if err != nil {
 		downloadSpan.RecordError(err)
 		server.StatSeedFinish(seedTask.ID, seedTask.RawURL, false, err, start, time.Now(), 0, 0)
-		return getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusSourceError), errors.Wrap(err, "download task file data")
+		return nil, errors.Wrap(err, "download task file data")
 	}
 	defer respBody.Close()
 	reader := limitreader.NewLimitReaderWithLimiterAndDigest(respBody, cm.limiter, fileDigest, digestutils.Algorithms[digestType])
@@ -151,14 +163,14 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 	if err != nil {
 		server.StatSeedFinish(seedTask.ID, seedTask.RawURL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
 			downloadMetadata.realSourceFileLength)
-		return getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed), errors.Wrap(err, "write task file data")
+		return nil, errors.Wrap(err, "write task file data")
 	}
 	server.StatSeedFinish(seedTask.ID, seedTask.RawURL, true, nil, start, time.Now(), downloadMetadata.backSourceLength,
 		downloadMetadata.realSourceFileLength)
 	// fifth: handle CDN result
 	err = cm.handleCDNResult(seedTask, downloadMetadata)
 	if err != nil {
-		return getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed), err
+		return nil, err
 	}
 	return getUpdateTaskInfo(seedTask, task.StatusSuccess, downloadMetadata.sourceRealDigest, downloadMetadata.pieceMd5Sign,
 		downloadMetadata.realSourceFileLength, downloadMetadata.realCdnFileLength, downloadMetadata.totalPieceCount), nil

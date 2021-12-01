@@ -19,10 +19,10 @@ package cdn
 import (
 	"sort"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/digestutils"

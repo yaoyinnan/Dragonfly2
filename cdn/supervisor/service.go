@@ -20,11 +20,12 @@ import (
 	"context"
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -99,25 +100,14 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		seedTask.Log().Infof("reconfirm seedTask status is not frozen, no need trigger again, current status: %s", seedTask.CdnStatus)
 		return nil
 	}
-	// TODO InitSeedProgress
 	seedTask.StartTrigger()
 	// triggerCDN goroutine
 	go func() {
 		updateTaskInfo, err := service.cdnManager.TriggerCDN(context.Background(), seedTask.Clone())
 		if err != nil {
-			seedTask.Log().Errorf("trigger cdn get error: %v", err)
+			seedTask.Log().Errorf("failed to trigger cdn: %v", err)
 		}
-		err = service.taskManager.Update(seedTask.ID, updateTaskInfo)
-		if err != nil {
-			seedTask.Log().Errorf("failed to update task: %v", err)
-		}
-		go func() {
-			if err := service.progressManager.PublishTask(ctx, seedTask.ID, updateTaskInfo); err != nil {
-				seedTask.Log().Errorf("failed to publish task: %v", err)
-			}
-
-		}()
-		seedTask.Log().Infof("successfully update task cdn updatedTask: %+v", updateTaskInfo)
+		seedTask.Log().Infof("trigger cdn successfully, trigger result: %+v", updateTaskInfo)
 	}()
 	return nil
 }

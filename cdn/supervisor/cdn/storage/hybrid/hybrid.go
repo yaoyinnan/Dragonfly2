@@ -180,7 +180,7 @@ func (h *hybridStorageManager) WritePieceMetaRecords(taskID string, records []*s
 
 func (h *hybridStorageManager) ResetRepo(seedTask *task.SeedTask) error {
 	if err := h.deleteTaskFiles(seedTask.ID, true); err != nil {
-		logger.Errorf("reset taskID %s repo: failed to delete task files: %v", seedTask.ID, err)
+		return errors.Errorf("delete task %s files: %v", seedTask.ID, err)
 	}
 	// 判断是否有足够空间存放
 	if shmPath, err := h.tryShmSpace(seedTask.RawURL, seedTask.ID, seedTask.SourceFileLength); err != nil {

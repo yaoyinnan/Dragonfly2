@@ -25,12 +25,12 @@ import (
 	"sync"
 	"time"
 
-	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 	"github.com/colinmarc/hdfs/v2"
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
 
 const (
@@ -44,7 +44,9 @@ const (
 )
 
 func init() {
-	source.Register(HDFSClient, newHDFSSourceClient(), adapter)
+	if err := source.Register(HDFSClient, newHDFSSourceClient(), adapter); err != nil {
+		panic(err)
+	}
 }
 
 func adapter(request *source.Request) *source.Request {
@@ -126,7 +128,7 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 	var limitReadN = hdfsFile.Stat().Size()
 
 	if request.Header.Get(source.Range) != "" {
-		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), limitReadN)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +137,7 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 			hdfsFile.Close()
 			return nil, err
 		}
-		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
+		limitReadN = requestRange.EndIndex - requestRange.StartIndex
 	}
 
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), nil
@@ -159,7 +161,7 @@ func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.R
 	var limitReadN = fileInfo.Size()
 
 	if request.Header.Get(source.Range) != "" {
-		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range))
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), limitReadN)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -168,7 +170,7 @@ func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.R
 			hdfsFile.Close()
 			return nil, nil, err
 		}
-		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
+		limitReadN = requestRange.EndIndex - requestRange.StartIndex
 	}
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), &source.ExpireInfo{
 		LastModified: timeutils.Format(fileInfo.ModTime()),

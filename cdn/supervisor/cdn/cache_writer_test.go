@@ -176,7 +176,6 @@ func (suite *CacheWriterTestSuite) TestStartWriter() {
 	}
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			suite.writer.cdnReporter.progressManager.InitSeedProgress(context.Background(), tt.args.task.ID)
 			downloadMetadata, err := suite.writer.startWriter(context.Background(), tt.args.reader, tt.args.task, tt.args.breakPoint)
 			suite.Equal(tt.wantErr, err != nil)
 			suite.Equal(tt.result, downloadMetadata)

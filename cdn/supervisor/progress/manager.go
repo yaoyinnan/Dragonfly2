@@ -41,9 +41,6 @@ type Manager interface {
 
 	// PublishTask publish task seed
 	PublishTask(ctx context.Context, taskID string, task *task.SeedTask) error
-
-	// Clear meta info of task
-	Clear(taskID string)
 }
 
 var _ Manager = (*manager)(nil)
@@ -67,59 +64,53 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
 	span.AddEvent(config.EventWatchSeedProgress)
-	pieces, err := pm.taskManager.GetProgress(taskID)
+	seedTask, err := pm.taskManager.Get(taskID)
 	if err != nil {
 		return nil, err
+	}
+	if seedTask.IsDone() {
+		pieceChan := make(chan *task.PieceInfo)
+		go func(pieceChan chan *task.PieceInfo) {
+			defer close(pieceChan)
+			for i := range seedTask.Pieces {
+				pieceChan <- seedTask.Pieces[i]
+			}
+		}(pieceChan)
+		return pieceChan, nil
 	}
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if !ok {
 		pm.seedTaskSubjects[taskID] = newProgressPublisher(taskID)
 	}
-	observer := newProgressSubscriber(pieces)
+	observer := newProgressSubscriber(ctx, seedTask.Pieces)
 	logger.Debugf("begin watch taskID %s seed progress", taskID)
 	progressPublisher.AddSubscriber(observer)
 	return observer.Receiver(), nil
 }
 
 func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task.PieceInfo) (err error) {
+	pm.mu.Lock(taskID, false)
+	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(record)
 	span.AddEvent(config.EventPublishPiece, trace.WithAttributes(config.AttributeSeedPiece.String(string(recordBytes))))
 	logger.Debugf("seed piece record %+v", record)
-	if err := pm.taskManager.UpdateProgress(taskID, record); err != nil {
-		return err
-	}
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if ok {
 		progressPublisher.NotifySubscribers(record)
 	}
-	return nil
+	return pm.taskManager.UpdateProgress(taskID, record)
 }
 
-func (pm *manager) PublishTask(ctx context.Context, taskID string, task *task.SeedTask) error {
-	span := trace.SpanFromContext(ctx)
-	recordBytes, _ := json.Marshal(task)
-	span.AddEvent(config.EventPublishTask, trace.WithAttributes(config.AttributeSeedTask.String(string(recordBytes))))
-}
-
-func (pm *manager) Clear(taskID string) {
+func (pm *manager) PublishTask(ctx context.Context, taskID string, seedTask *task.SeedTask) error {
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
-	//chanList, ok := pm.getSeedSubscribers(taskID)
-	//pm.seedSubscribers.Delete(taskID)
-	//pm.taskPieceMetaRecords.Delete(taskID)
-	//if !ok {
-	//	logger.Warnf("taskID %s not found in seedSubscribers", taskID)
-	//	return
-	//}
-	//for e := chanList.Front(); e != nil; e = e.Next() {
-	//	chanList.Remove(e)
-	//	sub, ok := e.Value.(chan *SeedPiece)
-	//	if !ok {
-	//		logger.Warnf("failed to convert chan seedPiece, e.Value: %v", e.Value)
-	//		continue
-	//	}
-	//	close(sub)
-	//}
-	//chanList = nil
+	span := trace.SpanFromContext(ctx)
+	recordBytes, _ := json.Marshal(seedTask)
+	span.AddEvent(config.EventPublishTask, trace.WithAttributes(config.AttributeSeedTask.String(string(recordBytes))))
+	if progressPublisher, ok := pm.seedTaskSubjects[taskID]; ok {
+		progressPublisher.RemoveAllSubscribers()
+		delete(pm.seedTaskSubjects, taskID)
+	}
+	return pm.taskManager.Update(taskID, seedTask)
 }

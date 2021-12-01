@@ -15,7 +15,6 @@
  */
 
 // Package structutils provides utilities supplementing the standard 'time' package.
-
 package structutils
 
 import (

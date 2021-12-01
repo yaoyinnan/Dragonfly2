@@ -24,6 +24,10 @@ import (
 	"path"
 	"strings"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.uber.org/atomic"
+
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
@@ -32,9 +36,6 @@ import (
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/fileutils"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.uber.org/atomic"
 )
 
 const _disk = "disk"
@@ -168,7 +169,9 @@ func (s *diskStorageManager) StatDownloadFile(taskID string) (*storedriver.Stora
 }
 
 func (s *diskStorageManager) ResetRepo(seedTask *task.SeedTask) error {
-	s.DeleteTask(seedTask.ID)
+	if err := s.DeleteTask(seedTask.ID); err != nil {
+		return errors.Errorf("delete task %s files: %v", seedTask.ID, err)
+	}
 	// create download file
 	if _, err := os.Create(s.diskDriver.GetPath(storage.GetDownloadRaw(seedTask.ID))); err != nil {
 		return err

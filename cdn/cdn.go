@@ -106,7 +106,10 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, errors.Wrapf(err, "create storage manager")
 	}
 	// Initialize CDN manager
-	cdnManager, err := cdn.NewManager(cfg, storageManager, progressManager, taskManager)
+	cdnManager, err := cdn.NewManager(cdn.Config{
+		SystemReservedBandwidth: cfg.SystemReservedBandwidth,
+		MaxBandwidth:            cfg.MaxBandwidth,
+	}, storageManager, progressManager, taskManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create cdn manager")
 	}

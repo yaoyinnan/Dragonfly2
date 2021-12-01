@@ -22,13 +22,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
-	"github.com/pkg/errors"
 )
 
 // Manager as an interface defines all operations against SeedTask.

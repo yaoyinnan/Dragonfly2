@@ -19,12 +19,12 @@ package cdn
 import (
 	"context"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
@@ -71,8 +71,8 @@ func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, re
 /*
 	helper functions
 */
-func convertPieceMeta2SeedPiece(record *storage.PieceMetaRecord) *progress.SeedPiece {
-	return &progress.SeedPiece{
+func convertPieceMeta2SeedPiece(record *storage.PieceMetaRecord) *task.PieceInfo {
+	return &task.PieceInfo{
 		PieceStyle:  record.PieceStyle,
 		PieceNum:    record.PieceNum,
 		PieceMd5:    record.Md5,

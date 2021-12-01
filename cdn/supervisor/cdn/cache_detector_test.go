@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
@@ -53,9 +54,7 @@ type CacheDetectorTestSuite struct {
 func (suite *CacheDetectorTestSuite) SetupSuite() {
 	ctrl := gomock.NewController(suite.T())
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
-		return request
-	})
+	suite.Require().Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	storageManager := storageMock.NewMockManager(ctrl)
 	cacheDataManager := newMetadataManager(storageManager)
 	suite.detector = newCacheDetector(cacheDataManager, storageManager)

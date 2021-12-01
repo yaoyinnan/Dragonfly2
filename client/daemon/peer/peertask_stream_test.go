@@ -27,6 +27,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	testifyassert "github.com/stretchr/testify/assert"
+	testifyrequire "github.com/stretchr/testify/require"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/client/clientutil"
@@ -35,11 +36,13 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	sourceMock "d7y.io/dragonfly/v2/pkg/source/mock"
 )
 
 func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 	assert := testifyassert.New(t)
+	require := testifyrequire.New(t)
 	ctrl := gomock.NewController(t)
 
 	testBytes, err := ioutil.ReadFile(test.File)
@@ -80,9 +83,7 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create request")
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
-		return request
-	})
+	require.Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
 	sourceClient.EXPECT().GetContentLength(gomock.Eq(request)).DoAndReturn(
 		func(request *source.Request) (int64, error) {
@@ -150,6 +151,7 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 
 func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 	assert := testifyassert.New(t)
+	require := testifyrequire.New(t)
 	ctrl := gomock.NewController(t)
 
 	testBytes, err := ioutil.ReadFile(test.File)
@@ -188,9 +190,7 @@ func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		})
 
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
-	source.Register("http", sourceClient, func(request *source.Request) *source.Request {
-		return request
-	})
+	require.Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
 	request, err := source.NewRequest(url)
 	assert.Nil(err, "create reqeust")

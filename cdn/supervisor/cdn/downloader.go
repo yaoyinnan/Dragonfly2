@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"io"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"

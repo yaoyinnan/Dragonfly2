@@ -20,7 +20,6 @@ import (
 	"context"
 	"testing"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"github.com/stretchr/testify/suite"
 
 	"d7y.io/dragonfly/v2/internal/idgen"
@@ -48,7 +47,7 @@ func (suite *TaskManagerTestSuite) TestRegister() {
 	tests := []struct {
 		name          string
 		args          args
-		wantPieceChan <-chan *progress.SeedPiece
+		wantPieceChan <-chan *PieceInfo
 		wantErr       bool
 	}{
 		{

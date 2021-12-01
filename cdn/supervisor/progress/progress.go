@@ -18,12 +18,14 @@ package progress
 
 import (
 	"container/list"
+	"context"
 	"sync"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 )
 
 type subscriber struct {
+	ctx       context.Context
 	done      chan struct{}
 	once      sync.Once
 	pieces    map[int32]*task.PieceInfo
@@ -31,8 +33,9 @@ type subscriber struct {
 	cond      *sync.Cond
 }
 
-func newProgressSubscriber(pieces map[int32]*task.PieceInfo) *subscriber {
+func newProgressSubscriber(ctx context.Context, pieces map[int32]*task.PieceInfo) *subscriber {
 	sub := &subscriber{
+		ctx:       ctx,
 		pieces:    pieces,
 		done:      make(chan struct{}),
 		pieceChan: make(chan *task.PieceInfo, 100),
@@ -46,8 +49,12 @@ func (sub *subscriber) readLoop() {
 	defer close(sub.pieceChan)
 	for {
 		select {
-		case <-sub.done:
+		case <-sub.ctx.Done():
 			return
+		case <-sub.done:
+			if len(sub.pieces) == 0 {
+				return
+			}
 		default:
 			sub.cond.L.Lock()
 			for len(sub.pieces) == 0 {
@@ -108,5 +115,12 @@ func (pub *publisher) RemoveSubscriber(sub *subscriber) {
 func (pub *publisher) NotifySubscribers(seedPiece *task.PieceInfo) {
 	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
 		e.Value.(*subscriber).Notify(seedPiece)
+	}
+}
+
+func (pub *publisher) RemoveAllSubscribers() {
+	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
+		pub.subscribers.Remove(e)
+		e.Value.(*subscriber).Close()
 	}
 }

@@ -79,7 +79,7 @@ func (suite *HTTPSourceClientTestSuite) SetupTest() {
 
 	httpmock.RegisterResponder(http.MethodGet, normalRawURL, func(request *http.Request) (*http.Response, error) {
 		if rang := request.Header.Get(headers.Range); rang != "" {
-			r, _ := rangeutils.ParseRange(rang[6:])
+			r, _ := rangeutils.GetRange(rang[6:])
 			header := http.Header{}
 			header.Set(headers.LastModified, lastModified)
 			header.Set(headers.ETag, etag)

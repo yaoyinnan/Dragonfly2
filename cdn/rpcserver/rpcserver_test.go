@@ -21,22 +21,34 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/distribution/distribution/v3/uuid"
+	"github.com/stretchr/testify/suite"
+
 	"d7y.io/dragonfly/v2/cdn/config"
-	"d7y.io/dragonfly/v2/cdn/plugins"
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
-	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
-	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
-	"github.com/distribution/distribution/v3/uuid"
-
-	// Register oss client
 	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"
 )
 
-func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
+func TestPluginsTestSuite(t *testing.T) {
+	suite.Run(t, new(RPCServerTestSuite))
+}
+
+type RPCServerTestSuite struct {
+	suite.Suite
+	*server
+}
+
+func (s *RPCServerTestSuite) SetUpSuite() {
+	s.server = &server{
+		service: nil,
+		cfg:     nil,
+	}
+}
+
+func (s *RPCServerTestSuite) TestCdnSeedServer_GetPieceTasks() {
 	type fields struct {
 		taskManager task.Manager
 		cfg         *config.Config
@@ -52,75 +64,35 @@ func TestCdnSeedServer_GetPieceTasks(t *testing.T) {
 		wantPiecePacket *base.PiecePacket
 		wantErr         bool
 	}{
-		// TODO: Add test cases.
+		{},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			css := &server{
-				taskManager: tt.fields.taskManager,
-				cfg:         tt.fields.cfg,
-			}
-			gotPiecePacket, err := css.GetPieceTasks(tt.args.ctx, tt.args.req)
+		s.Run(tt.name, func() {
+			gotPiecePacket, err := s.GetPieceTasks(tt.args.ctx, tt.args.req)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetPieceTasks() error = %v, wantErr %v", err, tt.wantErr)
+				//s.FailNowf("GetPieceTasks() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(gotPiecePacket, tt.wantPiecePacket) {
-				t.Errorf("GetPieceTasks() gotPiecePacket = %v, want %v", gotPiecePacket, tt.wantPiecePacket)
+				s.FailNowf("", "GetPieceTasks() gotPiecePacket = %v, want %v", gotPiecePacket, tt.wantPiecePacket)
 			}
 		})
 	}
 }
 
-func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
-	cfg := config.New()
-	if err := plugins.Initialize(cfg.Plugins); err != nil {
-		t.Fatal(err, "Initialize plugins")
-	}
-	progressManager, err := progress.NewManager()
-	if err != nil {
-		t.Fatal(err, "create progress manager")
-	}
-
-	// Initialize storage manager
-	storageManager, ok := storage.Get(cfg.StorageMode)
-	if !ok {
-		t.Fatal(err, "create storage")
-	}
-
-	// Initialize CDN manager
-	cdnMa, err := cdn.NewManager(cfg, storageManager, progressManager)
-	if err != nil {
-		t.Fatal(err, "create cdn manager")
-	}
-
-	// Initialize task manager
-	taskManager, err := task.NewManager(cfg, cdnManager, progressManager)
-	if err != nil {
-		t.Fatal(err, "create task manager")
-	}
-	type fields struct {
-		taskManager task.Manager
-		cfg         *config.Config
-	}
+func (s *RPCServerTestSuite) TestCdnSeedServer_ObtainSeeds() {
 	type args struct {
 		ctx context.Context
 		req *cdnsystem.SeedRequest
 		psc chan *cdnsystem.PieceSeed
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		wantErr   bool
-		testCount int
+		name    string
+		args    args
+		wantErr bool
 	}{
 		{
 			name: "testObtain",
-			fields: fields{
-				taskManager: taskManager,
-				cfg:         cfg,
-			},
 			args: args{
 				ctx: context.Background(),
 				req: &cdnsystem.SeedRequest{
@@ -136,27 +108,16 @@ func TestCdnSeedServer_ObtainSeeds(t *testing.T) {
 				},
 				psc: make(chan *cdnsystem.PieceSeed, 4),
 			},
-			testCount: 1000,
 		},
 	}
 	for _, tt := range tests {
-		for i := 0; i < tt.testCount; i++ {
-			t.Run(tt.name, func(t *testing.T) {
-				css := &server{
-					taskManager: tt.fields.taskManager,
-					cfg:         tt.fields.cfg,
-				}
-				go func() {
-					for range tt.args.psc {
-					}
-				}()
-				if err := css.ObtainSeeds(tt.args.ctx, tt.args.req, tt.args.psc); (err != nil) != tt.wantErr {
-					t.Fatalf("ObtainSeeds() error = %v, wantErr %v", err, tt.wantErr)
-				} else {
-					println("obtain success")
-				}
+		s.Run(tt.name, func() {
+			if err := s.ObtainSeeds(tt.args.ctx, tt.args.req, tt.args.psc); (err != nil) != tt.wantErr {
+				s.FailNowf("", "ObtainSeeds() error = %v, wantErr %v", err, tt.wantErr)
+			} else {
+				println("obtain success")
+			}
 
-			})
-		}
+		})
 	}
 }
