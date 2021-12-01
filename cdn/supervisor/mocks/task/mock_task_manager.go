@@ -17,6 +17,14 @@ type MockManager struct {
 	recorder *MockManagerMockRecorder
 }
 
+func (m *MockManager) UpdateProgress(taskID string, piece *task.PieceInfo) (err error) {
+	panic("implement me")
+}
+
+func (m *MockManager) GetProgress(taskID string) (map[int32]*task.PieceInfo, error) {
+	panic("implement me")
+}
+
 // MockManagerMockRecorder is the mock recorder for MockManager.
 type MockManagerMockRecorder struct {
 	mock *MockManager

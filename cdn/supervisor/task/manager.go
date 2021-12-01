@@ -49,10 +49,10 @@ type Manager interface {
 	// Update the task info with specified taskID and updateTask
 	Update(taskID string, updateTask *SeedTask) (err error)
 
-	// UpdateProgress
+	// UpdateProgress update the downloaded pieces belonging to the task
 	UpdateProgress(taskID string, piece *PieceInfo) (err error)
 
-	// GetProgress
+	// GetProgress returns the downloaded pieces belonging to the task
 	GetProgress(taskID string) (map[int32]*PieceInfo, error)
 
 	// Exist check task existence with specified taskID.

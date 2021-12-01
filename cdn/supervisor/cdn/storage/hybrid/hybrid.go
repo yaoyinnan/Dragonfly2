@@ -24,16 +24,14 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"time"
 
-	"d7y.io/dragonfly/v2/cdn/storedriver/local"
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
@@ -52,46 +50,44 @@ var (
 
 type hybridStorageBuilder struct{}
 
-func (*hybridStorageBuilder) Build(cfg storage.Config, taskManager task.Manager) (storage.Manager, error) {
-	if len(cfg.DriverConfigs) != 2 {
-		return nil, fmt.Errorf("disk storage manager should have two driver, cfg's driver number is wrong : %v", cfg)
+func (*hybridStorageBuilder) Build(storageConfig storage.Config, taskManager task.Manager) (storage.Manager, error) {
+	if len(storageConfig.DriverConfigs) != 2 {
+		return nil, fmt.Errorf("disk storage manager should have two driver, cfg's driver number is wrong : %v", storageConfig)
 	}
-	driverNames := make([]string, len(cfg.DriverConfigs))
-	for k := range cfg.DriverConfigs {
+	driverNames := make([]string, len(storageConfig.DriverConfigs))
+	for k := range storageConfig.DriverConfigs {
 		driverNames = append(driverNames, k)
 	}
 	diskDriver, ok := storedriver.Get(driverNames[0])
 	if !ok {
-		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config is %v", driverNames[0], cfg)
+		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config is %v", driverNames[0], storageConfig)
 	}
 	memoryDriver, ok := storedriver.Get(driverNames[1])
 	if !ok {
-		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config %v", driverNames[1], cfg)
+		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config %v", driverNames[1], storageConfig)
 	}
-	diskGcConfig := cfg.DriverConfigs[driverNames[0]].GCConfig
+	cfg := applyDefaults(diskDriver, memoryDriver, storageConfig)
 
-	if diskGcConfig == nil {
-		diskGcConfig = h.getDiskDefaultGcConfig()
-		logger.GcLogger.With("type", "hybrid").Warnf("disk gc config is nil, use default gcConfig: %v", diskGcConfig)
-	}
-	diskDriverCleaner, _ = storage.NewStorageCleaner(diskGcConfig, diskDriver, , taskManager)
-	memoryGcConfig := h.cfg.DriverConfigs[local.MemoryDriverName].GCConfig
-	if memoryGcConfig == nil {
-		memoryGcConfig = h.getMemoryDefaultGcConfig()
-		logger.GcLogger.With("type", "hybrid").Warnf("memory gc config is nil, use default gcConfig: %v", diskGcConfig)
-	}
-	h.memoryDriverCleaner, _ = storage.NewStorageCleaner(memoryGcConfig, h.memoryDriver, h, taskManager)
-	logger.GcLogger.With("type", "hybrid").Info("success initialize hybrid cleaners")
 	storageManager := &hybridStorageManager{
-		cfg:                 cfg,
-		memoryDriver:        memoryDriver,
-		diskDriver:          diskDriver,
-		diskDriverCleaner:   nil,
-		memoryDriverCleaner: nil,
-		taskManager:         taskManager,
-		shmSwitch:           newShmSwitch(),
-		hasShm:              true,
+		cfg:          cfg,
+		memoryDriver: memoryDriver,
+		diskDriver:   diskDriver,
+		taskManager:  taskManager,
+		shmSwitch:    newShmSwitch(),
+		hasShm:       true,
 	}
+
+	diskDriverCleaner, err := storage.NewStorageCleaner(cfg.DiskGCConfig, diskDriver, storageManager, taskManager)
+	if err != nil {
+		return nil, err
+	}
+	memoryDriverCleaner, err := storage.NewStorageCleaner(cfg.MemoryGCConfig, memoryDriver, storageManager, taskManager)
+	if err != nil {
+		return nil, err
+	}
+	storageManager.diskDriverCleaner = diskDriverCleaner
+	storageManager.memoryDriverCleaner = memoryDriverCleaner
+
 	gc.Register("hybridStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
 	return storageManager, nil
 	// TODO apply default
@@ -105,110 +101,16 @@ func init() {
 	storage.Register(&hybridStorageBuilder{})
 }
 
-func (h *hybridStorageManager) getDiskDefaultGcConfig() *storage.GCConfig {
-	totalSpace, err := h.diskDriver.GetTotalSpace()
-	if err != nil {
-		logger.GcLogger.With("type", "hybrid").Errorf("failed to get total space of disk: %v", err)
-	}
-	yongGcThreshold := 200 * unit.GB
-	if totalSpace > 0 && totalSpace/4 < yongGcThreshold {
-		yongGcThreshold = totalSpace / 4
-	}
-	return &storage.GCConfig{
-		YoungGCThreshold:  yongGcThreshold,
-		FullGCThreshold:   25 * unit.GB,
-		IntervalThreshold: 2 * time.Hour,
-		CleanRatio:        1,
-	}
-}
-
-func (h *hybridStorageManager) getMemoryDefaultGcConfig() *storage.GCConfig {
-	// determine whether the shared cache can be used
-	diff := unit.Bytes(0)
-	totalSpace, err := h.memoryDriver.GetTotalSpace()
-	if err != nil {
-		logger.GcLogger.With("type", "hybrid").Errorf("failed to get total space of memory: %v", err)
-	}
-	if totalSpace < 72*unit.GB {
-		diff = 72*unit.GB - totalSpace
-	}
-	if diff >= totalSpace {
-		h.hasShm = false
-	}
-	return &storage.GCConfig{
-		YoungGCThreshold:  10*unit.GB + diff,
-		FullGCThreshold:   2*unit.GB + diff,
-		CleanRatio:        3,
-		IntervalThreshold: 2 * time.Hour,
-	}
-}
-
 type hybridStorageManager struct {
-	cfg                 storage.Config
+	cfg                 Config
 	memoryDriver        storedriver.Driver
 	diskDriver          storedriver.Driver
-	diskDriverCleaner   *storage.Cleaner
-	memoryDriverCleaner *storage.Cleaner
+	diskDriverCleaner   storage.Cleaner
+	memoryDriverCleaner storage.Cleaner
 	taskManager         task.Manager
 	shmSwitch           *shmSwitch
-	hasShm              bool
-}
-
-func (h *hybridStorageManager) GC() error {
-	logger.GcLogger.With("type", "hybrid").Info("start the hybrid storage gc job")
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		gcTaskIDs, err := h.diskDriverCleaner.GC("hybrid", false)
-		if err != nil {
-			logger.GcLogger.With("type", "hybrid").Error("gc disk: failed to get gcTaskIds")
-		}
-		realGCCount := h.gcTasks(gcTaskIDs, true)
-		logger.GcLogger.With("type", "hybrid").Infof("at most %d tasks can be cleaned up from disk, actual gc %d tasks", len(gcTaskIDs), realGCCount)
-	}()
-	if h.hasShm {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			gcTaskIDs, err := h.memoryDriverCleaner.GC("hybrid", false)
-			logger.GcLogger.With("type", "hybrid").Infof("at most %d tasks can be cleaned up from memory", len(gcTaskIDs))
-			if err != nil {
-				logger.GcLogger.With("type", "hybrid").Error("gc memory: failed to get gcTaskIds")
-			}
-			h.gcTasks(gcTaskIDs, false)
-		}()
-	}
-	wg.Wait()
-	return nil
-}
-
-func (h *hybridStorageManager) gcTasks(gcTaskIDs []string, isDisk bool) int {
-	var realGCCount int
-	for _, taskID := range gcTaskIDs {
-		synclock.Lock(taskID, false)
-		// try to ensure the taskID is not using again
-		if _, exist := h.taskManager.Exist(taskID); exist {
-			synclock.UnLock(taskID, false)
-			continue
-		}
-		realGCCount++
-		if isDisk {
-			if err := h.deleteDiskFiles(taskID); err != nil {
-				logger.GcLogger.With("type", "hybrid").Errorf("gc disk: failed to delete disk files with taskID(%s): %v", taskID, err)
-				synclock.UnLock(taskID, false)
-				continue
-			}
-		} else {
-			if err := h.deleteMemoryFiles(taskID); err != nil {
-				logger.GcLogger.With("type", "hybrid").Errorf("gc memory: failed to delete memory files with taskID(%s): %v", taskID, err)
-				synclock.UnLock(taskID, false)
-				continue
-			}
-		}
-		synclock.UnLock(taskID, false)
-	}
-	return realGCCount
+	// whether enable shm
+	hasShm bool
 }
 
 func (h *hybridStorageManager) WriteDownloadFile(taskID string, offset int64, len int64, data io.Reader) error {
@@ -219,7 +121,7 @@ func (h *hybridStorageManager) WriteDownloadFile(taskID string, offset int64, le
 }
 
 func (h *hybridStorageManager) DeleteTask(taskID string) error {
-	return h.deleteTaskFiles(taskID, true, true)
+	return h.deleteTaskFiles(taskID, true)
 }
 
 func (h *hybridStorageManager) ReadDownloadFile(taskID string) (io.ReadCloser, error) {
@@ -277,7 +179,7 @@ func (h *hybridStorageManager) WritePieceMetaRecords(taskID string, records []*s
 }
 
 func (h *hybridStorageManager) ResetRepo(seedTask *task.SeedTask) error {
-	if err := h.deleteTaskFiles(seedTask.ID, false, true); err != nil {
+	if err := h.deleteTaskFiles(seedTask.ID, true); err != nil {
 		logger.Errorf("reset taskID %s repo: failed to delete task files: %v", seedTask.ID, err)
 	}
 	// 判断是否有足够空间存放
@@ -364,14 +266,14 @@ func (h *hybridStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
 }
 
 func (h *hybridStorageManager) deleteDiskFiles(taskID string) error {
-	return h.deleteTaskFiles(taskID, true, true)
+	return h.deleteTaskFiles(taskID, true)
 }
 
 func (h *hybridStorageManager) deleteMemoryFiles(taskID string) error {
-	return h.deleteTaskFiles(taskID, true, false)
+	return h.deleteTaskFiles(taskID, false)
 }
 
-func (h *hybridStorageManager) deleteTaskFiles(taskID string, deleteUploadPath bool, deleteHardLink bool) error {
+func (h *hybridStorageManager) deleteTaskFiles(taskID string, deleteHardLink bool) error {
 	// delete task file data
 	if err := h.diskDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
@@ -380,11 +282,9 @@ func (h *hybridStorageManager) deleteTaskFiles(taskID string, deleteUploadPath b
 	if err := h.memoryDriver.Remove(storage.GetDownloadRaw(taskID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-
-	if deleteUploadPath {
-		if err := h.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !os.IsNotExist(err) {
-			return err
-		}
+	// delete upload file
+	if err := h.diskDriver.Remove(storage.GetUploadRaw(taskID)); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	exists := h.diskDriver.Exits(getHardLinkRaw(taskID))
 	if !deleteHardLink && exists {
@@ -458,6 +358,62 @@ func (h *hybridStorageManager) tryShmSpace(url, taskID string, fileLength int64)
 		return "", fmt.Errorf("not enough free space left")
 	}
 	return "", fmt.Errorf("shared memory is not allowed")
+}
+
+func (h *hybridStorageManager) GC() error {
+	logger.GcLogger.With("type", "hybrid").Info("start the hybrid storage gc job")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		gcTaskIDs, err := h.diskDriverCleaner.GC("hybrid", false)
+		if err != nil {
+			logger.GcLogger.With("type", "hybrid").Error("gc disk: failed to get gcTaskIds")
+		}
+		realGCCount := h.gcTasks(gcTaskIDs, true)
+		logger.GcLogger.With("type", "hybrid").Infof("at most %d tasks can be cleaned up from disk, actual gc %d tasks", len(gcTaskIDs), realGCCount)
+	}()
+	if h.hasShm {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			gcTaskIDs, err := h.memoryDriverCleaner.GC("hybrid", false)
+			logger.GcLogger.With("type", "hybrid").Infof("at most %d tasks can be cleaned up from memory", len(gcTaskIDs))
+			if err != nil {
+				logger.GcLogger.With("type", "hybrid").Error("gc memory: failed to get gcTaskIds")
+			}
+			h.gcTasks(gcTaskIDs, false)
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
+func (h *hybridStorageManager) gcTasks(gcTaskIDs []string, isDisk bool) int {
+	var realGCCount int
+	for _, taskID := range gcTaskIDs {
+		// try to ensure the taskID is not using again
+		if _, exist := h.taskManager.Exist(taskID); exist {
+			continue
+		}
+		realGCCount++
+		synclock.Lock(taskID, false)
+		if isDisk {
+			if err := h.deleteDiskFiles(taskID); err != nil {
+				logger.GcLogger.With("type", "hybrid").Errorf("gc disk: failed to delete disk files with taskID(%s): %v", taskID, err)
+				synclock.UnLock(taskID, false)
+				continue
+			}
+		} else {
+			if err := h.deleteMemoryFiles(taskID); err != nil {
+				logger.GcLogger.With("type", "hybrid").Errorf("gc memory: failed to delete memory files with taskID(%s): %v", taskID, err)
+				synclock.UnLock(taskID, false)
+				continue
+			}
+		}
+		synclock.UnLock(taskID, false)
+	}
+	return realGCCount
 }
 
 func (h *hybridStorageManager) getMemoryUsableSpace() unit.Bytes {

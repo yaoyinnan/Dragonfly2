@@ -22,18 +22,16 @@ import (
 	"context"
 	"encoding/json"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Manager as an interface defines all operations about seed progress
 type Manager interface {
-
-	// InitSeedProgress init task seed progress
-	InitSeedProgress(ctx context.Context, taskID string)
 
 	// WatchSeedProgress watch task seed progress
 	WatchSeedProgress(ctx context.Context, taskID string) (<-chan *task.PieceInfo, error)
@@ -56,30 +54,12 @@ type manager struct {
 	seedTaskSubjects map[string]*publisher
 }
 
-func (pm *manager) PublishTask(ctx context.Context, taskID string, task *task.SeedTask) error {
-	panic("implement me")
-}
-
-func (pm *manager) GetPieces(taskID string) (records []*task.PieceInfo, err error) {
-	panic("implement me")
-}
-
 func NewManager(taskManager task.Manager) (Manager, error) {
 	return &manager{
-		mu:          synclock.NewLockerPool(),
-		taskManager: taskManager,
+		mu:               synclock.NewLockerPool(),
+		taskManager:      taskManager,
+		seedTaskSubjects: make(map[string]*publisher),
 	}, nil
-}
-
-func (pm *manager) InitSeedProgress(ctx context.Context, taskID string) {
-	pm.mu.Lock(taskID, false)
-	defer pm.mu.UnLock(taskID, false)
-	span := trace.SpanFromContext(ctx)
-	span.AddEvent(config.EventInitSeedProgress)
-	pm.seedTaskSubjects[taskID] = newProgressPublisher(taskID)
-	//if _, loaded := pm.seedTaskSubjects.LoadOrStore(taskID, list.New()); loaded {
-	//	logger.WithTaskID(taskID).Info("the task seedSubscribers already exist")
-	//}
 }
 
 func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan *task.PieceInfo, error) {
@@ -91,10 +71,13 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	if err != nil {
 		return nil, err
 	}
+	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
+	if !ok {
+		pm.seedTaskSubjects[taskID] = newProgressPublisher(taskID)
+	}
 	observer := newProgressSubscriber(pieces)
 	logger.Debugf("begin watch taskID %s seed progress", taskID)
-	taskSubject := pm.seedTaskSubjects[taskID]
-	taskSubject.AddSubscriber(observer)
+	progressPublisher.AddSubscriber(observer)
 	return observer.Receiver(), nil
 }
 
@@ -106,12 +89,17 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 	if err := pm.taskManager.UpdateProgress(taskID, record); err != nil {
 		return err
 	}
-	progressPublisher, ok := pm.seedTaskSubjects[taskID]
-	if !ok {
-
+	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
+	if ok {
+		progressPublisher.NotifySubscribers(record)
 	}
-	progressPublisher.NotifySubscribers(record)
 	return nil
+}
+
+func (pm *manager) PublishTask(ctx context.Context, taskID string, task *task.SeedTask) error {
+	span := trace.SpanFromContext(ctx)
+	recordBytes, _ := json.Marshal(task)
+	span.AddEvent(config.EventPublishTask, trace.WithAttributes(config.AttributeSeedTask.String(string(recordBytes))))
 }
 
 func (pm *manager) Clear(taskID string) {

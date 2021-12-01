@@ -23,7 +23,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
@@ -48,27 +47,29 @@ var (
 
 type diskStorageBuilder struct{}
 
-func (b *diskStorageBuilder) Build(cfg storage.Config, taskManager task.Manager) (storage.Manager, error) {
-	if len(cfg.DriverConfigs) != 1 {
-		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", cfg)
+func (b *diskStorageBuilder) Build(storageConfig storage.Config, taskManager task.Manager) (storage.Manager, error) {
+	if len(storageConfig.DriverConfigs) != 1 {
+		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", storageConfig)
 	}
-	driverNames := make([]string, len(cfg.DriverConfigs))
-	for k := range cfg.DriverConfigs {
+	driverNames := make([]string, len(storageConfig.DriverConfigs))
+	for k := range storageConfig.DriverConfigs {
 		driverNames = append(driverNames, k)
 	}
 	diskDriver, ok := storedriver.Get(driverNames[0])
 	if !ok {
-		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", cfg)
+		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", storageConfig)
 	}
+	cfg := applyDefaults(diskDriver, storageConfig)
 	storageManager := &diskStorageManager{
-		cfg:         &cfg,
+		cfg:         cfg,
 		diskDriver:  diskDriver,
 		taskManager: taskManager,
 	}
-	cleaner, err := storage.NewStorageCleaner(cfg.DriverConfigs[driverNames[0]].GCConfig, diskDriver, storageManager, taskManager)
+	cleaner, err := storage.NewStorageCleaner(cfg.GCConfig, diskDriver, storageManager, taskManager)
 	if err != nil {
 		return nil, err
 	}
+	storageManager.diskCleaner = cleaner
 	gc.Register("diskStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
 	return storageManager, nil
 }
@@ -83,26 +84,10 @@ func init() {
 }
 
 type diskStorageManager struct {
-	cfg         *storage.Config
+	cfg         Config
 	diskDriver  storedriver.Driver
+	diskCleaner storage.Cleaner
 	taskManager task.Manager
-}
-
-func (s *diskStorageManager) applyDefaults() *storage.GCConfig {
-	totalSpace, err := s.diskDriver.GetTotalSpace()
-	if err != nil {
-		logger.GcLogger.With("type", "disk").Errorf("get total space of disk: %v", err)
-	}
-	yongGcThreshold := 200 * unit.GB
-	if totalSpace > 0 && totalSpace/4 < yongGcThreshold {
-		yongGcThreshold = totalSpace / 4
-	}
-	return &storage.GCConfig{
-		YoungGCThreshold:  yongGcThreshold,
-		FullGCThreshold:   25 * unit.GB,
-		IntervalThreshold: 2 * time.Hour,
-		CleanRatio:        1,
-	}
 }
 
 func (s *diskStorageManager) AppendPieceMetadata(taskID string, pieceRecord *storage.PieceMetaRecord) error {
@@ -252,7 +237,7 @@ func (s *diskStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
 
 	enoughSpace := freeSpace.ToNumber()-remainder.Load() > (fileLength + int64(5*unit.GB))
 	if !enoughSpace {
-		if _, err := s.cleaner.GC("disk", true); err != nil {
+		if _, err := s.diskCleaner.GC("disk", true); err != nil {
 			return false, err
 		}
 
@@ -275,7 +260,7 @@ func (s *diskStorageManager) TryFreeSpace(fileLength int64) (bool, error) {
 
 func (s *diskStorageManager) GC() error {
 	logger.GcLogger.With("type", "disk").Info("start the disk storage gc job")
-	gcTaskIDs, err := s.cleaner.GC("disk", false)
+	gcTaskIDs, err := s.diskCleaner.GC("disk", false)
 	if err != nil {
 		logger.GcLogger.With("type", "disk").Error("failed to get gcTaskIDs")
 	}

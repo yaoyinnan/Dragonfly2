@@ -8,7 +8,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	progress "d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	task "d7y.io/dragonfly/v2/cdn/supervisor/task"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -49,10 +48,10 @@ func (mr *MockManagerMockRecorder) Clear(arg0 interface{}) *gomock.Call {
 }
 
 // GetPieces mocks base method.
-func (m *MockManager) GetPieces(arg0 string) ([]*progress.SeedPiece, error) {
+func (m *MockManager) GetPieces(arg0 string) ([]*task.PieceInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPieces", arg0)
-	ret0, _ := ret[0].([]*progress.SeedPiece)
+	ret0, _ := ret[0].([]*task.PieceInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -76,7 +75,7 @@ func (mr *MockManagerMockRecorder) InitSeedProgress(arg0, arg1 interface{}) *gom
 }
 
 // PublishPiece mocks base method.
-func (m *MockManager) PublishPiece(arg0 context.Context, arg1 string, arg2 *progress.SeedPiece) error {
+func (m *MockManager) PublishPiece(arg0 context.Context, arg1 string, arg2 *task.PieceInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PublishPiece", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -104,10 +103,10 @@ func (mr *MockManagerMockRecorder) PublishTask(arg0, arg1, arg2 interface{}) *go
 }
 
 // WatchSeedProgress mocks base method.
-func (m *MockManager) WatchSeedProgress(arg0 context.Context, arg1 string) (<-chan *progress.SeedPiece, error) {
+func (m *MockManager) WatchSeedProgress(arg0 context.Context, arg1 string) (<-chan *task.PieceInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchSeedProgress", arg0, arg1)
-	ret0, _ := ret[0].(<-chan *progress.SeedPiece)
+	ret0, _ := ret[0].(<-chan *task.PieceInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -165,6 +165,7 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 	if fileMetadata.CdnFileLength != storageInfo.Size {
 		return nil, errors.Errorf("file size is inconsistent, expected is %d, but got %d", fileMetadata.CdnFileLength, storageInfo.Size)
 	}
+	// TODO For hybrid storage mode, synchronize disk data to memory
 	return &cacheResult{
 		breakPoint:       -1,
 		pieceMetaRecords: pieceMetaRecords,

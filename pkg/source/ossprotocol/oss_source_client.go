@@ -17,11 +17,9 @@
 package ossprotocol
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"sync"
 
@@ -30,8 +28,8 @@ import (
 	"github.com/pkg/errors"
 
 	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
+	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
 
 const ossClient = "oss"

@@ -65,6 +65,7 @@ func GetRange(rangeStr string) (r *Range, err error) {
 }
 
 // ParseRange parses the start and the end from rangeStr and returns them.
+// length is file total length
 func ParseRange(rangeStr string, length int64) (*Range, error) {
 	if strings.Count(rangeStr, "-") != 1 {
 		return nil, errors.Errorf("invalid range: %s, should be like 0-1023", rangeStr)

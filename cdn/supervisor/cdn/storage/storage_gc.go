@@ -31,23 +31,27 @@ import (
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"
 )
 
-type Cleaner struct {
+type Cleaner interface {
+	GC(storagePattern string, force bool) ([]string, error)
+}
+
+type cleaner struct {
 	cfg            GCConfig
 	driver         storedriver.Driver
 	taskManager    task.Manager
 	storageManager Manager
 }
 
-func NewStorageCleaner(cfg GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner, error) {
-	return &Cleaner{
-		cfg:            cfg.applyDefaults(),
+func NewStorageCleaner(cfg GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (Cleaner, error) {
+	return &cleaner{
+		cfg:            cfg,
 		driver:         driver,
 		taskManager:    taskManager,
 		storageManager: storageManager,
 	}, nil
 }
 
-func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) {
+func (cleaner *cleaner) GC(storagePattern string, force bool) ([]string, error) {
 	freeSpace, err := cleaner.driver.GetFreeSpace()
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -137,7 +141,7 @@ func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) 
 	return gcTaskIDs, nil
 }
 
-func (cleaner *Cleaner) sortInert(gapTasks, intervalTasks *treemap.Map, metadata *FileMetadata) error {
+func (cleaner *cleaner) sortInert(gapTasks, intervalTasks *treemap.Map, metadata *FileMetadata) error {
 	gap := timeutils.CurrentTimeMillis() - metadata.AccessTime
 
 	if metadata.Interval > 0 &&
@@ -167,7 +171,7 @@ func (cleaner *Cleaner) sortInert(gapTasks, intervalTasks *treemap.Map, metadata
 	return nil
 }
 
-func (cleaner *Cleaner) getGCTasks(gapTasks, intervalTasks *treemap.Map) []string {
+func (cleaner *cleaner) getGCTasks(gapTasks, intervalTasks *treemap.Map) []string {
 	var gcTasks = make([]string, 0)
 
 	for _, v := range gapTasks.Values() {
