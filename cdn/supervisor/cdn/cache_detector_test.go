@@ -102,6 +102,9 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndSupportRequest)).Return(true, nil).AnyTimes()
 
+	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndNotSupporRequest), gomock.Any()).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(gomock.Eq(expiredAndNotSupporRequest)).Return(false, nil).AnyTimes()
+
 	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
 	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
 }

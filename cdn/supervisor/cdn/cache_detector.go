@@ -19,7 +19,6 @@ package cdn
 import (
 	"context"
 	"crypto/md5"
-	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
@@ -49,14 +48,6 @@ type cacheResult struct {
 	fileMetadata     *storage.FileMetadata      // file meta data of task
 }
 
-func (result *cacheResult) String() string {
-	bytes, err := json.Marshal(result)
-	if err != nil {
-		logger.Errorf("marshal cacheResult failed: %v", err)
-	}
-	return string(bytes)
-}
-
 // newCacheDetector create a new cache detector
 func newCacheDetector(metadataManager *metadataManager, storageManager storage.Manager) *cacheDetector {
 	return &cacheDetector{
@@ -69,9 +60,6 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanDetectCache)
 	defer span.End()
-	defer func() {
-		span.SetAttributes(config.AttributeDetectCacheResult.String(result.String()))
-	}()
 	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {
 		if err != storage.ErrTaskNotPersisted {

@@ -128,7 +128,6 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	if err != nil {
 		return nil, errors.Wrap(err, "detect task cache")
 	}
-	span.SetAttributes(config.AttributeCacheResult.String(detectResult.String()))
 	seedTask.Log().Infof("detects cache result: %+v", detectResult)
 	// second: report detect result
 	err = cm.cdnReporter.reportDetectResult(ctx, seedTask.ID, detectResult)

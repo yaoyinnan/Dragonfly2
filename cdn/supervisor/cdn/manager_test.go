@@ -25,8 +25,6 @@ import (
 	"strings"
 	"testing"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
-	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
@@ -35,9 +33,11 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
 	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/internal/idgen"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	sourceMock "d7y.io/dragonfly/v2/pkg/source/mock"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
