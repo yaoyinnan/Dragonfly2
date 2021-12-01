@@ -85,7 +85,6 @@ func init() {
 type diskStorageManager struct {
 	cfg         *storage.Config
 	diskDriver  storedriver.Driver
-	cleaner     *storage.Cleaner
 	taskManager task.Manager
 }
 

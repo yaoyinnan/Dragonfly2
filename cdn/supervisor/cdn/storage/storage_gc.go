@@ -38,13 +38,13 @@ type Cleaner struct {
 	storageManager Manager
 }
 
-func NewStorageCleaner(cfg GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner {
+func NewStorageCleaner(cfg GCConfig, driver storedriver.Driver, storageManager Manager, taskManager task.Manager) (*Cleaner, error) {
 	return &Cleaner{
 		cfg:            cfg.applyDefaults(),
 		driver:         driver,
 		taskManager:    taskManager,
 		storageManager: storageManager,
-	}
+	}, nil
 }
 
 func (cleaner *Cleaner) GC(storagePattern string, force bool) ([]string, error) {
