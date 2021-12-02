@@ -54,7 +54,7 @@ type Manager interface {
 	UpdateProgress(taskID string, piece *PieceInfo) (err error)
 
 	// GetProgress returns the downloaded pieces belonging to the task
-	GetProgress(taskID string) (map[int32]*PieceInfo, error)
+	GetProgress(taskID string) (map[uint32]*PieceInfo, error)
 
 	// Exist check task existence with specified taskID.
 	// returns the task info with specified taskID, or nil if no value is present.
@@ -158,7 +158,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 	// calculate piece size and update the PieceSize and PieceTotal
 	if registerTask.PieceSize <= 0 {
 		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
-		seedTask.PieceSize = pieceSize
+		seedTask.PieceSize = int32(pieceSize)
 	}
 	return seedTask, nil
 }
@@ -200,7 +200,7 @@ func (tm *manager) UpdateProgress(taskID string, info *PieceInfo) error {
 	return nil
 }
 
-func (tm *manager) GetProgress(taskID string) (map[int32]*PieceInfo, error) {
+func (tm *manager) GetProgress(taskID string) (map[uint32]*PieceInfo, error) {
 	synclock.Lock(taskID, false)
 	defer synclock.UnLock(taskID, false)
 	seedTask, ok := tm.getTask(taskID)

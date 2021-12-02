@@ -63,12 +63,15 @@ func getBreakRange(breakPoint int64, taskRange string, length int64) (string, er
 	if breakPoint < 0 {
 		return "", errors.Errorf("breakPoint is illegal, breakPoint: %d", breakPoint)
 	}
+	if length < 0 {
+		return "", errors.Errorf("file length is illegal, length: %d", breakPoint)
+	}
 	if stringutils.IsBlank(taskRange) {
 		return fmt.Sprintf("%d-", breakPoint), nil
 	}
-	requestRange, err := rangeutils.ParseRange(taskRange, length)
+	requestRange, err := rangeutils.ParseRange(taskRange, uint64(length))
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%d-%d", requestRange.StartIndex+breakPoint, requestRange.EndIndex), nil
+	return fmt.Sprintf("%d-%d", requestRange.StartIndex+uint64(breakPoint), requestRange.EndIndex), nil
 }

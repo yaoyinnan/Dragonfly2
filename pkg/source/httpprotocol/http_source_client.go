@@ -68,7 +68,7 @@ func init() {
 	_defaultHTTPClient = &http.Client{
 		Transport: transport,
 	}
-	sc := newHTTPSourceClient()
+	sc := NewHTTPSourceClient()
 
 	if err := source.Register(HTTPClient, sc, Adapter); err != nil {
 		panic(err)
@@ -101,7 +101,11 @@ type httpSourceClient struct {
 	httpClient *http.Client
 }
 
-// newHTTPSourceClient returns a new HTTPSourceClientOption.
+// NewHTTPSourceClient returns a new HTTPSourceClientOption.
+func NewHTTPSourceClient(opts ...HTTPSourceClientOption) source.ResourceClient {
+	return newHTTPSourceClient(opts...)
+}
+
 func newHTTPSourceClient(opts ...HTTPSourceClientOption) *httpSourceClient {
 	client := &httpSourceClient{
 		httpClient: _defaultHTTPClient,

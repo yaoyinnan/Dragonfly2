@@ -65,7 +65,7 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 		componentsOption{
 			taskID:             taskID,
 			contentLength:      int64(mockContentLength),
-			pieceSize:          int32(pieceSize),
+			pieceSize:          uint32(pieceSize),
 			pieceParallelCount: pieceParallelCount,
 		})
 	defer storageManager.CleanUp()
@@ -125,8 +125,8 @@ func TestStreamPeerTask_BackSource_WithContentLength(t *testing.T) {
 		&pieceManager{
 			storageManager:  storageManager,
 			pieceDownloader: downloader,
-			computePieceSize: func(contentLength int64) int32 {
-				return int32(pieceSize)
+			computePieceSize: func(contentLength int64) uint32 {
+				return uint32(pieceSize)
 			},
 		},
 		req,
@@ -175,7 +175,7 @@ func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		componentsOption{
 			taskID:             taskID,
 			contentLength:      int64(mockContentLength),
-			pieceSize:          int32(pieceSize),
+			pieceSize:          uint32(pieceSize),
 			pieceParallelCount: pieceParallelCount,
 		})
 	defer storageManager.CleanUp()
@@ -235,8 +235,8 @@ func TestStreamPeerTask_BackSource_WithoutContentLength(t *testing.T) {
 		&pieceManager{
 			storageManager:  storageManager,
 			pieceDownloader: downloader,
-			computePieceSize: func(contentLength int64) int32 {
-				return int32(pieceSize)
+			computePieceSize: func(contentLength int64) uint32 {
+				return uint32(pieceSize)
 			},
 		},
 		req,

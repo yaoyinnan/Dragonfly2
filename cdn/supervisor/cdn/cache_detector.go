@@ -175,7 +175,7 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 	var breakPoint int64 = 0
 	pieceMetaRecords := make([]*storage.PieceMetaRecord, 0, len(tempRecords))
 	for index := range tempRecords {
-		if int32(index) != tempRecords[index].PieceNum {
+		if uint32(index) != tempRecords[index].PieceNum {
 			break
 		}
 		// read content TODO concurrent by multi-goroutine
@@ -183,7 +183,7 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 			logger.WithTaskID(taskID).Errorf("check content of pieceNum %d failed: %v", tempRecords[index].PieceNum, err)
 			break
 		}
-		breakPoint = tempRecords[index].OriginRange.EndIndex + 1
+		breakPoint = int64(tempRecords[index].OriginRange.EndIndex + 1)
 		pieceMetaRecords = append(pieceMetaRecords, tempRecords[index])
 	}
 	if len(tempRecords) != len(pieceMetaRecords) {

@@ -28,12 +28,12 @@ type subscriber struct {
 	ctx       context.Context
 	done      chan struct{}
 	once      sync.Once
-	pieces    map[int32]*task.PieceInfo
+	pieces    map[uint32]*task.PieceInfo
 	pieceChan chan *task.PieceInfo
 	cond      *sync.Cond
 }
 
-func newProgressSubscriber(ctx context.Context, pieces map[int32]*task.PieceInfo) *subscriber {
+func newProgressSubscriber(ctx context.Context, pieces map[uint32]*task.PieceInfo) *subscriber {
 	sub := &subscriber{
 		ctx:       ctx,
 		pieces:    pieces,

@@ -39,8 +39,8 @@ import (
 
 type piece struct {
 	taskID       string
-	pieceNum     int32
-	pieceSize    int32
+	pieceNum     uint32
+	pieceSize    uint32
 	pieceContent *bytes.Buffer
 }
 
@@ -139,8 +139,8 @@ loop:
 
 			jobCh <- &piece{
 				taskID:       seedTask.ID,
-				pieceNum:     curPieceNum,
-				pieceSize:    seedTask.PieceSize,
+				pieceNum:     uint32(curPieceNum),
+				pieceSize:    uint32(seedTask.PieceSize),
 				pieceContent: bb,
 			}
 			curPieceNum++
@@ -178,11 +178,11 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 					}
 					// Recycle Buffer
 					bufPool.Put(waitToWriteContent)
-					start := int64(p.pieceNum) * int64(p.pieceSize)
-					end := start + int64(pieceLen) - 1
+					start := uint64(p.pieceNum) * uint64(p.pieceSize)
+					end := start + uint64(pieceLen) - 1
 					pieceRecord := &storage.PieceMetaRecord{
 						PieceNum: p.pieceNum,
-						PieceLen: int32(pieceLen),
+						PieceLen: uint32(pieceLen),
 						Md5:      digestutils.ToHashString(pieceMd5),
 						Range: &rangeutils.Range{
 							StartIndex: start,

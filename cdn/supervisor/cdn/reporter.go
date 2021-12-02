@@ -62,7 +62,7 @@ func (re *reporter) reportDetectResult(ctx context.Context, taskID string, detec
 func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, record *storage.PieceMetaRecord, from string) error {
 	// report cache piece status
 	logger.DownloaderLogger.Info(taskID,
-		zap.Int32("pieceNum", record.PieceNum),
+		zap.Uint32("pieceNum", record.PieceNum),
 		zap.String("md5", record.Md5),
 		zap.String("from", from))
 	return re.progressManager.PublishPiece(ctx, taskID, convertPieceMeta2SeedPiece(record))

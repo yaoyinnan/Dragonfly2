@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -36,9 +35,6 @@ import (
 	cdnserver "d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/server"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/hostutils"
-	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
-	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
-	"d7y.io/dragonfly/v2/pkg/util/stringutils"
 )
 
 var tracer = otel.Tracer("cdn-server")
@@ -55,26 +51,9 @@ func New(cfg *config.Config, cdnService supervisor.CDNService, opts ...grpc.Serv
 		service: cdnService,
 		cfg:     cfg,
 	}
+
 	svr.rpcServer = cdnserver.New(svr, opts...)
 	return svr.rpcServer, nil
-}
-
-// checkSeedRequestParams check the params of SeedRequest.
-func checkSeedRequestParams(req *cdnsystem.SeedRequest) error {
-	if stringutils.IsBlank(req.TaskId) {
-		return errors.New("taskID is empty")
-	}
-	if !urlutils.IsValidURL(req.Url) {
-		return errors.Errorf("resource url: %s is invalid", req.Url)
-	}
-	if req.UrlMeta != nil && stringutils.IsBlank(req.UrlMeta.Range) {
-		// todo check range is valid and source support range
-		_, err := rangeutils.GetRange(req.UrlMeta.Range)
-		if err != nil {
-			return errors.Errorf("request range: %s is valid", req.UrlMeta.Range)
-		}
-	}
-	return nil
 }
 
 func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, psc chan<- *cdnsystem.PieceSeed) (err error) {
@@ -92,11 +71,6 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		}
 		logger.Infof("seeds task %s result success: %t", req.TaskId, err == nil)
 	}()
-	if err := checkSeedRequestParams(req); err != nil {
-		err = dferrors.Newf(base.Code_BadRequest, "bad seed request for task(%s): %v", req.TaskId, err)
-		span.RecordError(err)
-		return err
-	}
 	// register seed task
 	pieceChan, err := css.service.RegisterSeedTask(ctx, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
 	if err != nil {
@@ -116,11 +90,11 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			PeerId:   peerID,
 			HostUuid: hostID,
 			PieceInfo: &base.PieceInfo{
-				PieceNum:    piece.PieceNum,
-				RangeStart:  uint64(piece.PieceRange.StartIndex),
+				PieceNum:    int32(piece.PieceNum),
+				RangeStart:  piece.PieceRange.StartIndex,
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
-				PieceOffset: uint64(piece.OriginRange.StartIndex),
+				PieceOffset: piece.OriginRange.StartIndex,
 				PieceStyle:  piece.PieceStyle,
 			},
 			Done:            false,
@@ -170,11 +144,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		}
 		logger.WithTaskID(req.TaskId).Infof("get piece tasks result success: %t", err == nil)
 	}()
-	if err := checkPieceTasksRequestParams(req); err != nil {
-		err = dferrors.Newf(base.Code_BadRequest, "failed to validate seed request for task(%s): %v", req.TaskId, err)
-		span.RecordError(err)
-		return nil, err
-	}
+	logger.Infof("get piece tasks: %+v", req)
 	seedTask, err := css.service.GetSeedTask(req.TaskId)
 	if err != nil {
 		if task.IsTaskNotFound(err) {
@@ -198,15 +168,15 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		return nil, err
 	}
 	pieceInfos := make([]*base.PieceInfo, 0)
-	var count int32 = 0
+	var count uint32 = 0
 	for _, piece := range pieces {
 		if piece.PieceNum >= req.StartNum && (count < req.Limit || req.Limit <= 0) {
 			p := &base.PieceInfo{
-				PieceNum:    piece.PieceNum,
-				RangeStart:  uint64(piece.PieceRange.StartIndex),
+				PieceNum:    int32(piece.PieceNum),
+				RangeStart:  piece.PieceRange.StartIndex,
 				RangeSize:   piece.PieceLen,
 				PieceMd5:    piece.PieceMd5,
-				PieceOffset: uint64(piece.OriginRange.StartIndex),
+				PieceOffset: piece.OriginRange.StartIndex,
 				PieceStyle:  piece.PieceStyle,
 			}
 			pieceInfos = append(pieceInfos, p)
@@ -224,20 +194,4 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 	}
 	span.SetAttributes(config.AttributePiecePacketResult.String(pp.String()))
 	return pp, nil
-}
-
-func checkPieceTasksRequestParams(req *base.PieceTaskRequest) error {
-	if stringutils.IsBlank(req.TaskId) {
-		return errors.New("taskID is empty")
-	}
-	if stringutils.IsBlank(req.SrcPid) {
-		return errors.New("src peerID is empty")
-	}
-	if req.StartNum < 0 {
-		return errors.Errorf("invalid starNum %d", req.StartNum)
-	}
-	if req.Limit < 0 {
-		return errors.Errorf("invalid limit %d", req.Limit)
-	}
-	return nil
 }

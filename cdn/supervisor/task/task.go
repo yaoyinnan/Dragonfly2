@@ -80,17 +80,17 @@ type SeedTask struct {
 	Header map[string]string `json:"header,omitempty"`
 
 	//
-	Pieces map[int32]*PieceInfo
+	Pieces map[uint32]*PieceInfo
 
 	logger *logger.SugaredLoggerOnWith
 }
 
 type PieceInfo struct {
-	PieceNum    int32             `json:"piece_num"`
+	PieceNum    uint32            `json:"piece_num"`
 	PieceMd5    string            `json:"piece_md_5"`
 	PieceRange  *rangeutils.Range `json:"piece_range"`
 	OriginRange *rangeutils.Range `json:"origin_range"`
-	PieceLen    int32             `json:"piece_len"`
+	PieceLen    uint32            `json:"piece_len"`
 	PieceStyle  base.PieceStyle   `json:"piece_style"`
 }
 
@@ -180,7 +180,7 @@ func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
 
 func (task *SeedTask) StartTrigger() {
 	task.CdnStatus = StatusRunning
-	task.Pieces = make(map[int32]*PieceInfo)
+	task.Pieces = make(map[uint32]*PieceInfo)
 }
 
 const (

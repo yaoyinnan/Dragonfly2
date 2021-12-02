@@ -114,10 +114,10 @@ func (s *RPCServerTestSuite) TestCdnSeedServer_ObtainSeeds() {
 		s.Run(tt.name, func() {
 			if err := s.ObtainSeeds(tt.args.ctx, tt.args.req, tt.args.psc); (err != nil) != tt.wantErr {
 				s.FailNowf("", "ObtainSeeds() error = %v, wantErr %v", err, tt.wantErr)
-			} else {
-				println("obtain success")
 			}
-
+			//if !reflect.DeepEqual(got, tt.want) {
+			//	t.Errorf("NewCdnSeedServer() got = %v, want %v", got, tt.want)
+			//}
 		})
 	}
 }

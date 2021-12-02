@@ -29,7 +29,7 @@ func TestComputePieceSize(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want int32
+		want uint32
 	}{
 		{
 			name: "length equal 200M and get default piece size",

@@ -43,8 +43,7 @@ const (
 var _ source.ResourceClient = (*ossSourceClient)(nil)
 
 func init() {
-	sourceClient := newOSSSourceClient()
-	if err := source.Register(ossClient, sourceClient, adaptor); err != nil {
+	if err := source.Register(ossClient, NewOSSSourceClient(), adaptor); err != nil {
 		panic(err)
 	}
 }
@@ -66,7 +65,11 @@ func adaptor(request *source.Request) *source.Request {
 	return clonedRequest
 }
 
-func newOSSSourceClient(opts ...OssSourceClientOption) *ossSourceClient {
+func NewOSSSourceClient(opts ...OssSourceClientOption) source.ResourceClient {
+	return newOSSSourceClient(opts...)
+}
+
+func newOSSSourceClient(opts ...OssSourceClientOption) source.ResourceClient {
 	sourceClient := &ossSourceClient{
 		clientMap: sync.Map{},
 		accessMap: sync.Map{},

@@ -42,10 +42,10 @@ func hostname() string {
 
 // Get FQDN hostname
 func fqdnHostname() string {
-	fqdn, err := fqdn.FqdnHostname()
-	if err != nil {
-		panic(err)
-	}
+	fqdn, _ := fqdn.FqdnHostname()
+	//if err != nil {
+	//	panic(err)
+	//}
 
 	return fqdn
 }

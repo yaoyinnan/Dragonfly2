@@ -44,7 +44,7 @@ const (
 )
 
 func init() {
-	if err := source.Register(HDFSClient, newHDFSSourceClient(), adapter); err != nil {
+	if err := source.Register(HDFSClient, NewHDFSSourceClient(), adapter); err != nil {
 		panic(err)
 	}
 }
@@ -126,9 +126,11 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 
 	// default read all data when rang is nil
 	var limitReadN = hdfsFile.Stat().Size()
-
+	if limitReadN < 0 {
+		return nil, errors.Errorf("file length is illegal, length: %d", limitReadN)
+	}
 	if request.Header.Get(source.Range) != "" {
-		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), limitReadN)
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), uint64(limitReadN))
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +139,7 @@ func (h *hdfsSourceClient) Download(request *source.Request) (io.ReadCloser, err
 			hdfsFile.Close()
 			return nil, err
 		}
-		limitReadN = requestRange.EndIndex - requestRange.StartIndex
+		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
 	}
 
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), nil
@@ -159,9 +161,12 @@ func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.R
 
 	// default read all data when rang is nil
 	var limitReadN = fileInfo.Size()
+	if limitReadN < 0 {
+		return nil, nil, errors.Errorf("file length is illegal, length: %d", limitReadN)
+	}
 
 	if request.Header.Get(source.Range) != "" {
-		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), limitReadN)
+		requestRange, err := rangeutils.ParseRange(request.Header.Get(source.Range), uint64(limitReadN))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -170,7 +175,7 @@ func (h *hdfsSourceClient) DownloadWithExpireInfo(request *source.Request) (io.R
 			hdfsFile.Close()
 			return nil, nil, err
 		}
-		limitReadN = requestRange.EndIndex - requestRange.StartIndex
+		limitReadN = int64(requestRange.EndIndex - requestRange.StartIndex)
 	}
 	return newHdfsFileReaderClose(hdfsFile, limitReadN, hdfsFile), &source.ExpireInfo{
 		LastModified: timeutils.Format(fileInfo.ModTime()),
@@ -232,6 +237,10 @@ func (h *hdfsSourceClient) getHDFSClientAndPath(url *url.URL) (*hdfs.Client, str
 		return nil, "", errors.Errorf("hdfs create client failed, url is %s", url)
 	}
 	return client, url.Path, nil
+}
+
+func NewHDFSSourceClient(opts ...HDFSSourceClientOption) source.ResourceClient {
+	return newHDFSSourceClient(opts...)
 }
 
 func newHDFSSourceClient(opts ...HDFSSourceClientOption) *hdfsSourceClient {

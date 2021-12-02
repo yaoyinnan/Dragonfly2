@@ -29,8 +29,8 @@ const (
 )
 
 type Range struct {
-	StartIndex int64 `json:"start_index"`
-	EndIndex   int64 `json:"end_index"`
+	StartIndex uint64 `json:"start_index"`
+	EndIndex   uint64 `json:"end_index"`
 }
 
 func (r Range) String() string {
@@ -45,11 +45,11 @@ func GetRange(rangeStr string) (r *Range, err error) {
 		return nil, fmt.Errorf("range value(%s) is illegal which should be like 0-45535", rangeStr)
 	}
 
-	startIndex, err := strconv.ParseInt(ranges[0], 10, 64)
+	startIndex, err := strconv.ParseUint(ranges[0], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("range(%s) start is not a non-negative number", rangeStr)
 	}
-	endIndex, err := strconv.ParseInt(ranges[1], 10, 64)
+	endIndex, err := strconv.ParseUint(ranges[1], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("range(%s) end is not a non-negative number", rangeStr)
 	}
@@ -66,12 +66,12 @@ func GetRange(rangeStr string) (r *Range, err error) {
 
 // ParseRange parses the start and the end from rangeStr and returns them.
 // length is file total length
-func ParseRange(rangeStr string, length int64) (*Range, error) {
+func ParseRange(rangeStr string, length uint64) (*Range, error) {
 	if strings.Count(rangeStr, "-") != 1 {
 		return nil, errors.Errorf("invalid range: %s, should be like 0-1023", rangeStr)
 	}
 
-	// -{length}
+	// -{endIndex}
 	if strings.HasPrefix(rangeStr, "-") {
 		rangeStruct, err := handlePrefixRange(rangeStr, length)
 		if err != nil {
@@ -96,9 +96,9 @@ func ParseRange(rangeStr string, length int64) (*Range, error) {
 	return rangeStruct, nil
 }
 
-func handlePrefixRange(rangeStr string, length int64) (*Range, error) {
-	downLength, err := strconv.ParseInt(strings.TrimPrefix(rangeStr, "-"), 10, 64)
-	if err != nil || downLength < 0 {
+func handlePrefixRange(rangeStr string, length uint64) (*Range, error) {
+	downLength, err := strconv.ParseUint(strings.TrimPrefix(rangeStr, "-"), 10, 64)
+	if err != nil {
 		return nil, errors.Errorf("failed to parse range: %s to int: %v", rangeStr, err)
 	}
 
@@ -112,10 +112,10 @@ func handlePrefixRange(rangeStr string, length int64) (*Range, error) {
 	}, nil
 }
 
-func handleSuffixRange(rangeStr string, length int64) (*Range, error) {
-	startIndex, err := strconv.ParseInt(strings.TrimSuffix(rangeStr, "-"), 10, 64)
-	if err != nil || startIndex < 0 {
-		return nil, errors.Errorf("failed to parse range: %s to int: %v", rangeStr, err)
+func handleSuffixRange(rangeStr string, length uint64) (*Range, error) {
+	startIndex, err := strconv.ParseUint(strings.TrimSuffix(rangeStr, "-"), 10, 64)
+	if err != nil {
+		return nil, errors.Errorf("failed to parse range: %s to uint: %v", rangeStr, err)
 	}
 
 	if startIndex > length {
@@ -128,20 +128,20 @@ func handleSuffixRange(rangeStr string, length int64) (*Range, error) {
 	}, nil
 }
 
-func handlePairRange(rangeStr string, length int64) (*Range, error) {
+func handlePairRange(rangeStr string, length uint64) (*Range, error) {
 	rangePair := strings.Split(rangeStr, "-")
 
-	startIndex, err := strconv.ParseInt(rangePair[0], 10, 64)
-	if err != nil || startIndex < 0 {
-		return nil, errors.Errorf("failed to parse range: %s to int: %v", rangeStr, err)
+	startIndex, err := strconv.ParseUint(rangePair[0], 10, 64)
+	if err != nil {
+		return nil, errors.Errorf("failed to parse range: %s to uint: %v", rangeStr, err)
 	}
 	if startIndex > length {
 		return nil, errors.Errorf("range: %s, the startIndex is larger than length", rangeStr)
 	}
 
-	endIndex, err := strconv.ParseInt(rangePair[1], 10, 64)
-	if err != nil || endIndex < 0 {
-		return nil, errors.Errorf("failed to parse range: %s to int: %v", rangeStr, err)
+	endIndex, err := strconv.ParseUint(rangePair[1], 10, 64)
+	if err != nil {
+		return nil, errors.Errorf("failed to parse range: %s to uint: %v", rangeStr, err)
 	}
 	if endIndex >= length {
 		//attention

@@ -25,7 +25,7 @@ import (
 func TestParseRange(t *testing.T) {
 	var cases = []struct {
 		rangeStr string
-		length   int64
+		length   uint64
 		expected *Range
 		wantErr  bool
 	}{
