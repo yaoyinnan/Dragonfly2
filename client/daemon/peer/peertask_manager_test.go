@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/phayes/freeport"
 	testifyassert "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"d7y.io/dragonfly/v2/cdn/cdnutil"
@@ -382,7 +383,7 @@ func TestPeerTaskManager_StartStreamPeerTask_BackSource(t *testing.T) {
 		PeerId:   peerID,
 		PeerHost: &scheduler.PeerHost{},
 	})
-	assert.Nil(err, "start stream peer task")
+	require.Nil(t, err, "start stream peer task")
 
 	outputBytes, err := ioutil.ReadAll(r)
 	assert.Nil(err, "load read data")
