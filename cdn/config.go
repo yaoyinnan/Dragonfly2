@@ -14,33 +14,37 @@
  * limitations under the License.
  */
 
-package config
+package cdn
 
 import (
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/config"
 	"gopkg.in/yaml.v3"
 
+	"d7y.io/dragonfly/v2/cdn/metrics"
 	"d7y.io/dragonfly/v2/cdn/plugins"
+	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 )
 
 // New creates an instant with default values.
-func New() *Config {
-	return &Config{
-		BaseProperties: NewDefaultBaseProperties(),
-		Plugins:        NewDefaultPlugins(),
-	}
-}
+//func New() *Config {
+//	return &Config{
+//		BaseProperties: NewDefaultBaseProperties(),
+//		Plugins:        NewDefaultPlugins(),
+//	}
+//}
 
 // Config contains all configuration of cdn node.
 type Config struct {
 	base.Options    `yaml:",inline" mapstructure:",squash"`
 	*BaseProperties `yaml:"base" mapstructure:"base"`
-
-	Plugins map[plugins.PluginType][]*plugins.PluginProperties `yaml:"plugins" mapstructure:"plugins"`
+	Metrics         metrics.Config
+	Storage         storage.Config
+	Plugins         map[plugins.PluginType][]*plugins.PluginProperties `yaml:"plugins" mapstructure:"plugins"`
 }
 
 func (c *Config) String() string {
@@ -118,19 +122,19 @@ func NewDefaultPlugins() map[plugins.PluginType][]*plugins.PluginProperties {
 // NewDefaultBaseProperties creates an base properties instant with default values.
 func NewDefaultBaseProperties() *BaseProperties {
 	return &BaseProperties{
-		ListenPort:              DefaultListenPort,
-		DownloadPort:            DefaultDownloadPort,
-		SystemReservedBandwidth: DefaultSystemReservedBandwidth,
-		MaxBandwidth:            DefaultMaxBandwidth,
-		FailAccessInterval:      DefaultFailAccessInterval,
-		GCInitialDelay:          DefaultGCInitialDelay,
-		GCMetaInterval:          DefaultGCMetaInterval,
-		TaskExpireTime:          DefaultTaskExpireTime,
-		StorageMode:             DefaultStorageMode,
+		ListenPort:              config.DefaultListenPort,
+		DownloadPort:            config.DefaultDownloadPort,
+		SystemReservedBandwidth: config.DefaultSystemReservedBandwidth,
+		MaxBandwidth:            config.DefaultMaxBandwidth,
+		FailAccessInterval:      config.DefaultFailAccessInterval,
+		GCInitialDelay:          config.DefaultGCInitialDelay,
+		GCMetaInterval:          config.DefaultGCMetaInterval,
+		TaskExpireTime:          config.DefaultTaskExpireTime,
+		StorageMode:             config.DefaultStorageMode,
 		AdvertiseIP:             iputils.IPv4,
 		Manager: ManagerConfig{
 			KeepAlive: KeepAliveConfig{
-				Interval: DefaultKeepAliveInterval,
+				Interval: config.DefaultKeepAliveInterval,
 			},
 		},
 		Host: HostConfig{},
@@ -186,9 +190,6 @@ type BaseProperties struct {
 
 	// Host configuration
 	Host HostConfig `yaml:"host" mapstructure:"host"`
-
-	// Metrics configuration
-	Metrics *RestConfig `yaml:"metrics" mapstructure:"metrics"`
 }
 
 type ManagerConfig struct {
@@ -213,8 +214,4 @@ type HostConfig struct {
 
 	// IDC for scheduler
 	IDC string `mapstructure:"idc" yaml:"idc"`
-}
-
-type RestConfig struct {
-	Addr string `yaml:"addr" mapstructure:"addr"`
 }

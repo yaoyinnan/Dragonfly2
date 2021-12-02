@@ -19,7 +19,9 @@ package rpcserver
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"d7y.io/dragonfly/v2/pkg/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -39,24 +41,23 @@ import (
 
 var tracer = otel.Tracer("cdn-server")
 
-type server struct {
-	rpcServer *grpc.Server
-	cfg       *config.Config
-	service   supervisor.CDNService
+type Server struct {
+	*grpc.Server
+	config  Config
+	service supervisor.CDNService
 }
 
 // New returns a new Manager Object.
-func New(cfg *config.Config, cdnService supervisor.CDNService, opts ...grpc.ServerOption) (*grpc.Server, error) {
-	svr := &server{
+func New(config Config, cdnService supervisor.CDNService, opts ...grpc.ServerOption) (*Server, error) {
+	svr := &Server{
 		service: cdnService,
-		cfg:     cfg,
+		config:  config,
 	}
-
-	svr.rpcServer = cdnserver.New(svr, opts...)
-	return svr.rpcServer, nil
+	svr.Server = cdnserver.New(svr, opts...)
+	return svr, nil
 }
 
-func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, psc chan<- *cdnsystem.PieceSeed) (err error) {
+func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, psc chan<- *cdnsystem.PieceSeed) (err error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanObtainSeeds, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
@@ -83,8 +84,8 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	peerID := idgen.CDNPeerID(css.cfg.AdvertiseIP)
-	hostID := idgen.CDNHostID(hostutils.FQDNHostname, int32(css.cfg.ListenPort))
+	peerID := idgen.CDNPeerID(css.config.AdvertiseIP)
+	hostID := idgen.CDNHostID(hostutils.FQDNHostname, int32(css.config.ListenPort))
 	for piece := range pieceChan {
 		psc <- &cdnsystem.PieceSeed{
 			PeerId:   peerID,
@@ -129,7 +130,7 @@ func (css *server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	return nil
 }
 
-func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest) (piecePacket *base.PiecePacket, err error) {
+func (css *Server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest) (piecePacket *base.PiecePacket, err error) {
 	var span trace.Span
 	_, span = tracer.Start(ctx, config.SpanGetPieceTasks, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
@@ -186,7 +187,7 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 	pp := &base.PiecePacket{
 		TaskId:        req.TaskId,
 		DstPid:        req.DstPid,
-		DstAddr:       fmt.Sprintf("%s:%d", css.cfg.AdvertiseIP, css.cfg.DownloadPort),
+		DstAddr:       fmt.Sprintf("%s:%d", css.config.AdvertiseIP, css.config.DownloadPort),
 		PieceInfos:    pieceInfos,
 		TotalPiece:    seedTask.TotalPieceCount,
 		ContentLength: seedTask.SourceFileLength,
@@ -194,4 +195,38 @@ func (css *server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 	}
 	span.SetAttributes(config.AttributePiecePacketResult.String(pp.String()))
 	return pp, nil
+}
+
+func (css *Server) ListenAndServe() error {
+	// Generate GRPC listener
+	lis, _, err := rpc.ListenWithPortRange(css.config.AdvertiseIP, css.config.ListenPort, css.config.ListenPort)
+	if err != nil {
+		return err
+	}
+	//Started GRPC server
+	logger.Infof("started grpc server at %s://%s", lis.Addr().Network(), lis.Addr().String())
+	return css.Server.Serve(lis)
+}
+
+const (
+	gracefulStopTimeout = 10 * time.Second
+)
+
+func (css *Server) Shutdown() error {
+	stopped := make(chan struct{})
+	go func() {
+		css.Server.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-time.After(gracefulStopTimeout):
+		css.Server.Stop()
+	case <-stopped:
+	}
+	return nil
+}
+
+func (css *Server) GetConfig() Config {
+	return css.config
 }

@@ -24,7 +24,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn"
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cmd/dependency"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/dflog/logcore"
@@ -32,7 +31,7 @@ import (
 )
 
 var (
-	cfg *config.Config
+	cfg *cdn.Config
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -65,7 +64,7 @@ func Execute() {
 
 func init() {
 	// Initialize default cdn system config
-	cfg = config.New()
+	cfg = cdn.New()
 	// Initialize cobra
 	dependency.InitCobra(rootCmd, true, cfg)
 }
@@ -85,6 +84,6 @@ func runCdnSystem() error {
 		return err
 	}
 
-	dependency.SetupQuitSignalHandler(func() { svr.Stop() })
+	dependency.SetupQuitSignalHandler(func() { logger.Fatalf("stop server failed: %v", svr.Stop()) })
 	return svr.Serve()
 }

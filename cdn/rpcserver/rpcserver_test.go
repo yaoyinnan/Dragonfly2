@@ -21,10 +21,10 @@ import (
 	"reflect"
 	"testing"
 
+	"d7y.io/dragonfly/v2/cdn"
 	"github.com/distribution/distribution/v3/uuid"
 	"github.com/stretchr/testify/suite"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
@@ -38,20 +38,20 @@ func TestPluginsTestSuite(t *testing.T) {
 
 type RPCServerTestSuite struct {
 	suite.Suite
-	*server
+	*Server
 }
 
 func (s *RPCServerTestSuite) SetUpSuite() {
-	s.server = &server{
+	s.Server = &Server{
 		service: nil,
-		cfg:     nil,
+		config:  Config{},
 	}
 }
 
 func (s *RPCServerTestSuite) TestCdnSeedServer_GetPieceTasks() {
 	type fields struct {
 		taskManager task.Manager
-		cfg         *config.Config
+		cfg         *cdn.Config
 	}
 	type args struct {
 		ctx context.Context

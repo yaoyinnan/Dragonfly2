@@ -17,13 +17,59 @@
 package gc
 
 import (
-	"context"
 	"strings"
 	"sync"
 	"time"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
+
+type Server struct {
+	config Config
+	done   chan struct{}
+}
+
+func New() (*Server, error) {
+	return &Server{
+		done: make(chan struct{}),
+	}, nil
+}
+
+func (server *Server) Serve() error {
+	logger.Debugf("====start the gc jobs====")
+	var wg sync.WaitGroup
+	for name, executorWrapper := range gcExecutorWrappers {
+		wg.Add(1)
+		// start a goroutine to gc
+		go func(name string, wrapper *ExecutorWrapper) {
+			logger.Debugf("start the %s gc task", name)
+			// delay executing GC after initialDelay
+			time.Sleep(wrapper.gcInitialDelay)
+			wg.Done()
+			// execute the GC by fixed delay
+			ticker := time.NewTicker(wrapper.gcInterval)
+			for {
+				select {
+				case <-server.done:
+					logger.Infof("exit %s gc task", name)
+					return
+				case <-ticker.C:
+					if err := wrapper.gcExecutor.GC(); err != nil {
+						logger.Errorf("%s gc task execute failed: %v", name, err)
+					}
+				}
+			}
+		}(name, executorWrapper)
+	}
+	wg.Wait()
+	logger.Debugf("====all gc jobs have been launched====")
+	return nil
+}
+
+func (server *Server) Shutdown() error {
+	server.done <- struct{}{}
+	return nil
+}
 
 type Executor interface {
 	GC() error
@@ -46,36 +92,4 @@ func Register(name string, gcInitialDelay time.Duration, gcInterval time.Duratio
 		gcInterval:     gcInterval,
 		gcExecutor:     gcExecutor,
 	}
-}
-
-// StartGC starts to do the gc jobs.
-func StartGC(ctx context.Context) error {
-	logger.Debugf("====start the gc jobs====")
-	var wg sync.WaitGroup
-	for name, executorWrapper := range gcExecutorWrappers {
-		wg.Add(1)
-		// start a goroutine to gc
-		go func(name string, wrapper *ExecutorWrapper) {
-			logger.Debugf("start the %s gc task", name)
-			// delay executing GC after initialDelay
-			time.Sleep(wrapper.gcInitialDelay)
-			wg.Done()
-			// execute the GC by fixed delay
-			ticker := time.NewTicker(wrapper.gcInterval)
-			for {
-				select {
-				case <-ctx.Done():
-					logger.Infof("exit %s gc task", name)
-					return
-				case <-ticker.C:
-					if err := wrapper.gcExecutor.GC(); err != nil {
-						logger.Errorf("%s gc task execute failed: %v", name, err)
-					}
-				}
-			}
-		}(name, executorWrapper)
-	}
-	wg.Wait()
-	logger.Debugf("====all gc jobs have been launched====")
-	return nil
 }

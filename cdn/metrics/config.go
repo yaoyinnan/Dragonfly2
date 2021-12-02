@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-package main
+package metrics
 
-import (
-	"d7y.io/dragonfly/v2/cmd/cdn/cmd"
+type Config struct {
+	Net  string `yaml:"net" mapstructure:"net"`
+	Addr string `yaml:"addr" mapstructure:"addr"`
+}
 
-	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"   // register disk storage manager
-	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/hybrid" // register hybrid storage manager
-	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"           // register http client
-	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"            // register oss client
-)
-
-func main() {
-	cmd.Execute()
+func (cfg Config) applyDefaults() Config {
+	if cfg.Net == "" {
+		cfg.Net = "tcp"
+	}
+	if cfg.Addr == "" {
+		cfg.Addr = ":8080"
+	}
+	return cfg
 }

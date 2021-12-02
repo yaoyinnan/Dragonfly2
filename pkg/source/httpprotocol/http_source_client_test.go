@@ -52,13 +52,13 @@ func (suite *HTTPSourceClientTestSuite) TearDownSuite() {
 }
 
 var (
-	timeoutRawURL               = "http://timeout.com"
-	normalRawURL                = "http://normal.com"
-	expireRawURL                = "http://expired.com"
-	errorRawURL                 = "http://error.com"
-	forbiddenRawURL             = "http://forbidden.com"
-	notfoundRawURL              = "http://notfound.com"
-	normalNotSupportRangeRawURL = "http://notsuppertrange.com"
+	timeoutRawURL               = "https://timeout.com"
+	normalRawURL                = "https://normal.com"
+	expireRawURL                = "https://expired.com"
+	errorRawURL                 = "https://error.com"
+	forbiddenRawURL             = "https://forbidden.com"
+	notfoundRawURL              = "https://notfound.com"
+	normalNotSupportRangeRawURL = "https://notsuppertrange.com"
 )
 
 var (
@@ -153,7 +153,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 	reader, expireInfo, err := suite.httpClient.DownloadWithExpireInfo(timeoutRequest)
 	cancel()
 	suite.NotNil(err)
-	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
+	suite.Equal("Get \"https://timeout.com\": context deadline exceeded", err.Error())
 	suite.Nil(reader)
 	suite.Nil(expireInfo)
 
@@ -198,7 +198,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDownloadWithResponse
 			request:    errorRequest,
 			content:    "",
 			expireInfo: nil,
-			wantErr:    errors.Errorf("Get \"http://error.com\": error"),
+			wantErr:    errors.Errorf("Get \"https://error.com\": error"),
 		},
 	}
 	for _, tt := range tests {
@@ -287,7 +287,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 	support, err := suite.httpClient.IsSupportRange(request)
 	cancel()
 	suite.NotNil(err)
-	suite.Equal("Get \"http://timeout.com\": context deadline exceeded", err.Error())
+	suite.Equal("Get \"https://timeout.com\": context deadline exceeded", err.Error())
 	suite.Equal(false, support)
 	httpmock.RegisterResponder(http.MethodGet, normalRawURL, httpmock.NewStringResponder(http.StatusPartialContent, ""))
 	httpmock.RegisterResponder(http.MethodGet, normalNotSupportRangeRawURL, httpmock.NewStringResponder(http.StatusOK, ""))
@@ -319,7 +319,7 @@ func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientIsSupportRange() {
 }
 
 func (suite *HTTPSourceClientTestSuite) TestHttpSourceClientDoRequest() {
-	var testURL = "http://www.hackhttp.com"
+	var testURL = "https://www.hackhttp.com"
 	httpmock.RegisterResponder(http.MethodGet, testURL, httpmock.NewStringResponder(http.StatusOK, "ok"))
 	request, err := source.NewRequest(testURL)
 	suite.Nil(err)
