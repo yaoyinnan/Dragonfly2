@@ -39,7 +39,7 @@ func (cm *manager) download(ctx context.Context, seedTask *task.SeedTask, breakP
 			return nil, errors.Wrapf(err, "calculate the breakRange")
 		}
 	}
-	seedTask.Log().Infof("start download url %s at range: %d-%d: with header: %+v", seedTask.RawURL, breakPoint,
+	seedTask.Log().Infof("start download url %s at range: %d-%d: with header: %#v", seedTask.RawURL, breakPoint,
 		seedTask.SourceFileLength, seedTask.Range)
 	downloadRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
 	if err != nil {

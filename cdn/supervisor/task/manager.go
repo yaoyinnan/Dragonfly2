@@ -24,9 +24,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"d7y.io/dragonfly/v2/cdn/cdnutil"
 	"d7y.io/dragonfly/v2/cdn/supervisor/gc"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/internal/dfutils"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
@@ -118,7 +118,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 	seedTask = actual.(*SeedTask)
 	if loaded && !IsSame(seedTask, registerTask) {
 		synclock.UnLock(registerTask.ID, true)
-		return nil, errors.Wrapf(errTaskIDConflict, "register task %v is conflict with exist task %v", registerTask, seedTask)
+		return nil, errors.Wrapf(errTaskIDConflict, "register task %#v is conflict with exist task %#v", registerTask, seedTask)
 	}
 	if seedTask.SourceFileLength != source.UnKnownSourceFileLen {
 		synclock.UnLock(registerTask.ID, true)
@@ -157,7 +157,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 
 	// calculate piece size and update the PieceSize and PieceTotal
 	if registerTask.PieceSize <= 0 {
-		pieceSize := cdnutil.ComputePieceSize(registerTask.SourceFileLength)
+		pieceSize := dfutils.ComputePieceSize(registerTask.SourceFileLength)
 		seedTask.PieceSize = int32(pieceSize)
 	}
 	return seedTask, nil

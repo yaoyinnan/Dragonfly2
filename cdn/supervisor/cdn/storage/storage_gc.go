@@ -122,7 +122,7 @@ func (cleaner *cleaner) GC(storagePattern string, force bool) ([]string, error) 
 		}
 		// put taskID into gapTasks or intervalTasks which will sort by some rules
 		if err := cleaner.sortInert(gapTasks, intervalTasks, metadata); err != nil {
-			logger.GcLogger.With("type", storagePattern).Errorf("failed to parse inert metadata(%+v): %v", metadata, err)
+			logger.GcLogger.With("type", storagePattern).Errorf("failed to parse inert metadata(%#v): %v", metadata, err)
 		}
 
 		return nil

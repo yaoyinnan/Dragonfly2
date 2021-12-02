@@ -128,7 +128,7 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	if err != nil {
 		return nil, errors.Wrap(err, "detect task cache")
 	}
-	seedTask.Log().Infof("detects cache result: %+v", detectResult)
+	seedTask.Log().Debugf("detects cache result: %#v", detectResult)
 	// second: report detect result
 	err = cm.cdnReporter.reportDetectResult(ctx, seedTask.ID, detectResult)
 	if err != nil {
@@ -190,7 +190,7 @@ func (cm *manager) TryFreeSpace(fileLength int64) (bool, error) {
 }
 
 func (cm *manager) handleCDNResult(seedTask *task.SeedTask, downloadMetadata *downloadMetadata) error {
-	seedTask.Log().Debugf("start handle cdn result, downloadMetadata: %+v", downloadMetadata)
+	seedTask.Log().Debugf("handle cdn result, downloadMetadata: %#v", downloadMetadata)
 	var success = true
 	var errMsg string
 	// check md5

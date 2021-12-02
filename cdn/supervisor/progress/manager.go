@@ -94,7 +94,7 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(record)
 	span.AddEvent(config.EventPublishPiece, trace.WithAttributes(config.AttributeSeedPiece.String(string(recordBytes))))
-	logger.Debugf("seed piece record %+v", record)
+	logger.Debugf("seed piece record %#v", record)
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if ok {
 		progressPublisher.NotifySubscribers(record)
