@@ -19,6 +19,7 @@ package cdn
 import (
 	"context"
 
+	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -61,7 +62,8 @@ func (re *reporter) reportDetectResult(ctx context.Context, taskID string, detec
 // reportPieceMetaRecord report piece meta record
 func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, record *storage.PieceMetaRecord, from string) error {
 	// report cache piece status
-	logger.DownloaderLogger.Info(taskID,
+	logger.DownloaderLogger.Info("report piece",
+		zap.String("taskID", taskID),
 		zap.Uint32("pieceNum", record.PieceNum),
 		zap.String("md5", record.Md5),
 		zap.String("from", from))
@@ -73,7 +75,7 @@ func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, re
 */
 func convertPieceMeta2SeedPiece(record *storage.PieceMetaRecord) *task.PieceInfo {
 	return &task.PieceInfo{
-		PieceStyle:  record.PieceStyle,
+		PieceStyle:  base.PieceStyle(record.PieceStyle),
 		PieceNum:    record.PieceNum,
 		PieceMd5:    record.Md5,
 		PieceRange:  record.Range,

@@ -63,15 +63,15 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {
 		if err != storage.ErrTaskNotPersisted {
-			seedTask.Log().Infof("detect cache failed, reset storage cache: %v", err)
+			seedTask.Log().Infof("reset storage cache: %v", err)
 		}
 		metadata, err := cd.resetCache(seedTask)
 		if err != nil {
-			return nil, errors.Wrapf(err, "reset cache failed")
+			return nil, errors.Wrapf(err, "reset cache")
 		}
-		result = &cacheResult{
+		return &cacheResult{
 			fileMetadata: metadata,
-		}
+		}, nil
 	}
 	if err := cd.metadataManager.updateAccessTime(seedTask.ID, getCurrentTimeMillisFunc()); err != nil {
 		seedTask.Log().Warnf("failed to update task access time ")

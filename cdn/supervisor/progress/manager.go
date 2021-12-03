@@ -80,10 +80,10 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	}
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if !ok {
-		pm.seedTaskSubjects[taskID] = newProgressPublisher(taskID)
+		progressPublisher = newProgressPublisher(taskID)
+		pm.seedTaskSubjects[taskID] = progressPublisher
 	}
-	observer := newProgressSubscriber(ctx, seedTask.Pieces)
-	logger.Debugf("begin watch taskID %s seed progress", taskID)
+	observer := newProgressSubscriber(ctx, seedTask.ID, seedTask.Pieces)
 	progressPublisher.AddSubscriber(observer)
 	return observer.Receiver(), nil
 }

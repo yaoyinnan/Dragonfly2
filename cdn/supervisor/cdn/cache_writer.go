@@ -168,7 +168,7 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 					waitToWriteContent := p.pieceContent
 					originPieceLen := waitToWriteContent.Len() // the length of the original data that has not been processed
 					pieceLen := originPieceLen                 // the real length written to the storage driver after processed
-					pieceStyle := base.PieceStyle_PLAIN
+					pieceStyle := int32(base.PieceStyle_PLAIN.Number())
 					pieceMd5 := md5.New()
 					err := cw.cacheStore.WriteDownloadFile(
 						p.taskID, int64(p.pieceNum)*int64(p.pieceSize), int64(waitToWriteContent.Len()),

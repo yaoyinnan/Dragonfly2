@@ -130,6 +130,11 @@ func (task *SeedTask) Clone() *SeedTask {
 			cloneTask.Header[key] = value
 		}
 	}
+	if len(task.Pieces) > 0 {
+		for pieceNum, piece := range task.Pieces {
+			cloneTask.Pieces[pieceNum] = piece
+		}
+	}
 	return cloneTask
 }
 

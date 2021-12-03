@@ -28,7 +28,6 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
 )
@@ -112,7 +111,7 @@ type PieceMetaRecord struct {
 	//  piece's real offset in the file
 	OriginRange *rangeutils.Range `json:"originRange"`
 	// 0: PlainUnspecified
-	PieceStyle base.PieceStyle `json:"pieceStyle"`
+	PieceStyle int32 `json:"pieceStyle"`
 }
 
 const fieldSeparator = ":"
@@ -156,7 +155,7 @@ func ParsePieceMetaRecord(value string) (record *PieceMetaRecord, err error) {
 		Md5:         md5,
 		Range:       pieceRange,
 		OriginRange: originRange,
-		PieceStyle:  base.PieceStyle(pieceStyle),
+		PieceStyle:  int32(pieceStyle),
 	}, nil
 }
 

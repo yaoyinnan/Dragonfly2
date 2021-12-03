@@ -112,6 +112,7 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 		// todo source not reach error SOURCE_ERROR
 		updateTaskInfo = getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed)
 	}
+	// TODO pieces
 	err = cm.progressManager.PublishTask(ctx, seedTask.ID, updateTaskInfo)
 	return updateTaskInfo, err
 }

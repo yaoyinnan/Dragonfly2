@@ -21,32 +21,51 @@ import (
 	"context"
 	"sync"
 
+	"go.uber.org/atomic"
+	"google.golang.org/grpc/peer"
+
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
+	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
 type subscriber struct {
 	ctx       context.Context
+	scheduler string
+	taskID    string
 	done      chan struct{}
 	once      sync.Once
 	pieces    map[uint32]*task.PieceInfo
 	pieceChan chan *task.PieceInfo
 	cond      *sync.Cond
+	closed    *atomic.Bool
 }
 
-func newProgressSubscriber(ctx context.Context, pieces map[uint32]*task.PieceInfo) *subscriber {
+func newProgressSubscriber(ctx context.Context, taskID string, pieces map[uint32]*task.PieceInfo) *subscriber {
+	var clientID = "unknown"
+	p, ok := peer.FromContext(ctx)
+	if ok {
+		clientID = p.Addr.String()
+	}
 	sub := &subscriber{
 		ctx:       ctx,
+		scheduler: clientID,
+		taskID:    taskID,
 		pieces:    pieces,
 		done:      make(chan struct{}),
 		pieceChan: make(chan *task.PieceInfo, 100),
 		cond:      sync.NewCond(&sync.Mutex{}),
+		closed:    atomic.NewBool(false),
 	}
 	go sub.readLoop()
 	return sub
 }
 
 func (sub *subscriber) readLoop() {
-	defer close(sub.pieceChan)
+	logger.Debugf("scheduler %s start watching task %s seed progress", sub.scheduler, sub.taskID)
+	defer func() {
+		close(sub.pieceChan)
+		logger.Debugf("scheduler %s stopped watch task %s seed progress", sub.scheduler, sub.taskID)
+	}()
 	for {
 		select {
 		case <-sub.ctx.Done():
@@ -57,7 +76,7 @@ func (sub *subscriber) readLoop() {
 			}
 		default:
 			sub.cond.L.Lock()
-			for len(sub.pieces) == 0 {
+			for len(sub.pieces) == 0 && !sub.closed.Load() {
 				sub.cond.Wait()
 			}
 			for i, info := range sub.pieces {
@@ -70,6 +89,7 @@ func (sub *subscriber) readLoop() {
 }
 
 func (sub *subscriber) Notify(seedPiece *task.PieceInfo) {
+	logger.Debugf("notifies scheduler %s about %d piece info", sub.scheduler, seedPiece.PieceNum)
 	sub.cond.L.Lock()
 	sub.pieces[seedPiece.PieceNum] = seedPiece
 	sub.cond.L.Unlock()
@@ -82,18 +102,20 @@ func (sub *subscriber) Receiver() <-chan *task.PieceInfo {
 
 func (sub *subscriber) Close() {
 	sub.once.Do(func() {
+		sub.cond.Signal()
+		sub.closed.CAS(false, true)
 		close(sub.done)
 	})
 }
 
 type publisher struct {
-	subjectID   string
+	taskID      string
 	subscribers *list.List
 }
 
-func newProgressPublisher(subjectID string) *publisher {
+func newProgressPublisher(taskID string) *publisher {
 	return &publisher{
-		subjectID:   subjectID,
+		taskID:      taskID,
 		subscribers: list.New(),
 	}
 }

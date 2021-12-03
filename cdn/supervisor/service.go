@@ -103,11 +103,11 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 	seedTask.StartTrigger()
 	// triggerCDN goroutine
 	go func() {
-		updateTaskInfo, err := service.cdnManager.TriggerCDN(context.Background(), seedTask.Clone())
+		updateTaskInfo, err := service.cdnManager.TriggerCDN(context.Background(), seedTask)
 		if err != nil {
 			seedTask.Log().Errorf("failed to trigger cdn: %v", err)
 		}
-		seedTask.Log().Infof("trigger cdn successfully, trigger result: %+v", updateTaskInfo)
+		seedTask.Log().Infof("trigger cdn successfully, trigger result: %#v", updateTaskInfo)
 	}()
 	return nil
 }

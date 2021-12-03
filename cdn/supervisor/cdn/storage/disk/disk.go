@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -173,7 +174,11 @@ func (s *diskStorageManager) ResetRepo(seedTask *task.SeedTask) error {
 		return errors.Errorf("delete task %s files: %v", seedTask.ID, err)
 	}
 	// create download file
-	if _, err := os.Create(s.diskDriver.GetPath(storage.GetDownloadRaw(seedTask.ID))); err != nil {
+	var downloadPath = s.diskDriver.GetPath(storage.GetDownloadRaw(seedTask.ID))
+	if err := fileutils.MkdirAll(filepath.Dir(downloadPath)); err != nil {
+		return err
+	}
+	if _, err := os.Create(downloadPath); err != nil {
 		return err
 	}
 	// create a soft link from the upload file to the download file

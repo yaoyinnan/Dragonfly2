@@ -72,7 +72,6 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	defer span.End()
 	span.SetAttributes(constants.AttributeObtainSeedsRequest.String(req.String()))
 	span.SetAttributes(constants.AttributeTaskID.String(req.TaskId))
-	logger.Infof("obtain seeds request: %#v", req)
 	defer func() {
 		if r := recover(); r != nil {
 			err = dferrors.Newf(base.Code_UnknownError, "obtain task(%s) seeds encounter an panic: %v", req.TaskId, r)
