@@ -22,9 +22,9 @@ import (
 	"context"
 	"encoding/json"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"go.opentelemetry.io/otel/trace"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
@@ -63,7 +63,7 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
-	span.AddEvent(config.EventWatchSeedProgress)
+	span.AddEvent(constants.EventWatchSeedProgress)
 	seedTask, err := pm.taskManager.Get(taskID)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(record)
-	span.AddEvent(config.EventPublishPiece, trace.WithAttributes(config.AttributeSeedPiece.String(string(recordBytes))))
+	span.AddEvent(constants.EventPublishPiece, trace.WithAttributes(constants.AttributeSeedPiece.String(string(recordBytes))))
 	logger.Debugf("seed piece record %#v", record)
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if ok {
@@ -107,7 +107,7 @@ func (pm *manager) PublishTask(ctx context.Context, taskID string, seedTask *tas
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
 	recordBytes, _ := json.Marshal(seedTask)
-	span.AddEvent(config.EventPublishTask, trace.WithAttributes(config.AttributeSeedTask.String(string(recordBytes))))
+	span.AddEvent(constants.EventPublishTask, trace.WithAttributes(constants.AttributeSeedTask.String(string(recordBytes))))
 	if progressPublisher, ok := pm.seedTaskSubjects[taskID]; ok {
 		progressPublisher.RemoveAllSubscribers()
 		delete(pm.seedTaskSubjects, taskID)

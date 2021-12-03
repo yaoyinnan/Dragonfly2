@@ -21,12 +21,14 @@ import (
 	"fmt"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/pkg/rpc"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/internal/dferrors"
@@ -49,9 +51,16 @@ type Server struct {
 
 // New returns a new Manager Object.
 func New(config Config, cdnService supervisor.CDNService, opts ...grpc.ServerOption) (*Server, error) {
+	config = config.applyDefaults()
+	// scheduler config values
+	if s, err := yaml.Marshal(config); err != nil {
+		return nil, errors.Wrap(err, "marshal grpc server config")
+	} else {
+		logger.Infof("grpc server config: \n%s", s)
+	}
 	svr := &Server{
-		service: cdnService,
 		config:  config,
+		service: cdnService,
 	}
 	svr.Server = cdnserver.New(svr, opts...)
 	return svr, nil
@@ -59,10 +68,10 @@ func New(config Config, cdnService supervisor.CDNService, opts ...grpc.ServerOpt
 
 func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, psc chan<- *cdnsystem.PieceSeed) (err error) {
 	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanObtainSeeds, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span = tracer.Start(ctx, constants.SpanObtainSeeds, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
-	span.SetAttributes(config.AttributeObtainSeedsRequest.String(req.String()))
-	span.SetAttributes(config.AttributeTaskID.String(req.TaskId))
+	span.SetAttributes(constants.AttributeObtainSeedsRequest.String(req.String()))
+	span.SetAttributes(constants.AttributeTaskID.String(req.TaskId))
 	logger.Infof("obtain seeds request: %#v", req)
 	defer func() {
 		if r := recover(); r != nil {
@@ -132,10 +141,10 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 
 func (css *Server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest) (piecePacket *base.PiecePacket, err error) {
 	var span trace.Span
-	_, span = tracer.Start(ctx, config.SpanGetPieceTasks, trace.WithSpanKind(trace.SpanKindServer))
+	_, span = tracer.Start(ctx, constants.SpanGetPieceTasks, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
-	span.SetAttributes(config.AttributeGetPieceTasksRequest.String(req.String()))
-	span.SetAttributes(config.AttributeTaskID.String(req.TaskId))
+	span.SetAttributes(constants.AttributeGetPieceTasksRequest.String(req.String()))
+	span.SetAttributes(constants.AttributeTaskID.String(req.TaskId))
 	logger.Infof("get piece tasks: %#v", req)
 	defer func() {
 		if r := recover(); r != nil {
@@ -193,7 +202,7 @@ func (css *Server) GetPieceTasks(ctx context.Context, req *base.PieceTaskRequest
 		ContentLength: seedTask.SourceFileLength,
 		PieceMd5Sign:  seedTask.PieceMd5Sign,
 	}
-	span.SetAttributes(config.AttributePiecePacketResult.String(pp.String()))
+	span.SetAttributes(constants.AttributePiecePacketResult.String(pp.String()))
 	return pp, nil
 }
 
@@ -204,7 +213,7 @@ func (css *Server) ListenAndServe() error {
 		return err
 	}
 	//Started GRPC server
-	logger.Infof("started grpc server at %s://%s", lis.Addr().Network(), lis.Addr().String())
+	logger.Infof("====starting grpc server at %s://%s====", lis.Addr().Network(), lis.Addr().String())
 	return css.Server.Serve(lis)
 }
 
@@ -213,6 +222,7 @@ const (
 )
 
 func (css *Server) Shutdown() error {
+	defer logger.Infof("====stopped rpc server====")
 	stopped := make(chan struct{})
 	go func() {
 		css.Server.GracefulStop()

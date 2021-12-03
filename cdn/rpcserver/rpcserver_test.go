@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"testing"
 
-	"d7y.io/dragonfly/v2/cdn"
+	"d7y.io/dragonfly/v2/cdn/config"
 	"github.com/distribution/distribution/v3/uuid"
 	"github.com/stretchr/testify/suite"
 
@@ -51,7 +51,7 @@ func (s *RPCServerTestSuite) SetUpSuite() {
 func (s *RPCServerTestSuite) TestCdnSeedServer_GetPieceTasks() {
 	type fields struct {
 		taskManager task.Manager
-		cfg         *cdn.Config
+		cfg         *config.Config
 	}
 	type args struct {
 		ctx context.Context

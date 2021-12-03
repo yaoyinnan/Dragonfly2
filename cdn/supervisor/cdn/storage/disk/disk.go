@@ -52,7 +52,7 @@ func (b *diskStorageBuilder) Build(storageConfig storage.Config, taskManager tas
 	if len(storageConfig.DriverConfigs) != 1 {
 		return nil, fmt.Errorf("disk storage manager should have only one disk driver, cfg's driver number is wrong. config: %v", storageConfig)
 	}
-	driverNames := make([]string, len(storageConfig.DriverConfigs))
+	driverNames := make([]string, 0, len(storageConfig.DriverConfigs))
 	for k := range storageConfig.DriverConfigs {
 		driverNames = append(driverNames, k)
 	}

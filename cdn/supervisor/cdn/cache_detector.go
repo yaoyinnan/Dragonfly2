@@ -24,10 +24,10 @@ import (
 	"io"
 	"io/ioutil"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -58,7 +58,7 @@ func newCacheDetector(metadataManager *metadataManager, storageManager storage.M
 
 func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTask, fileDigest hash.Hash) (result *cacheResult, err error) {
 	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanDetectCache)
+	ctx, span = tracer.Start(ctx, constants.SpanDetectCache)
 	defer span.End()
 	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {

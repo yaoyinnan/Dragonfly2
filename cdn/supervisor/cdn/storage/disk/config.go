@@ -32,18 +32,24 @@ type Config struct {
 }
 
 func applyDefaults(driver storedriver.Driver, storageConfig storage.Config) Config {
-	cfg := Config{}
-	if storageConfig.GCInitialDelay == 0 {
-		cfg.GCInitialDelay = 0 * time.Second
+	cfg := Config{
+		GCInitialDelay: 0 * time.Second,
+		GCInterval:     15 * time.Second,
 	}
-	if storageConfig.GCInterval == 0 {
-		cfg.GCInterval = 15 * time.Second
+	if storageConfig.GCInitialDelay != 0 {
+		cfg.GCInitialDelay = storageConfig.GCInitialDelay
+	}
+	if storageConfig.GCInterval != 0 {
+		cfg.GCInterval = storageConfig.GCInterval
 	}
 	cfg.GCConfig = getDiskGCConfig(driver, storageConfig.DriverConfigs["disk"])
 	return cfg
 }
 
 func getDiskGCConfig(diskDriver storedriver.Driver, config *storage.DriverConfig) storage.GCConfig {
+	if config != nil && config.GCConfig != nil {
+		return *config.GCConfig
+	}
 	totalSpace, err := diskDriver.GetTotalSpace()
 	if err != nil {
 		logger.GcLogger.With("type", "hybrid").Errorf("failed to get total space of disk: %v", err)

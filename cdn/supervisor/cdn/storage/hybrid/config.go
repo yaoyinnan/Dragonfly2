@@ -46,6 +46,9 @@ func applyDefaults(diskDriver storedriver.Driver, memoryDriver storedriver.Drive
 }
 
 func getDiskGCConfig(diskDriver storedriver.Driver, config *storage.DriverConfig) storage.GCConfig {
+	if config != nil && config.GCConfig != nil {
+		return *config.GCConfig
+	}
 	totalSpace, err := diskDriver.GetTotalSpace()
 	if err != nil {
 		logger.GcLogger.With("type", "hybrid").Errorf("failed to get total space of disk: %v", err)
@@ -64,6 +67,9 @@ func getDiskGCConfig(diskDriver storedriver.Driver, config *storage.DriverConfig
 
 func getMemoryGCConfig(memoryDriver storedriver.Driver, config *storage.DriverConfig) storage.GCConfig {
 	// determine whether the shared cache can be used
+	if config != nil && config.GCConfig != nil {
+		return *config.GCConfig
+	}
 	diff := unit.Bytes(0)
 	totalSpace, err := memoryDriver.GetTotalSpace()
 	if err != nil {

@@ -24,11 +24,11 @@ import (
 	"io"
 	"sync"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
@@ -71,12 +71,12 @@ func newCacheWriter(cdnReporter *reporter, metadataManager *metadataManager, cac
 func (cw *cacheWriter) startWriter(ctx context.Context, reader *limitreader.LimitReader, seedTask *task.SeedTask, breakPoint int64) (*downloadMetadata,
 	error) {
 	var writeSpan trace.Span
-	ctx, writeSpan = tracer.Start(ctx, config.SpanWriteData)
+	ctx, writeSpan = tracer.Start(ctx, constants.SpanWriteData)
 	defer writeSpan.End()
 	// currentSourceFileLength is used to calculate the source file Length dynamically
 	currentSourceFileLength := breakPoint
 	routineCount := calculateRoutineCount(seedTask.SourceFileLength-currentSourceFileLength, seedTask.PieceSize)
-	writeSpan.SetAttributes(config.AttributeWriteGoroutineCount.Int(routineCount))
+	writeSpan.SetAttributes(constants.AttributeWriteGoroutineCount.Int(routineCount))
 	// start writer pool
 	backSourceLength, totalPieceCount, err := cw.doWrite(ctx, reader, seedTask, routineCount, breakPoint)
 	if err != nil {
@@ -87,7 +87,7 @@ func (cw *cacheWriter) startWriter(ctx context.Context, reader *limitreader.Limi
 		return &downloadMetadata{backSourceLength: backSourceLength}, errors.Wrap(err, "stat cdn download file")
 	}
 	storageInfoBytes, _ := json.Marshal(storageInfo)
-	writeSpan.SetAttributes(config.AttributeDownloadFileInfo.String(string(storageInfoBytes)))
+	writeSpan.SetAttributes(constants.AttributeDownloadFileInfo.String(string(storageInfoBytes)))
 	// TODO Try getting it from the ProgressManager first
 	pieceMd5Sign, _, err := cw.metadataManager.getPieceMd5Sign(seedTask.ID)
 	if err != nil {
@@ -216,7 +216,7 @@ func (cw *cacheWriter) writerPool(ctx context.Context, g *errgroup.Group, routin
 
 // calculateRoutineCount max goroutine count is CDNWriterRoutineLimit
 func calculateRoutineCount(remainingFileLength int64, pieceSize int32) int {
-	routineSize := config.CDNWriterRoutineLimit
+	routineSize := constants.CDNWriterRoutineLimit
 	if remainingFileLength < 0 || pieceSize <= 0 {
 		return routineSize
 	}

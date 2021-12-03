@@ -18,3 +18,7 @@ package gc
 
 type Config struct {
 }
+
+func (config Config) applyDefaults() Config {
+	return config
+}

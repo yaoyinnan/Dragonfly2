@@ -24,11 +24,11 @@ import (
 	"fmt"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"   // nolint
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/hybrid" // nolint
@@ -111,7 +111,7 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 
 func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*task.SeedTask, error) {
 	var span trace.Span
-	ctx, span = tracer.Start(ctx, config.SpanTriggerCDN)
+	ctx, span = tracer.Start(ctx, constants.SpanTriggerCDN)
 	defer span.End()
 	cm.cdnLocker.Lock(seedTask.ID, false)
 	defer cm.cdnLocker.UnLock(seedTask.ID, false)
@@ -145,7 +145,7 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	start := time.Now()
 	// third: start to download the source file
 	var downloadSpan trace.Span
-	ctx, downloadSpan = tracer.Start(ctx, config.SpanDownloadSource)
+	ctx, downloadSpan = tracer.Start(ctx, constants.SpanDownloadSource)
 	downloadSpan.End()
 	respBody, err := cm.download(ctx, seedTask, detectResult.breakPoint)
 	// download fail

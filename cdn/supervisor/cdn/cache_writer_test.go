@@ -26,10 +26,10 @@ import (
 	"testing"
 	"time"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
@@ -90,9 +90,9 @@ func (suite *CacheWriterTestSuite) SetupSuite() {
 	ctrl := gomock.NewController(suite.T())
 	progressManager := progressMock.NewMockManager(ctrl)
 	taskManager := taskMock.NewMockManager(ctrl)
-	storageManager, err := storage.Get(config.DefaultStorageMode).Build(storage.Config{}, taskManager)
+	storageManager, err := storage.Get(constants.DefaultStorageMode).Build(storage.Config{}, taskManager)
 	if err != nil {
-		suite.Failf("failed to create storage mode %s", config.DefaultStorageMode)
+		suite.Failf("failed to create storage mode %s", constants.DefaultStorageMode)
 	}
 	cacheDataManager := newMetadataManager(storageManager)
 	cdnReporter := newReporter(progressManager)

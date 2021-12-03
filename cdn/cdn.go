@@ -21,12 +21,13 @@ import (
 	"fmt"
 	"runtime"
 
-	"d7y.io/dragonfly/v2/cdn/gc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"d7y.io/dragonfly/v2/cdn/config"
+	"d7y.io/dragonfly/v2/cdn/gc"
 	"d7y.io/dragonfly/v2/cdn/metrics"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
@@ -43,7 +44,7 @@ import (
 
 type Server struct {
 	// Server configuration
-	config *Config
+	config *config.Config
 
 	// GRPC server
 	grpcServer *rpcserver.Server
@@ -59,7 +60,7 @@ type Server struct {
 }
 
 // New creates a brand-new server instance.
-func New(cfg *Config) (*Server, error) {
+func New(cfg *config.Config) (*Server, error) {
 	if ok := storage.IsSupport(cfg.StorageMode); !ok {
 		return nil, fmt.Errorf("os %s is not support storage mode %s", runtime.GOOS, cfg.StorageMode)
 	}
@@ -91,7 +92,7 @@ func New(cfg *Config) (*Server, error) {
 	if storageManagerBuilder == nil {
 		return nil, fmt.Errorf("can not find storage manager mode %s", cfg.StorageMode)
 	}
-	storageManager, err := storageManagerBuilder.Build(cfg.Storage, taskManager)
+	storageManager, err := storageManagerBuilder.Build(config.NewStorage(cfg.StorageMode), taskManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create storage manager")
 	}
@@ -156,23 +157,27 @@ func New(cfg *Config) (*Server, error) {
 func (s *Server) Serve() error {
 	go func() {
 		// Start GC
-		logger.Fatalf("start gc task failed: %v", s.gcServer.Serve())
+		if err := s.gcServer.Serve(); err != nil {
+			logger.Fatalf("start gc task failed: %v", err)
+		}
 	}()
 
 	go func() {
 		// Start metrics server
-		logger.Fatalf("start metrics server failed: %v", s.metricsServer.ListenAndServe(s.metricsServer.Handler()))
+		if err := s.metricsServer.ListenAndServe(s.metricsServer.Handler()); err != nil {
+			logger.Fatalf("start metrics server failed: %v", err)
+		}
 	}()
 
 	go func() {
 		if s.configServer != nil {
-			config := s.grpcServer.GetConfig()
+			var rpcServerConfig = s.grpcServer.GetConfig()
 			CDNInstance, err := s.configServer.UpdateCDN(&manager.UpdateCDNRequest{
 				SourceType:   manager.SourceType_CDN_SOURCE,
 				HostName:     hostutils.FQDNHostname,
-				Ip:           config.AdvertiseIP,
-				Port:         int32(config.ListenPort),
-				DownloadPort: int32(config.DownloadPort),
+				Ip:           rpcServerConfig.AdvertiseIP,
+				Port:         int32(rpcServerConfig.ListenPort),
+				DownloadPort: int32(rpcServerConfig.DownloadPort),
 				Idc:          s.config.Host.IDC,
 				Location:     s.config.Host.Location,
 				CdnClusterId: uint64(s.config.Manager.CDNClusterID),
@@ -181,7 +186,7 @@ func (s *Server) Serve() error {
 				logger.Fatalf("update cdn instance failed: %v", err)
 			}
 			// Serve Keepalive
-			logger.Info("update cdn instance %#v successfully, start keepalive to manager", CDNInstance)
+			logger.Infof("====starting keepalive cdn instance %#v to manager %s====", CDNInstance)
 			s.configServer.KeepAlive(s.config.Manager.KeepAlive.Interval, &manager.KeepAliveRequest{
 				HostName:   hostutils.FQDNHostname,
 				SourceType: manager.SourceType_CDN_SOURCE,
@@ -190,11 +195,8 @@ func (s *Server) Serve() error {
 		}
 	}()
 
-	go func() {
-		// Start grpc server
-		logger.Fatalf("start grpc server failed: %v", s.grpcServer.ListenAndServe())
-	}()
-	return nil
+	// Start grpc server
+	return s.grpcServer.ListenAndServe()
 }
 
 func (s *Server) Stop() error {

@@ -19,6 +19,7 @@ package cmd
 import (
 	"os"
 
+	"d7y.io/dragonfly/v2/cdn/config"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -31,7 +32,7 @@ import (
 )
 
 var (
-	cfg *cdn.Config
+	cfg = config.New()
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -63,8 +64,6 @@ func Execute() {
 }
 
 func init() {
-	// Initialize default cdn system config
-	cfg = cdn.New()
 	// Initialize cobra
 	dependency.InitCobra(rootCmd, true, cfg)
 }

@@ -25,10 +25,10 @@ import (
 	"strings"
 	"testing"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
-	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
@@ -58,9 +58,9 @@ func (suite *CDNManagerTestSuite) SetupSuite() {
 	suite.workHome, _ = ioutil.TempDir("/tmp", "cdn-ManagerTestSuite-")
 	fmt.Printf("workHome: %s", suite.workHome)
 	suite.Nil(plugins.Initialize(NewPlugins(suite.workHome)))
-	storageManagerBuilder := storage.Get(config.DefaultStorageMode)
+	storageManagerBuilder := storage.Get(constants.DefaultStorageMode)
 	if storageManagerBuilder == nil {
-		suite.Failf("failed to get storage mode %s", config.DefaultStorageMode)
+		suite.Failf("failed to get storage mode %s", constants.DefaultStorageMode)
 	}
 	ctrl := gomock.NewController(suite.T())
 	taskManager := taskMock.NewMockManager(ctrl)

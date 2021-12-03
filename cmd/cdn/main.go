@@ -19,10 +19,11 @@ package main
 import (
 	"d7y.io/dragonfly/v2/cmd/cdn/cmd"
 
+	_ "d7y.io/dragonfly/v2/cdn/storedriver/local"
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"   // register disk storage manager
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/hybrid" // register hybrid storage manager
-	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"           // register http client
-	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"            // register oss client
+	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"           // register HTTP client
+	_ "d7y.io/dragonfly/v2/pkg/source/ossprotocol"            // register OSS client
 )
 
 func main() {

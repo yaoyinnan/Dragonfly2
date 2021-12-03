@@ -22,30 +22,41 @@ import (
 	"time"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
 type Server struct {
 	config Config
 	done   chan struct{}
+	wg     *sync.WaitGroup
 }
 
-func New() (*Server, error) {
+func New(config Config) (*Server, error) {
+	config = config.applyDefaults()
+	// scheduler config values
+	if s, err := yaml.Marshal(config); err != nil {
+		return nil, errors.Wrap(err, "marshal gc server config")
+	} else {
+		logger.Infof("gc server config: \n%s", s)
+	}
 	return &Server{
-		done: make(chan struct{}),
+		config: config,
+		done:   make(chan struct{}),
+		wg:     new(sync.WaitGroup),
 	}, nil
 }
 
 func (server *Server) Serve() error {
-	logger.Debugf("====start the gc jobs====")
-	var wg sync.WaitGroup
+	logger.Info("====starting gc jobs====")
 	for name, executorWrapper := range gcExecutorWrappers {
-		wg.Add(1)
+		server.wg.Add(1)
 		// start a goroutine to gc
 		go func(name string, wrapper *ExecutorWrapper) {
-			logger.Debugf("start the %s gc task", name)
+			defer server.wg.Done()
+			logger.Debugf("start the %s gc task， gc initialDelay: %s, gc initial interval: %s", name, wrapper.gcInitialDelay, wrapper.gcInterval)
 			// delay executing GC after initialDelay
 			time.Sleep(wrapper.gcInitialDelay)
-			wg.Done()
 			// execute the GC by fixed delay
 			ticker := time.NewTicker(wrapper.gcInterval)
 			for {
@@ -61,13 +72,14 @@ func (server *Server) Serve() error {
 			}
 		}(name, executorWrapper)
 	}
-	wg.Wait()
-	logger.Debugf("====all gc jobs have been launched====")
+	server.wg.Wait()
 	return nil
 }
 
 func (server *Server) Shutdown() error {
+	defer logger.Infof("====stopped gc server====")
 	server.done <- struct{}{}
+	server.wg.Wait()
 	return nil
 }
 
