@@ -24,11 +24,11 @@ import (
 	"path"
 	"strings"
 
-	"d7y.io/dragonfly/v2/cdn/gc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/atomic"
 
+	"d7y.io/dragonfly/v2/cdn/gc"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
@@ -60,18 +60,18 @@ func (b *diskStorageBuilder) Build(storageConfig storage.Config, taskManager tas
 	if !ok {
 		return nil, fmt.Errorf("can not find disk driver for disk storage manager, config is %#v", storageConfig)
 	}
-	cfg := applyDefaults(diskDriver, storageConfig)
+	config := applyDefaults(diskDriver, storageConfig)
 	storageManager := &diskStorageManager{
-		cfg:         cfg,
+		config:      config,
 		diskDriver:  diskDriver,
 		taskManager: taskManager,
 	}
-	cleaner, err := storage.NewStorageCleaner(cfg.GCConfig, diskDriver, storageManager, taskManager)
+	cleaner, err := storage.NewStorageCleaner(config.GCConfig, diskDriver, storageManager, taskManager)
 	if err != nil {
 		return nil, err
 	}
 	storageManager.diskCleaner = cleaner
-	gc.Register("diskStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
+	gc.Register("diskStorage", config.GCInitialDelay, config.GCInterval, storageManager)
 	return storageManager, nil
 }
 
@@ -85,7 +85,7 @@ func init() {
 }
 
 type diskStorageManager struct {
-	cfg         Config
+	config      Config
 	diskDriver  storedriver.Driver
 	diskCleaner storage.Cleaner
 	taskManager task.Manager

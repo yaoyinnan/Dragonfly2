@@ -25,10 +25,10 @@ import (
 	"strings"
 	"sync"
 
-	"d7y.io/dragonfly/v2/cdn/gc"
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 
+	"d7y.io/dragonfly/v2/cdn/gc"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
@@ -66,10 +66,10 @@ func (*hybridStorageBuilder) Build(storageConfig storage.Config, taskManager tas
 	if !ok {
 		return nil, fmt.Errorf("can not find %s driver for hybrid storage manager, config %v", driverNames[1], storageConfig)
 	}
-	cfg := applyDefaults(diskDriver, memoryDriver, storageConfig)
+	config := applyDefaults(diskDriver, memoryDriver, storageConfig)
 
 	storageManager := &hybridStorageManager{
-		cfg:          cfg,
+		config:       config,
 		memoryDriver: memoryDriver,
 		diskDriver:   diskDriver,
 		taskManager:  taskManager,
@@ -77,18 +77,18 @@ func (*hybridStorageBuilder) Build(storageConfig storage.Config, taskManager tas
 		hasShm:       true,
 	}
 
-	diskDriverCleaner, err := storage.NewStorageCleaner(cfg.DiskGCConfig, diskDriver, storageManager, taskManager)
+	diskDriverCleaner, err := storage.NewStorageCleaner(config.DiskGCConfig, diskDriver, storageManager, taskManager)
 	if err != nil {
 		return nil, err
 	}
-	memoryDriverCleaner, err := storage.NewStorageCleaner(cfg.MemoryGCConfig, memoryDriver, storageManager, taskManager)
+	memoryDriverCleaner, err := storage.NewStorageCleaner(config.MemoryGCConfig, memoryDriver, storageManager, taskManager)
 	if err != nil {
 		return nil, err
 	}
 	storageManager.diskDriverCleaner = diskDriverCleaner
 	storageManager.memoryDriverCleaner = memoryDriverCleaner
 
-	gc.Register("hybridStorage", cfg.GCInitialDelay, cfg.GCInterval, storageManager)
+	gc.Register("hybridStorage", config.GCInitialDelay, config.GCInterval, storageManager)
 	return storageManager, nil
 	// TODO apply default
 }
@@ -102,7 +102,7 @@ func init() {
 }
 
 type hybridStorageManager struct {
-	cfg                 Config
+	config              Config
 	memoryDriver        storedriver.Driver
 	diskDriver          storedriver.Driver
 	diskDriverCleaner   storage.Cleaner

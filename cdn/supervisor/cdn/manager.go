@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"   // nolint
@@ -79,13 +80,19 @@ type manager struct {
 }
 
 // NewManager returns a new Manager.
-func NewManager(cfg Config, cacheStore storage.Manager, progressManager progress.Manager,
+func NewManager(config Config, cacheStore storage.Manager, progressManager progress.Manager,
 	taskManager task.Manager) (Manager, error) {
-	rateLimiter := ratelimiter.NewRateLimiter(ratelimiter.TransRate(int64(cfg.MaxBandwidth-cfg.SystemReservedBandwidth)), 2)
+	config = config.applyDefaults()
+	s, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal cdn manager config")
+	}
+	logger.Infof("cdn manager config: \n%s", s)
+	rateLimiter := ratelimiter.NewRateLimiter(ratelimiter.TransRate(int64(config.MaxBandwidth-config.SystemReservedBandwidth)), 2)
 	metadataManager := newMetadataManager(cacheStore)
 	cdnReporter := newReporter(progressManager)
 	return &manager{
-		cfg:             cfg.applyDefaults(),
+		cfg:             config,
 		cacheStore:      cacheStore,
 		limiter:         rateLimiter,
 		metadataManager: metadataManager,

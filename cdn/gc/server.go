@@ -21,9 +21,10 @@ import (
 	"sync"
 	"time"
 
-	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
+
+	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
 type Server struct {
@@ -35,11 +36,11 @@ type Server struct {
 func New(config Config) (*Server, error) {
 	config = config.applyDefaults()
 	// scheduler config values
-	if s, err := yaml.Marshal(config); err != nil {
+	s, err := yaml.Marshal(config)
+	if err != nil {
 		return nil, errors.Wrap(err, "marshal gc server config")
-	} else {
-		logger.Infof("gc server config: \n%s", s)
 	}
+	logger.Infof("gc server config: \n%s", s)
 	return &Server{
 		config: config,
 		done:   make(chan struct{}),

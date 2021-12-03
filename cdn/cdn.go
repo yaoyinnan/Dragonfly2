@@ -126,7 +126,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	// Initialize gc server
-	gcServer, err := gc.New()
+	gcServer, err := gc.New(gc.Config{})
 	if err != nil {
 		return nil, errors.Wrap(err, "create gcServer")
 	}

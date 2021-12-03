@@ -21,19 +21,19 @@ import (
 	"fmt"
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/constants"
-	"d7y.io/dragonfly/v2/pkg/rpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/idgen"
+	"d7y.io/dragonfly/v2/pkg/rpc"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem"
 	cdnserver "d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/server"
@@ -53,11 +53,11 @@ type Server struct {
 func New(config Config, cdnService supervisor.CDNService, opts ...grpc.ServerOption) (*Server, error) {
 	config = config.applyDefaults()
 	// scheduler config values
-	if s, err := yaml.Marshal(config); err != nil {
+	s, err := yaml.Marshal(config)
+	if err != nil {
 		return nil, errors.Wrap(err, "marshal grpc server config")
-	} else {
-		logger.Infof("grpc server config: \n%s", s)
 	}
+	logger.Infof("grpc server config: \n%s", s)
 	svr := &Server{
 		config:  config,
 		service: cdnService,

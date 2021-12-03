@@ -72,11 +72,11 @@ type Server struct {
 func New(config Config, rpcServer *rpc.Server) (*Server, error) {
 	config = config.applyDefaults()
 	// scheduler config values
-	if s, err := yaml.Marshal(config); err != nil {
+	s, err := yaml.Marshal(config)
+	if err != nil {
 		return nil, errors.Wrap(err, "marshal metrics server config")
-	} else {
-		logger.Infof("metrics server config: \n%s", s)
 	}
+	logger.Infof("metrics server config: \n%s", s)
 	grpc_prometheus.Register(rpcServer.Server)
 
 	return &Server{

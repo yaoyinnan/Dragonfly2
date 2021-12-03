@@ -22,9 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"d7y.io/dragonfly/v2/cdn/gc"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 
+	"d7y.io/dragonfly/v2/cdn/gc"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/internal/dfutils"
 	"d7y.io/dragonfly/v2/pkg/source"
@@ -83,18 +84,27 @@ func IsTaskNotFound(err error) bool {
 
 // manager is an implementation of the interface of Manager.
 type manager struct {
-	cfg                     Config
+	config                  Config
 	taskStore               sync.Map
 	accessTimeMap           sync.Map
 	taskURLUnreachableStore sync.Map
 }
 
 // NewManager returns a new Manager Object.
-func NewManager(cfg Config) (Manager, error) {
-	manager := &manager{
-		cfg: cfg.applyDefaults(),
+func NewManager(config Config) (Manager, error) {
+	config = config.applyDefaults()
+	// scheduler config values
+	s, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal task manager config")
 	}
-	gc.Register("task", cfg.GCInitialDelay, cfg.GCMetaInterval, manager)
+	logger.Infof("task manager config: \n%s", s)
+
+	manager := &manager{
+		config: config,
+	}
+
+	gc.Register("task", config.GCInitialDelay, config.GCMetaInterval, manager)
 	return manager, nil
 }
 
@@ -106,7 +116,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 	}()
 	synclock.Lock(registerTask.ID, true)
 	if unreachableTime, ok := tm.getTaskUnreachableTime(registerTask.ID); ok {
-		if time.Since(unreachableTime) < tm.cfg.FailAccessInterval {
+		if time.Since(unreachableTime) < tm.config.FailAccessInterval {
 			synclock.UnLock(registerTask.ID, true)
 			// TODO 校验Header
 			return nil, errURLUnreachable
@@ -239,7 +249,7 @@ func (tm *manager) GC() error {
 		totalTaskNums++
 		taskID := key.(string)
 		atime := value.(time.Time)
-		if time.Since(atime) < tm.cfg.TaskExpireTime {
+		if time.Since(atime) < tm.config.TaskExpireTime {
 			return true
 		}
 

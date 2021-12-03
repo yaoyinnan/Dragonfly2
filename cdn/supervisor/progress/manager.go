@@ -22,9 +22,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"d7y.io/dragonfly/v2/cdn/constants"
 	"go.opentelemetry.io/otel/trace"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/synclock"
