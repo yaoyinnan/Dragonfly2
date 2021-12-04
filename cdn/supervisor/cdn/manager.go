@@ -21,6 +21,7 @@ package cdn
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -136,7 +137,12 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	if err != nil {
 		return nil, errors.Wrap(err, "detect task cache")
 	}
-	seedTask.Log().Debugf("detects cache result: %#v", detectResult)
+	jsonResult, err := json.Marshal(detectResult)
+	if err != nil {
+		return nil, errors.Wrapf(err, "json marshal detectResult: %#v", detectResult)
+	}
+
+	seedTask.Log().Debugf("detects cache result: %s", jsonResult)
 	// second: report detect result
 	err = cm.cdnReporter.reportDetectResult(ctx, seedTask.ID, detectResult)
 	if err != nil {
@@ -144,10 +150,10 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 		return nil, errors.Wrapf(err, "report detect cache result")
 	}
 	// full cache
-	if detectResult.breakPoint == -1 {
+	if detectResult.BreakPoint == -1 {
 		seedTask.Log().Infof("cache full hit on local")
-		return getUpdateTaskInfo(seedTask, task.StatusSuccess, detectResult.fileMetadata.SourceRealDigest, detectResult.fileMetadata.PieceMd5Sign,
-			detectResult.fileMetadata.SourceFileLen, detectResult.fileMetadata.CdnFileLength, detectResult.fileMetadata.TotalPieceCount), nil
+		return getUpdateTaskInfo(seedTask, task.StatusSuccess, detectResult.FileMetadata.SourceRealDigest, detectResult.FileMetadata.PieceMd5Sign,
+			detectResult.FileMetadata.SourceFileLen, detectResult.FileMetadata.CdnFileLength, detectResult.FileMetadata.TotalPieceCount), nil
 	}
 	server.StatSeedStart(seedTask.ID, seedTask.RawURL)
 	start := time.Now()
@@ -155,7 +161,7 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	var downloadSpan trace.Span
 	ctx, downloadSpan = tracer.Start(ctx, constants.SpanDownloadSource)
 	downloadSpan.End()
-	respBody, err := cm.download(ctx, seedTask, detectResult.breakPoint)
+	respBody, err := cm.download(ctx, seedTask, detectResult.BreakPoint)
 	// download fail
 	if err != nil {
 		downloadSpan.RecordError(err)
@@ -166,7 +172,7 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 	reader := limitreader.NewLimitReaderWithLimiterAndDigest(respBody, cm.limiter, fileDigest, digestutils.Algorithms[digestType])
 
 	// forth: write to storage
-	downloadMetadata, err := cm.writer.startWriter(ctx, reader, seedTask, detectResult.breakPoint)
+	downloadMetadata, err := cm.writer.startWriter(ctx, reader, seedTask, detectResult.BreakPoint)
 	if err != nil {
 		server.StatSeedFinish(seedTask.ID, seedTask.RawURL, false, err, start, time.Now(), downloadMetadata.backSourceLength,
 			downloadMetadata.realSourceFileLength)

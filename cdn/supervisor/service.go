@@ -18,6 +18,7 @@ package supervisor
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 
 	"github.com/pkg/errors"
@@ -39,7 +40,7 @@ func IsResourcesLacked(err error) bool {
 
 type CDNService interface {
 	// RegisterSeedTask registers seed task
-	RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error)
+	RegisterSeedTask(ctx context.Context, clientAddr string, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error)
 
 	// GetSeedPieces returns pieces associated with taskID, which are sorted by pieceNum
 	GetSeedPieces(taskID string) (pieces []*task.PieceInfo, err error)
@@ -62,14 +63,14 @@ func NewCDNService(taskManager task.Manager, cdnManager cdn.Manager, progressMan
 	}, nil
 }
 
-func (service *cdnService) RegisterSeedTask(ctx context.Context, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error) {
+func (service *cdnService) RegisterSeedTask(ctx context.Context, clientAddr string, registerTask *task.SeedTask) (<-chan *task.PieceInfo, error) {
 	if _, err := service.taskManager.AddOrUpdate(registerTask); err != nil {
 		return nil, err
 	}
 	if err := service.triggerCdnSyncAction(ctx, registerTask.ID); err != nil {
 		return nil, err
 	}
-	return service.progressManager.WatchSeedProgress(ctx, registerTask.ID)
+	return service.progressManager.WatchSeedProgress(ctx, clientAddr, registerTask.ID)
 }
 
 // triggerCdnSyncAction trigger cdn sync action
@@ -87,7 +88,7 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		}
 	}
 	if !seedTask.IsFrozen() {
-		seedTask.Log().Infof("seedTask status is not frozen，no need trigger again, current status: %s", seedTask.CdnStatus)
+		seedTask.Log().Infof("seedTask status is %s，no need trigger again", seedTask.CdnStatus)
 		synclock.UnLock(seedTask.ID, true)
 		return nil
 	}
@@ -107,7 +108,12 @@ func (service *cdnService) triggerCdnSyncAction(ctx context.Context, taskID stri
 		if err != nil {
 			seedTask.Log().Errorf("failed to trigger cdn: %v", err)
 		}
-		seedTask.Log().Infof("trigger cdn successfully, trigger result: %#v", updateTaskInfo)
+		jsonTaskInfo, err := json.Marshal(updateTaskInfo)
+		if err != nil {
+			seedTask.Log().Errorf("failed to json marshal updateTaskInfo: %#v: %v", updateTaskInfo, err)
+			return
+		}
+		seedTask.Log().Infof("trigger cdn result: %s", jsonTaskInfo)
 	}()
 	return nil
 }

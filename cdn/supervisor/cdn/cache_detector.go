@@ -43,9 +43,9 @@ type cacheDetector struct {
 
 // cacheResult cache result of detect
 type cacheResult struct {
-	breakPoint       int64                      // break-point of task file
-	pieceMetaRecords []*storage.PieceMetaRecord // piece metadata records of task
-	fileMetadata     *storage.FileMetadata      // file meta data of task
+	BreakPoint       int64                      `json:"break_point"`        // break-point of task file
+	PieceMetaRecords []*storage.PieceMetaRecord `json:"piece_meta_records"` // piece metadata records of task
+	FileMetadata     *storage.FileMetadata      `json:"file_metadata"`      // file meta data of task
 }
 
 // newCacheDetector create a new cache detector
@@ -70,7 +70,7 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 			return nil, errors.Wrapf(err, "reset cache")
 		}
 		return &cacheResult{
-			fileMetadata: metadata,
+			FileMetadata: metadata,
 		}, nil
 	}
 	if err := cd.metadataManager.updateAccessTime(seedTask.ID, getCurrentTimeMillisFunc()); err != nil {
@@ -104,7 +104,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, 
 		seedTask.Log().Warnf("failed to check whether the source is expired. To prevent the source from being suspended, "+
 			"assume that the source is not expired: %v", err)
 	}
-	seedTask.Log().Debugf("task expired result: %t", expired)
+	seedTask.Log().Debugf("task resource expired result: %t", expired)
 	if expired {
 		return nil, errors.Errorf("resource %s has expired", seedTask.TaskURL)
 	}
@@ -155,9 +155,9 @@ func (cd *cacheDetector) detectByReadMetaFile(taskID string, fileMetadata *stora
 	}
 	// TODO For hybrid storage mode, synchronize disk data to memory
 	return &cacheResult{
-		breakPoint:       -1,
-		pieceMetaRecords: pieceMetaRecords,
-		fileMetadata:     fileMetadata,
+		BreakPoint:       -1,
+		PieceMetaRecords: pieceMetaRecords,
+		FileMetadata:     fileMetadata,
 	}, nil
 }
 
@@ -202,9 +202,9 @@ func (cd *cacheDetector) detectByReadFile(taskID string, metadata *storage.FileM
 	//}
 	// TODO 整理数据文件 truncate breakpoint 之后的数据内容
 	return &cacheResult{
-		breakPoint:       breakPoint,
-		pieceMetaRecords: pieceMetaRecords,
-		fileMetadata:     metadata,
+		BreakPoint:       breakPoint,
+		PieceMetaRecords: pieceMetaRecords,
+		FileMetadata:     metadata,
 	}, nil
 }
 

@@ -143,7 +143,7 @@ func Test_manager_WatchSeedProgress(t *testing.T) {
 				taskManager:      tt.fields.taskManager,
 				seedTaskSubjects: tt.fields.seedTaskSubjects,
 			}
-			got, err := pm.WatchSeedProgress(tt.args.ctx, tt.args.taskID)
+			got, err := pm.WatchSeedProgress(tt.args.ctx, "", tt.args.taskID)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("WatchSeedProgress() error = %v, wantErr %v", err, tt.wantErr)
 				return

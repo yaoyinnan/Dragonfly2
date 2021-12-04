@@ -18,6 +18,7 @@ package rpcserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/peer"
 	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn/constants"
@@ -67,6 +69,11 @@ func New(config Config, cdnService supervisor.CDNService, opts ...grpc.ServerOpt
 }
 
 func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, psc chan<- *cdnsystem.PieceSeed) (err error) {
+	clientAddr := "unknown"
+	if pe, ok := peer.FromContext(ctx); ok {
+		clientAddr = pe.Addr.String()
+	}
+	logger.Infof("trigger obtain seed for taskID: %s, url: %s, urlMeta: %+v client: %s", req.TaskId, req.Url, req.UrlMeta, clientAddr)
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, constants.SpanObtainSeeds, trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
@@ -78,10 +85,9 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			span.RecordError(err)
 			logger.WithTaskID(req.TaskId).Errorf("%v", err)
 		}
-		logger.Infof("seeds task %s result success: %t", req.TaskId, err == nil)
 	}()
 	// register seed task
-	pieceChan, err := css.service.RegisterSeedTask(ctx, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
+	pieceChan, err := css.service.RegisterSeedTask(ctx, clientAddr, task.NewSeedTask(req.TaskId, req.Url, req.UrlMeta))
 	if err != nil {
 		if supervisor.IsResourcesLacked(err) {
 			err = dferrors.Newf(base.Code_ResourceLacked, "resources lacked for task(%s): %v", req.TaskId, err)
@@ -95,7 +101,7 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 	peerID := idgen.CDNPeerID(css.config.AdvertiseIP)
 	hostID := idgen.CDNHostID(hostutils.FQDNHostname, int32(css.config.ListenPort))
 	for piece := range pieceChan {
-		psc <- &cdnsystem.PieceSeed{
+		pieceSeed := &cdnsystem.PieceSeed{
 			PeerId:   peerID,
 			HostUuid: hostID,
 			PieceInfo: &base.PieceInfo{
@@ -110,6 +116,12 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 			ContentLength:   source.UnKnownSourceFileLen,
 			TotalPieceCount: task.UnknownTotalPieceCount,
 		}
+		psc <- pieceSeed
+		jsonPiece, err := json.Marshal(pieceSeed)
+		if err != nil {
+			logger.Errorf("failed to json marshal seed piece: %v", err)
+		}
+		logger.Debugf("send piece seed: %s to client: %s", jsonPiece, clientAddr)
 	}
 	seedTask, err := css.service.GetSeedTask(req.TaskId)
 	if err != nil {
@@ -128,13 +140,19 @@ func (css *Server) ObtainSeeds(ctx context.Context, req *cdnsystem.SeedRequest, 
 		span.RecordError(err)
 		return err
 	}
-	psc <- &cdnsystem.PieceSeed{
+	pieceSeed := &cdnsystem.PieceSeed{
 		PeerId:          peerID,
 		HostUuid:        hostID,
 		Done:            true,
 		ContentLength:   seedTask.SourceFileLength,
 		TotalPieceCount: seedTask.TotalPieceCount,
 	}
+	psc <- pieceSeed
+	jsonPiece, err := json.Marshal(pieceSeed)
+	if err != nil {
+		logger.Errorf("failed to json marshal seed piece: %v", err)
+	}
+	logger.Debugf("send piece seed: %s to client: %s", jsonPiece, clientAddr)
 	return nil
 }
 

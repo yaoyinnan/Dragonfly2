@@ -23,7 +23,6 @@ import (
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/peer"
 
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -61,12 +60,6 @@ func (p *proxy) ObtainSeeds(sr *cdnsystem.SeedRequest, stream cdnsystem.Seeder_O
 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
-
-	peerAddr := "unknown"
-	if pe, ok := peer.FromContext(ctx); ok {
-		peerAddr = pe.Addr.String()
-	}
-	logger.Infof("trigger obtain seed for taskID: %s, url: %s, urlMeta: %+v from: %s", sr.TaskId, sr.Url, sr.UrlMeta, peerAddr)
 
 	errChan := make(chan error, 10)
 	psc := make(chan *cdnsystem.PieceSeed, 4)

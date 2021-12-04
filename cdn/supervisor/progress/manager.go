@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
 	"d7y.io/dragonfly/v2/cdn/constants"
@@ -34,7 +35,7 @@ import (
 type Manager interface {
 
 	// WatchSeedProgress watch task seed progress
-	WatchSeedProgress(ctx context.Context, taskID string) (<-chan *task.PieceInfo, error)
+	WatchSeedProgress(ctx context.Context, clientAddr string, taskID string) (<-chan *task.PieceInfo, error)
 
 	// PublishPiece publish piece seed
 	PublishPiece(ctx context.Context, taskID string, piece *task.PieceInfo) error
@@ -59,7 +60,7 @@ func NewManager(taskManager task.Manager) (Manager, error) {
 	}, nil
 }
 
-func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan *task.PieceInfo, error) {
+func (pm *manager) WatchSeedProgress(ctx context.Context, clientAddr string, taskID string) (<-chan *task.PieceInfo, error) {
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
@@ -71,8 +72,12 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 	if seedTask.IsDone() {
 		pieceChan := make(chan *task.PieceInfo)
 		go func(pieceChan chan *task.PieceInfo) {
-			defer close(pieceChan)
+			defer func() {
+				logger.Debugf("subscriber %s starts watching task %s seed progress", clientAddr, taskID)
+				close(pieceChan)
+			}()
 			for i := range seedTask.Pieces {
+				logger.Debugf("notifies subscriber %s about %d piece info", clientAddr, i)
 				pieceChan <- seedTask.Pieces[i]
 			}
 		}(pieceChan)
@@ -83,7 +88,7 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, taskID string) (<-chan
 		progressPublisher = newProgressPublisher(taskID)
 		pm.seedTaskSubjects[taskID] = progressPublisher
 	}
-	observer := newProgressSubscriber(ctx, seedTask.ID, seedTask.Pieces)
+	observer := newProgressSubscriber(ctx, clientAddr, seedTask.ID, seedTask.Pieces)
 	progressPublisher.AddSubscriber(observer)
 	return observer.Receiver(), nil
 }
@@ -92,9 +97,12 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
-	recordBytes, _ := json.Marshal(record)
-	span.AddEvent(constants.EventPublishPiece, trace.WithAttributes(constants.AttributeSeedPiece.String(string(recordBytes))))
-	logger.Debugf("seed piece record %#v", record)
+	jsonRecord, err := json.Marshal(record)
+	if err != nil {
+		return errors.Wrapf(err, "json marshal piece record: %#v", record)
+	}
+	span.AddEvent(constants.EventPublishPiece, trace.WithAttributes(constants.AttributeSeedPiece.String(string(jsonRecord))))
+	logger.Debugf("publish seed piece record: %s", jsonRecord)
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if ok {
 		progressPublisher.NotifySubscribers(record)

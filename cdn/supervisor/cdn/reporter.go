@@ -48,8 +48,8 @@ func newReporter(publisher progress.Manager) *reporter {
 // reportDetectResult report detect cache result
 func (re *reporter) reportDetectResult(ctx context.Context, taskID string, detectResult *cacheResult) error {
 	// report cache pieces status
-	if detectResult != nil && detectResult.pieceMetaRecords != nil {
-		for _, record := range detectResult.pieceMetaRecords {
+	if detectResult != nil && detectResult.PieceMetaRecords != nil {
+		for _, record := range detectResult.PieceMetaRecords {
 			if err := re.reportPieceMetaRecord(ctx, taskID, record, CacheReport); err != nil {
 				return errors.Wrapf(err, "publish pieceMetaRecord: %v, seedPiece: %v", record,
 					convertPieceMeta2SeedPiece(record))
@@ -62,8 +62,7 @@ func (re *reporter) reportDetectResult(ctx context.Context, taskID string, detec
 // reportPieceMetaRecord report piece meta record
 func (re *reporter) reportPieceMetaRecord(ctx context.Context, taskID string, record *storage.PieceMetaRecord, from string) error {
 	// report cache piece status
-	logger.DownloaderLogger.Info("report piece",
-		zap.String("taskID", taskID),
+	logger.DownloaderLogger.Info(taskID,
 		zap.Uint32("pieceNum", record.PieceNum),
 		zap.String("md5", record.Md5),
 		zap.String("from", from))

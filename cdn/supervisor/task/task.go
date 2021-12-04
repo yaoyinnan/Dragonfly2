@@ -80,9 +80,9 @@ type SeedTask struct {
 	Header map[string]string `json:"header,omitempty"`
 
 	//
-	Pieces map[uint32]*PieceInfo
+	Pieces map[uint32]*PieceInfo `json:"-"`
 
-	logger *logger.SugaredLoggerOnWith
+	logger *logger.SugaredLoggerOnWith `json:"-"`
 }
 
 type PieceInfo struct {

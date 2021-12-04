@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	"go.uber.org/atomic"
-	"google.golang.org/grpc/peer"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
@@ -40,15 +39,14 @@ type subscriber struct {
 	closed    *atomic.Bool
 }
 
-func newProgressSubscriber(ctx context.Context, taskID string, pieces map[uint32]*task.PieceInfo) *subscriber {
-	var clientID = "unknown"
-	p, ok := peer.FromContext(ctx)
-	if ok {
-		clientID = p.Addr.String()
+func newProgressSubscriber(ctx context.Context, clientAddr, taskID string, taskPieces map[uint32]*task.PieceInfo) *subscriber {
+	pieces := make(map[uint32]*task.PieceInfo, len(taskPieces))
+	for u, info := range taskPieces {
+		pieces[u] = info
 	}
 	sub := &subscriber{
 		ctx:       ctx,
-		scheduler: clientID,
+		scheduler: clientAddr,
 		taskID:    taskID,
 		pieces:    pieces,
 		done:      make(chan struct{}),
@@ -61,10 +59,10 @@ func newProgressSubscriber(ctx context.Context, taskID string, pieces map[uint32
 }
 
 func (sub *subscriber) readLoop() {
-	logger.Debugf("scheduler %s start watching task %s seed progress", sub.scheduler, sub.taskID)
+	logger.Debugf("subscriber %s starts watching task %s seed progress", sub.scheduler, sub.taskID)
 	defer func() {
 		close(sub.pieceChan)
-		logger.Debugf("scheduler %s stopped watch task %s seed progress", sub.scheduler, sub.taskID)
+		logger.Debugf("subscriber %s stopped watch task %s seed progress", sub.scheduler, sub.taskID)
 	}()
 	for {
 		select {
@@ -89,7 +87,7 @@ func (sub *subscriber) readLoop() {
 }
 
 func (sub *subscriber) Notify(seedPiece *task.PieceInfo) {
-	logger.Debugf("notifies scheduler %s about %d piece info", sub.scheduler, seedPiece.PieceNum)
+	logger.Debugf("notifies subscriber %s about %d piece info", sub.scheduler, seedPiece.PieceNum)
 	sub.cond.L.Lock()
 	sub.pieces[seedPiece.PieceNum] = seedPiece
 	sub.cond.L.Unlock()
