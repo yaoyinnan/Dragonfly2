@@ -63,7 +63,7 @@ func (cd *cacheDetector) detectCache(ctx context.Context, seedTask *task.SeedTas
 	result, err = cd.doDetect(ctx, seedTask, fileDigest)
 	if err != nil {
 		if err != storage.ErrTaskNotPersisted {
-			seedTask.Log().Infof("reset storage cache: %v", err)
+			seedTask.Log().Infof("reset storage cache because %v", err)
 		}
 		metadata, err := cd.resetCache(seedTask)
 		if err != nil {
@@ -89,7 +89,7 @@ func (cd *cacheDetector) doDetect(ctx context.Context, seedTask *task.SeedTask, 
 		return nil, errors.Wrapf(err, "read file metadata")
 	}
 	if ok, cause := checkMetadata(seedTask, fileMetadata); !ok {
-		return nil, errors.Errorf("fileMetadata has been modified: %s", cause)
+		return nil, errors.Errorf("fileMetadata is inconsistent with task: %s", cause)
 	}
 	checkExpiredRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
 	if err != nil {

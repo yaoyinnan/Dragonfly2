@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"d7y.io/dragonfly/v2/pkg/unit"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 
@@ -169,6 +170,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 	if registerTask.PieceSize <= 0 {
 		pieceSize := dfutils.ComputePieceSize(registerTask.SourceFileLength)
 		seedTask.PieceSize = int32(pieceSize)
+		seedTask.Log().Debugf("piece size calculate result: %s", unit.ToBytes(int64(pieceSize)))
 	}
 	return seedTask, nil
 }

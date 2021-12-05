@@ -40,31 +40,49 @@ func TestGetBreakRange(t *testing.T) {
 			want:    "8-103",
 			wantErr: false,
 		}, {
-			name: "range without breakPoint",
+			name: "range with breakPoint 1",
 			args: args{
-				breakPoint:       0,
+				breakPoint:       1,
 				sourceFileLength: 100,
 				taskRange:        "0-100",
 			},
-			want:    "0-99",
+			want:    "1-99",
 			wantErr: false,
 		}, {
-			name: "test1",
+			name: "breakpoint larger than length of download required",
+			args: args{
+				breakPoint:       101,
+				sourceFileLength: 200,
+				taskRange:        "100-300",
+			},
+			want:    "",
+			wantErr: true,
+		}, {
+			name: "breakpoint is equal with length of download required",
 			args: args{
 				breakPoint:       100,
 				sourceFileLength: 200,
 				taskRange:        "100-300",
 			},
-			want:    "200-300",
+			want:    "",
+			wantErr: true,
+		}, {
+			name: "breakpoint is smaller than length of download required",
+			args: args{
+				breakPoint:       99,
+				sourceFileLength: 200,
+				taskRange:        "100-300",
+			},
+			want:    "199-199",
 			wantErr: false,
 		}, {
 			name: "test2",
 			args: args{
-				breakPoint:       100,
-				sourceFileLength: -1,
-				taskRange:        "100-500",
+				breakPoint:       102760448,
+				sourceFileLength: 552562021,
+				taskRange:        "",
 			},
-			want:    "100-",
+			want:    "102760448-552562020",
 			wantErr: false,
 		},
 	}

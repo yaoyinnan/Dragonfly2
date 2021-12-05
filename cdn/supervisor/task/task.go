@@ -87,7 +87,7 @@ type SeedTask struct {
 
 type PieceInfo struct {
 	PieceNum    uint32            `json:"piece_num"`
-	PieceMd5    string            `json:"piece_md_5"`
+	PieceMd5    string            `json:"piece_md5"`
 	PieceRange  *rangeutils.Range `json:"piece_range"`
 	OriginRange *rangeutils.Range `json:"origin_range"`
 	PieceLen    uint32            `json:"piece_len"`

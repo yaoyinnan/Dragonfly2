@@ -155,12 +155,13 @@ func (cm *manager) doTrigger(ctx context.Context, seedTask *task.SeedTask) (*tas
 		return getUpdateTaskInfo(seedTask, task.StatusSuccess, detectResult.FileMetadata.SourceRealDigest, detectResult.FileMetadata.PieceMd5Sign,
 			detectResult.FileMetadata.SourceFileLen, detectResult.FileMetadata.CdnFileLength, detectResult.FileMetadata.TotalPieceCount), nil
 	}
-	server.StatSeedStart(seedTask.ID, seedTask.RawURL)
+
 	start := time.Now()
 	// third: start to download the source file
 	var downloadSpan trace.Span
 	ctx, downloadSpan = tracer.Start(ctx, constants.SpanDownloadSource)
 	downloadSpan.End()
+	server.StatSeedStart(seedTask.ID, seedTask.RawURL)
 	respBody, err := cm.download(ctx, seedTask, detectResult.BreakPoint)
 	// download fail
 	if err != nil {
@@ -246,7 +247,7 @@ func (cm *manager) updateExpireInfo(taskID string, expireInfo map[string]string)
 	if err := cm.metadataManager.updateExpireInfo(taskID, expireInfo); err != nil {
 		logger.WithTaskID(taskID).Errorf("failed to update expireInfo(%s): %v", expireInfo, err)
 	}
-	logger.WithTaskID(taskID).Infof("success to update expireInfo(%s)", expireInfo)
+	logger.WithTaskID(taskID).Debugf("success to update metadata expireInfo(%s)", expireInfo)
 }
 
 /*

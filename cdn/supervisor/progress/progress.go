@@ -87,7 +87,7 @@ func (sub *subscriber) readLoop() {
 }
 
 func (sub *subscriber) Notify(seedPiece *task.PieceInfo) {
-	logger.Debugf("notifies subscriber %s about %d piece info", sub.scheduler, seedPiece.PieceNum)
+	logger.Debugf("notifies subscriber %s about %d piece info of taskID %s", sub.scheduler, seedPiece.PieceNum, sub.taskID)
 	sub.cond.L.Lock()
 	sub.pieces[seedPiece.PieceNum] = seedPiece
 	sub.cond.L.Unlock()
@@ -100,6 +100,7 @@ func (sub *subscriber) Receiver() <-chan *task.PieceInfo {
 
 func (sub *subscriber) Close() {
 	sub.once.Do(func() {
+		logger.Debugf("close subscriber %s from taskID %s", sub.scheduler, sub.taskID)
 		sub.cond.Signal()
 		sub.closed.CAS(false, true)
 		close(sub.done)
@@ -120,6 +121,7 @@ func newProgressPublisher(taskID string) *publisher {
 
 func (pub *publisher) AddSubscriber(sub *subscriber) {
 	pub.subscribers.PushBack(sub)
+	logger.Debugf("subscriber %s has been added into subscribers of publisher %s", sub.scheduler, sub.taskID)
 }
 
 func (pub *publisher) RemoveSubscriber(sub *subscriber) {
@@ -127,6 +129,7 @@ func (pub *publisher) RemoveSubscriber(sub *subscriber) {
 	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
 		if e.Value == sub {
 			pub.subscribers.Remove(e)
+			logger.Debugf("subscriber %s has been removed from subscribers of publisher %s", sub.scheduler, sub.taskID)
 			return
 		}
 	}
@@ -140,7 +143,6 @@ func (pub *publisher) NotifySubscribers(seedPiece *task.PieceInfo) {
 
 func (pub *publisher) RemoveAllSubscribers() {
 	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
-		pub.subscribers.Remove(e)
-		e.Value.(*subscriber).Close()
+		pub.RemoveSubscriber(e.Value.(*subscriber))
 	}
 }

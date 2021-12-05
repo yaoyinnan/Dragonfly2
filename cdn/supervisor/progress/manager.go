@@ -77,7 +77,7 @@ func (pm *manager) WatchSeedProgress(ctx context.Context, clientAddr string, tas
 				close(pieceChan)
 			}()
 			for i := range seedTask.Pieces {
-				logger.Debugf("notifies subscriber %s about %d piece info", clientAddr, i)
+				logger.Debugf("notifies subscriber %s about %d piece info of taskID %s", clientAddr, i, taskID)
 				pieceChan <- seedTask.Pieces[i]
 			}
 		}(pieceChan)
@@ -102,7 +102,7 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 		return errors.Wrapf(err, "json marshal piece record: %#v", record)
 	}
 	span.AddEvent(constants.EventPublishPiece, trace.WithAttributes(constants.AttributeSeedPiece.String(string(jsonRecord))))
-	logger.Debugf("publish seed piece record: %s", jsonRecord)
+	logger.Debugf("publish task %s seed piece record: %s", taskID, jsonRecord)
 	var progressPublisher, ok = pm.seedTaskSubjects[taskID]
 	if ok {
 		progressPublisher.NotifySubscribers(record)
@@ -111,6 +111,11 @@ func (pm *manager) PublishPiece(ctx context.Context, taskID string, record *task
 }
 
 func (pm *manager) PublishTask(ctx context.Context, taskID string, seedTask *task.SeedTask) error {
+	jsonTask, err := json.Marshal(seedTask)
+	if err != nil {
+		return errors.Wrapf(err, "json marshal seedTask: %#v", seedTask)
+	}
+	logger.Debugf("publish task %s seed piece record: %s", taskID, jsonTask)
 	pm.mu.Lock(taskID, false)
 	defer pm.mu.UnLock(taskID, false)
 	span := trace.SpanFromContext(ctx)
