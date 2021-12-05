@@ -147,7 +147,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 		return nil, err
 	}
 	// add range info
-	if stringutils.IsBlank(registerTask.Range) {
+	if !stringutils.IsBlank(registerTask.Range) {
 		contentLengthRequest.Header.Add(source.Range, registerTask.Range)
 	}
 	sourceFileLength, err := source.GetContentLength(contentLengthRequest)
