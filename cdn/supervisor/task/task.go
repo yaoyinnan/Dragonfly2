@@ -79,10 +79,10 @@ type SeedTask struct {
 	// Header other url header infos
 	Header map[string]string `json:"header,omitempty"`
 
-	//
+	// Pieces pieces of task
 	Pieces map[uint32]*PieceInfo `json:"-"`
 
-	logger *logger.SugaredLoggerOnWith `json:"-"`
+	logger *logger.SugaredLoggerOnWith
 }
 
 type PieceInfo struct {
