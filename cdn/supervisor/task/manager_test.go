@@ -22,13 +22,14 @@ import (
 	"reflect"
 	"testing"
 
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
-	sourcemock "d7y.io/dragonfly/v2/pkg/source/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/jarcoal/httpmock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
+	sourcemock "d7y.io/dragonfly/v2/pkg/source/mock"
 )
 
 func TestMain(m *testing.M) {
@@ -80,25 +81,6 @@ func Test_manager_AddOrUpdate(t *testing.T) {
 	type args struct {
 		registerTask *SeedTask
 	}
-	tm.AddOrUpdate(&SeedTask{
-		ID:               "",
-		RawURL:           "",
-		TaskURL:          "",
-		SourceFileLength: 0,
-		CdnFileLength:    0,
-		PieceSize:        0,
-		CdnStatus:        "",
-		TotalPieceCount:  0,
-		SourceRealDigest: "",
-		PieceMd5Sign:     "",
-		Digest:           "",
-		Tag:              "",
-		Range:            "",
-		Filter:           "",
-		Header:           nil,
-		Pieces:           nil,
-		logger:           nil,
-	})
 	tests := []struct {
 		name         string
 		args         args

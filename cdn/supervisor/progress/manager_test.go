@@ -21,11 +21,11 @@ import (
 	"reflect"
 	"testing"
 
-	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
 	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
+	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 )
 

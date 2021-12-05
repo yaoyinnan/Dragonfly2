@@ -27,7 +27,7 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/gc"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"d7y.io/dragonfly/v2/internal/dfutils"
+	"d7y.io/dragonfly/v2/internal/util"
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 	"d7y.io/dragonfly/v2/pkg/unit"
@@ -168,7 +168,7 @@ func (tm *manager) AddOrUpdate(registerTask *SeedTask) (seedTask *SeedTask, err 
 
 	// calculate piece size and update the PieceSize and PieceTotal
 	if registerTask.PieceSize <= 0 {
-		pieceSize := dfutils.ComputePieceSize(registerTask.SourceFileLength)
+		pieceSize := util.ComputePieceSize(registerTask.SourceFileLength)
 		seedTask.PieceSize = int32(pieceSize)
 		seedTask.Log().Debugf("piece size calculate result: %s", unit.ToBytes(int64(pieceSize)))
 	}

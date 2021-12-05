@@ -24,10 +24,10 @@ import (
 	"io"
 	"io/ioutil"
 
-	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"

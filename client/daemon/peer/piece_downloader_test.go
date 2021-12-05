@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"d7y.io/dragonfly/v2/pkg/source"
-	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/go-http-utils/headers"
 	testifyassert "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +38,8 @@ import (
 	"d7y.io/dragonfly/v2/client/daemon/upload"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 )
 
 func TestPieceDownloader_DownloadPiece(t *testing.T) {

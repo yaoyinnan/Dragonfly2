@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/backoff"
 
 	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
+	"d7y.io/dragonfly/v2/internal/dfnet"
 	"d7y.io/dragonfly/v2/pkg/reachable"
 	"d7y.io/dragonfly/v2/pkg/rpc/manager"
 )
@@ -155,7 +155,7 @@ retry:
 				ClusterId:  keepalive.ClusterId,
 			}); err != nil {
 				if _, err := stream.CloseAndRecv(); err != nil {
-					logger.Errorf("hostname %s cluster id %s close and recv stream failed", keepalive.HostName, keepalive.ClusterId, err)
+					logger.Errorf("hostname %s cluster id %v close and recv stream failed: %v", keepalive.HostName, keepalive.ClusterId, err)
 				}
 
 				cancel()

@@ -35,7 +35,7 @@ import (
 
 	"d7y.io/dragonfly/v2/client/clientutil"
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
-	"d7y.io/dragonfly/v2/pkg/basic/dfnet"
+	"d7y.io/dragonfly/v2/internal/dfnet"
 	"d7y.io/dragonfly/v2/pkg/unit"
 	"d7y.io/dragonfly/v2/pkg/util/net/iputils"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
@@ -170,6 +170,17 @@ type DownloadOption struct {
 	DownloadGRPC         ListenOption         `mapstructure:"downloadGRPC" yaml:"downloadGRPC"`
 	PeerGRPC             ListenOption         `mapstructure:"peerGRPC" yaml:"peerGRPC"`
 	CalculateDigest      bool                 `mapstructure:"calculateDigest" yaml:"calculateDigest"`
+	TransportOption      *TransportOption     `mapstructure:"transportOption" yaml:"transportOption"`
+}
+
+type TransportOption struct {
+	DialTimeout           time.Duration `mapstructure:"dialTimeout" yaml:"dialTimeout"`
+	KeepAlive             time.Duration `mapstructure:"keepAlive" yaml:"keepAlive"`
+	MaxIdleConns          int           `mapstructure:"maxIdleConns" yaml:"maxIdleConns"`
+	IdleConnTimeout       time.Duration `mapstructure:"idleConnTimeout" yaml:"idleConnTimeout"`
+	ResponseHeaderTimeout time.Duration `mapstructure:"responseHeaderTimeout" yaml:"responseHeaderTimeout"`
+	TLSHandshakeTimeout   time.Duration `mapstructure:"tlsHandshakeTimeout" yaml:"tlsHandshakeTimeout"`
+	ExpectContinueTimeout time.Duration `mapstructure:"expectContinueTimeout" yaml:"expectContinueTimeout"`
 }
 
 type ProxyOption struct {

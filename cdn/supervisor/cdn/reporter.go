@@ -19,7 +19,6 @@ package cdn
 import (
 	"context"
 
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -27,6 +26,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
+	"d7y.io/dragonfly/v2/pkg/rpc/base"
 )
 
 type reporter struct {
