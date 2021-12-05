@@ -117,6 +117,10 @@ func IsSame(task1, task2 *SeedTask) bool {
 		return false
 	}
 
+	if task1.Digest != task2.Digest {
+		return false
+	}
+
 	if task1.Filter != task2.Filter {
 		return false
 	}

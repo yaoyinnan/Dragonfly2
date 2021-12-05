@@ -113,7 +113,6 @@ func (cm *manager) TriggerCDN(ctx context.Context, seedTask *task.SeedTask) (*ta
 		// todo source not reach error SOURCE_ERROR
 		updateTaskInfo = getUpdateTaskInfoWithStatusOnly(seedTask, task.StatusFailed)
 	}
-	// TODO pieces
 	err = cm.progressManager.PublishTask(ctx, seedTask.ID, updateTaskInfo)
 	return updateTaskInfo, err
 }
@@ -204,6 +203,7 @@ func (cm *manager) TryFreeSpace(fileLength int64) (bool, error) {
 	return cm.cacheStore.TryFreeSpace(fileLength)
 }
 
+// TODO Different error representations are returned to the caller
 func (cm *manager) handleCDNResult(seedTask *task.SeedTask, downloadMetadata *downloadMetadata) error {
 	seedTask.Log().Debugf("handle cdn result, downloadMetadata: %#v", downloadMetadata)
 	var success = true
