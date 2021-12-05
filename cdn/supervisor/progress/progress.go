@@ -121,7 +121,7 @@ func newProgressPublisher(taskID string) *publisher {
 
 func (pub *publisher) AddSubscriber(sub *subscriber) {
 	pub.subscribers.PushBack(sub)
-	logger.Debugf("subscriber %s has been added into subscribers of publisher %s", sub.scheduler, sub.taskID)
+	logger.Debugf("subscriber %s has been added into subscribers of publisher %s, list size is %d", sub.scheduler, sub.taskID, pub.subscribers.Len())
 }
 
 func (pub *publisher) RemoveSubscriber(sub *subscriber) {
@@ -129,7 +129,7 @@ func (pub *publisher) RemoveSubscriber(sub *subscriber) {
 	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
 		if e.Value == sub {
 			pub.subscribers.Remove(e)
-			logger.Debugf("subscriber %s has been removed from subscribers of publisher %s", sub.scheduler, sub.taskID)
+			logger.Debugf("subscriber %s has been removed from subscribers of publisher %s, list size is %d", sub.scheduler, sub.taskID, pub.subscribers.Len())
 			return
 		}
 	}
@@ -142,7 +142,9 @@ func (pub *publisher) NotifySubscribers(seedPiece *task.PieceInfo) {
 }
 
 func (pub *publisher) RemoveAllSubscribers() {
-	for e := pub.subscribers.Front(); e != nil; e = e.Next() {
+	var next *list.Element
+	for e := pub.subscribers.Front(); e != nil; e = next {
+		next = e.Next()
 		pub.RemoveSubscriber(e.Value.(*subscriber))
 	}
 }
