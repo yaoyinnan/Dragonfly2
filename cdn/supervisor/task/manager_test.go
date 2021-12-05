@@ -17,45 +17,22 @@
 package task
 
 import (
+	"net/url"
+	"os"
 	"reflect"
-	"sync"
 	"testing"
-	"time"
 
-	logger "d7y.io/dragonfly/v2/internal/dflog"
-	"github.com/stretchr/testify/suite"
-
-	"d7y.io/dragonfly/v2/pkg/rpc/base"
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
+	sourcemock "d7y.io/dragonfly/v2/pkg/source/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/jarcoal/httpmock"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
-func TestTaskManagerSuite(t *testing.T) {
-	suite.Run(t, new(TaskManagerTestSuite))
-}
-
-type TaskManagerTestSuite struct {
-	tm *Manager
-	suite.Suite
-}
-
-func TestIsSame(t *testing.T) {
-	type args struct {
-		task1 *SeedTask
-		task2 *SeedTask
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsSame(tt.args.task1, tt.args.task2); got != tt.want {
-				t.Errorf("IsSame() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+func TestMain(m *testing.M) {
+	os.Exit(m.Run())
 }
 
 func TestIsTaskNotFound(t *testing.T) {
@@ -67,7 +44,25 @@ func TestIsTaskNotFound(t *testing.T) {
 		args args
 		want bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "wrap task not found error",
+			args: args{
+				err: errors.Wrap(errTaskNotFound, "wrap error"),
+			},
+			want: true,
+		}, {
+			name: "wrap task two layers",
+			args: args{
+				err: errors.Wrap(errors.Wrap(errTaskNotFound, "wrap error"), "wrap error again"),
+			},
+			want: true,
+		}, {
+			name: "native err",
+			args: args{
+				err: errTaskNotFound,
+			},
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,452 +73,34 @@ func TestIsTaskNotFound(t *testing.T) {
 	}
 }
 
-func TestNewManager(t *testing.T) {
-	type args struct {
-		config Config
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Manager
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewManager(tt.args.config)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewManager() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewManager() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestNewSeedTask(t *testing.T) {
-	type args struct {
-		taskID  string
-		rawURL  string
-		urlMeta *base.UrlMeta
-	}
-	tests := []struct {
-		name string
-		args args
-		want *SeedTask
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := NewSeedTask(tt.args.taskID, tt.args.rawURL, tt.args.urlMeta); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewSeedTask() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_Clone(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   *SeedTask
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.Clone(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Clone() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_IsDone(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.IsDone(); got != tt.want {
-				t.Errorf("IsDone() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_IsError(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.IsError(); got != tt.want {
-				t.Errorf("IsError() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_IsFrozen(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.IsFrozen(); got != tt.want {
-				t.Errorf("IsFrozen() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_IsSuccess(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.IsSuccess(); got != tt.want {
-				t.Errorf("IsSuccess() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_IsWait(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.IsWait(); got != tt.want {
-				t.Errorf("IsWait() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSeedTask_Log(t *testing.T) {
-	type fields struct {
-		ID               string
-		RawURL           string
-		TaskURL          string
-		SourceFileLength int64
-		CdnFileLength    int64
-		PieceSize        int32
-		CdnStatus        string
-		TotalPieceCount  int32
-		SourceRealDigest string
-		PieceMd5Sign     string
-		Digest           string
-		Tag              string
-		Range            string
-		Filter           string
-		Header           map[string]string
-		Pieces           map[uint32]*PieceInfo
-		logger           *logger.SugaredLoggerOnWith
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   *logger.SugaredLoggerOnWith
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			task := &SeedTask{
-				ID:               tt.fields.ID,
-				RawURL:           tt.fields.RawURL,
-				TaskURL:          tt.fields.TaskURL,
-				SourceFileLength: tt.fields.SourceFileLength,
-				CdnFileLength:    tt.fields.CdnFileLength,
-				PieceSize:        tt.fields.PieceSize,
-				CdnStatus:        tt.fields.CdnStatus,
-				TotalPieceCount:  tt.fields.TotalPieceCount,
-				SourceRealDigest: tt.fields.SourceRealDigest,
-				PieceMd5Sign:     tt.fields.PieceMd5Sign,
-				Digest:           tt.fields.Digest,
-				Tag:              tt.fields.Tag,
-				Range:            tt.fields.Range,
-				Filter:           tt.fields.Filter,
-				Header:           tt.fields.Header,
-				Pieces:           tt.fields.Pieces,
-				logger:           tt.fields.logger,
-			}
-			if got := task.Log(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Log() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_manager_AddOrUpdate(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
+	tm, err := NewManager(Config{})
+	require := require.New(t)
+	require.Nil(err)
 	type args struct {
 		registerTask *SeedTask
 	}
+	tm.AddOrUpdate(&SeedTask{
+		ID:               "",
+		RawURL:           "",
+		TaskURL:          "",
+		SourceFileLength: 0,
+		CdnFileLength:    0,
+		PieceSize:        0,
+		CdnStatus:        "",
+		TotalPieceCount:  0,
+		SourceRealDigest: "",
+		PieceMd5Sign:     "",
+		Digest:           "",
+		Tag:              "",
+		Range:            "",
+		Filter:           "",
+		Header:           nil,
+		Pieces:           nil,
+		logger:           nil,
+	})
 	tests := []struct {
 		name         string
-		fields       fields
 		args         args
 		wantSeedTask *SeedTask
 		wantErr      bool
@@ -532,12 +109,6 @@ func Test_manager_AddOrUpdate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
 			gotSeedTask, err := tm.AddOrUpdate(tt.args.registerTask)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AddOrUpdate() error = %v, wantErr %v", err, tt.wantErr)
@@ -551,362 +122,24 @@ func Test_manager_AddOrUpdate(t *testing.T) {
 }
 
 func Test_manager_Exist(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *SeedTask
-		want1  bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, got1 := tm.Exist(tt.args.taskID)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Exist() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("Exist() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
+	httpmock.Activate()
+	tm, err := NewManager(Config{})
+	require := require.New(t)
+	require.Nil(err)
+	ctl := gomock.NewController(t)
+	sourceClient := sourcemock.NewMockResourceClient(ctl)
+	testURL, err := url.Parse("https://dragonfly.com")
+	require.Nil(err)
+	source.UnRegister("https")
+	require.Nil(source.Register("https", sourceClient, httpprotocol.Adapter))
 
-func Test_manager_GC(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			if err := tm.GC(); (err != nil) != tt.wantErr {
-				t.Errorf("GC() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_manager_Get(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *SeedTask
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, err := tm.Get(tt.args.taskID)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Get() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_manager_GetProgress(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    map[uint32]*PieceInfo
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, err := tm.GetProgress(tt.args.taskID)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetProgress() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetProgress() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_manager_Update(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID   string
-		taskInfo *SeedTask
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			if err := tm.Update(tt.args.taskID, tt.args.taskInfo); (err != nil) != tt.wantErr {
-				t.Errorf("Update() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_manager_UpdateProgress(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-		info   *PieceInfo
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			if err := tm.UpdateProgress(tt.args.taskID, tt.args.info); (err != nil) != tt.wantErr {
-				t.Errorf("UpdateProgress() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_manager_getTask(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *SeedTask
-		want1  bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, got1 := tm.getTask(tt.args.taskID)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getTask() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("getTask() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func Test_manager_getTaskAccessTime(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   time.Time
-		want1  bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, got1 := tm.getTaskAccessTime(tt.args.taskID)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getTaskAccessTime() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("getTaskAccessTime() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func Test_manager_getTaskUnreachableTime(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   time.Time
-		want1  bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			got, got1 := tm.getTaskUnreachableTime(tt.args.taskID)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getTaskUnreachableTime() got = %v, want %v", got, tt.want)
-			}
-			if got1 != tt.want1 {
-				t.Errorf("getTaskUnreachableTime() got1 = %v, want %v", got1, tt.want1)
-			}
-		})
-	}
-}
-
-func Test_manager_updateTask(t *testing.T) {
-	type fields struct {
-		config                  Config
-		taskStore               sync.Map
-		accessTimeMap           sync.Map
-		taskURLUnreachableStore sync.Map
-	}
-	type args struct {
-		taskID         string
-		updateTaskInfo *SeedTask
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tm := &manager{
-				config:                  tt.fields.config,
-				taskStore:               tt.fields.taskStore,
-				accessTimeMap:           tt.fields.accessTimeMap,
-				taskURLUnreachableStore: tt.fields.taskURLUnreachableStore,
-			}
-			if err := tm.updateTask(tt.args.taskID, tt.args.updateTaskInfo); (err != nil) != tt.wantErr {
-				t.Errorf("updateTask() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+	sourceClient.EXPECT().GetContentLength(source.RequestEq(testURL.String())).Return(int64(1024*1024*500+1000), nil).Times(1)
+	seedTask := NewSeedTask("taskID", testURL.String(), nil)
+	addedTask, err := tm.AddOrUpdate(seedTask)
+	require.Nil(err)
+	existTask, ok := tm.Exist("taskID")
+	require.True(ok)
+	require.EqualValues(addedTask, existTask)
+	require.EqualValues(1024*1024*500+1000, existTask.SourceFileLength)
+	require.EqualValues(1024*1024*7, existTask.PieceSize)
 }
