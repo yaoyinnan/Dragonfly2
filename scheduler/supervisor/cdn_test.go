@@ -468,7 +468,7 @@ func TestCDN_Initial(t *testing.T) {
 				patch.ApplyMethodSeq(reflect.TypeOf(mockTask), "Log",
 					[]gomonkey.OutputCell{{Values: gomonkey.Params{mockLogger}}})
 
-				const testwords string = "dragonfly-scheduler-testssss"
+				const testwords string = "dragonfly-scheduler-test"
 				res := &http.Response{
 					Body: ioutil.NopCloser(
 						bytes.NewBuffer([]byte(testwords))),
@@ -503,7 +503,7 @@ func TestCDN_Initial(t *testing.T) {
 				assert := assert.New(t)
 				assert.Equal(mockPeer, peer)
 				assert.Nil(err)
-				assert.Equal([]byte("drago"), mockTask.DirectPiece)
+				assert.Equal([]byte("dragonfly-scheduler-test"), mockTask.DirectPiece)
 			},
 		},
 	}
