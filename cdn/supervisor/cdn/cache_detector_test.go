@@ -54,6 +54,7 @@ type CacheDetectorTestSuite struct {
 func (suite *CacheDetectorTestSuite) SetupSuite() {
 	ctrl := gomock.NewController(suite.T())
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
+	source.UnRegister("http")
 	suite.Require().Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	storageManager := storageMock.NewMockManager(ctrl)
 	cacheDataManager := newMetadataManager(storageManager)
@@ -92,21 +93,19 @@ func (suite *CacheDetectorTestSuite) SetupSuite() {
 		CreateTime: time.Time{},
 		ModTime:    time.Time{},
 	}, nil).AnyTimes()
+	storageManager.EXPECT().StatDownloadFile(gomock.Not(fullNoExpiredCache.taskID)).Return(&storedriver.StorageInfo{}, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndSupportRequest), gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Eq(expiredAndSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(source.RequestEq(expiredAndSupportURL), gomock.Any()).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(source.RequestEq(expiredAndSupportURL)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest), gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(source.RequestEq(noExpiredAndSupportURL), gomock.Any()).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(source.RequestEq(noExpiredAndSupportURL)).Return(true, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndSupportRequest)).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(source.RequestEq(expiredAndNotSupportURL), gomock.Any()).Return(true, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(source.RequestEq(expiredAndNotSupportURL)).Return(false, nil).AnyTimes()
 
-	sourceClient.EXPECT().IsExpired(gomock.Eq(expiredAndNotSupporRequest), gomock.Any()).Return(true, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Eq(expiredAndNotSupporRequest)).Return(false, nil).AnyTimes()
-
-	sourceClient.EXPECT().IsExpired(gomock.Eq(noExpiredAndNotSupportRequest), gomock.Any()).Return(false, nil).AnyTimes()
-	sourceClient.EXPECT().IsSupportRange(gomock.Eq(noExpiredAndNotSupportRequest)).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsExpired(source.RequestEq(noExpiredAndNotSupportURL), gomock.Any()).Return(false, nil).AnyTimes()
+	sourceClient.EXPECT().IsSupportRange(source.RequestEq(noExpiredAndNotSupportURL)).Return(false, nil).AnyTimes()
 }
 
 var noCacheTask, partialAndSupportCacheTask, partialAndNotSupportCacheTask, fullCacheExpiredTask, fullCacheNotExpiredTask = "noCache", "partialSupportCache",
@@ -114,14 +113,6 @@ var noCacheTask, partialAndSupportCacheTask, partialAndNotSupportCacheTask, full
 
 var expiredAndSupportURL, expiredAndNotSupportURL, noExpiredAndSupportURL, noExpiredAndNotSupportURL = "http://expiredsupport.com",
 	"http://expiredNotsupport.com", "http://noexpiredAndsupport.com", "http://noexpiredAndnotsupport.com"
-
-var expiredAndSupportRequest, _ = source.NewRequest(expiredAndSupportURL)
-
-var expiredAndNotSupporRequest, _ = source.NewRequest(expiredAndNotSupportURL)
-
-var noExpiredAndSupportRequest, _ = source.NewRequest(noExpiredAndSupportURL)
-
-var noExpiredAndNotSupportRequest, _ = source.NewRequest(noExpiredAndNotSupportURL)
 
 type mockData struct {
 	taskID   string

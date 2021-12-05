@@ -24,6 +24,8 @@ import (
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/net/urlutils"
 	"d7y.io/dragonfly/v2/pkg/util/rangeutils"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 type SeedTask struct {
@@ -177,7 +179,7 @@ func (task *SeedTask) UpdateTaskInfo(cdnStatus, realDigest, pieceMd5Sign string,
 }
 
 func (task *SeedTask) Log() *logger.SugaredLoggerOnWith {
-	if task.logger != nil {
+	if task.logger == nil {
 		task.logger = logger.WithTaskID(task.ID)
 	}
 	return task.logger
@@ -205,3 +207,7 @@ const (
 	// StatusSourceError captures enum value "SOURCE_ERROR"
 	StatusSourceError string = "SOURCE_ERROR"
 )
+
+func IsEqual(task1, task2 SeedTask) bool {
+	return cmp.Equal(task1, task2, cmpopts.IgnoreFields(SeedTask{}, "Pieces"), cmpopts.IgnoreUnexported(SeedTask{}))
+}

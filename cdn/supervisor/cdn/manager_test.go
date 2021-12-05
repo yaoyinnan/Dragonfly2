@@ -25,12 +25,13 @@ import (
 	"strings"
 	"testing"
 
-	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"
 	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
 	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
@@ -64,12 +65,20 @@ func (suite *CDNManagerTestSuite) SetupSuite() {
 	}
 	ctrl := gomock.NewController(suite.T())
 	taskManager := taskMock.NewMockManager(ctrl)
-	storageManager, err := storageManagerBuilder.Build(storage.Config{}, taskManager)
-	suite.Require().NotNil(err)
+	storageManager, err := storageManagerBuilder.Build(storage.Config{
+		GCInitialDelay: 0,
+		GCInterval:     0,
+		DriverConfigs: map[string]*storage.DriverConfig{
+			"disk": {},
+		},
+	}, taskManager)
+	suite.Require().Nil(err)
 
 	progressManager := progressMock.NewMockManager(ctrl)
 	progressManager.EXPECT().PublishPiece(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(98 * 2)
 	progressManager.EXPECT().PublishPiece(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(98 * 2)
+	progressManager.EXPECT().PublishTask(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(2)
+	progressManager.EXPECT().PublishTask(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(2)
 	suite.cm, _ = NewManager(Config{}.applyDefaults(), storageManager, progressManager, taskManager)
 }
 
@@ -90,6 +99,7 @@ func (suite *CDNManagerTestSuite) TearDownSuite() {
 func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 	ctrl := gomock.NewController(suite.T())
 	sourceClient := sourceMock.NewMockResourceClient(ctrl)
+	source.UnRegister("http")
 	suite.Require().Nil(source.Register("http", sourceClient, httpprotocol.Adapter))
 	defer source.UnRegister("http")
 
@@ -152,7 +162,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
 				CdnStatus:        task.StatusRunning,
-				TotalPieceCount:  0,
+				TotalPieceCount:  98,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "",
 				PieceMd5Sign:     "",
@@ -166,7 +176,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				PieceSize:        100,
 				Header:           map[string]string{"md5": "f1e2488bba4d1267948d9e2f7008571c"},
 				CdnStatus:        task.StatusSuccess,
-				TotalPieceCount:  0,
+				TotalPieceCount:  98,
 				Digest:           "md5:f1e2488bba4d1267948d9e2f7008571c",
 				SourceRealDigest: "md5:f1e2488bba4d1267948d9e2f7008571c",
 				PieceMd5Sign:     "bb138842f338fff90af737e4a6b2c6f8e2a7031ca9d5900bc9b646f6406d890f",
@@ -183,7 +193,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
 				CdnStatus:        task.StatusRunning,
-				TotalPieceCount:  0,
+				TotalPieceCount:  98,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "",
 				PieceMd5Sign:     "",
@@ -197,7 +207,7 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 				PieceSize:        100,
 				Header:           map[string]string{"sha256": "b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5"},
 				CdnStatus:        task.StatusSuccess,
-				TotalPieceCount:  0,
+				TotalPieceCount:  98,
 				Digest:           "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				SourceRealDigest: "sha256:b9907b9a5ba2b0223868c201b9addfe2ec1da1b90325d57c34f192966b0a68c5",
 				PieceMd5Sign:     "bb138842f338fff90af737e4a6b2c6f8e2a7031ca9d5900bc9b646f6406d890f",
@@ -209,10 +219,10 @@ func (suite *CDNManagerTestSuite) TestTriggerCDN() {
 		suite.Run(tt.name, func() {
 			gotSeedTask, err := suite.cm.TriggerCDN(context.Background(), tt.sourceTask)
 			suite.Nil(err)
-			suite.Equal(tt.targetTask, gotSeedTask)
+			suite.True(task.IsEqual(*tt.targetTask, *gotSeedTask))
 			cacheSeedTask, err := suite.cm.TriggerCDN(context.Background(), gotSeedTask)
 			suite.Nil(err)
-			suite.Equal(tt.targetTask, cacheSeedTask)
+			suite.True(task.IsEqual(*tt.targetTask, *cacheSeedTask))
 		})
 	}
 

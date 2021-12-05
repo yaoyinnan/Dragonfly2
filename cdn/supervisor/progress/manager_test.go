@@ -22,36 +22,31 @@ import (
 	"testing"
 
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/suite"
+
+	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"d7y.io/dragonfly/v2/pkg/synclock"
 )
 
-func TestNewManager(t *testing.T) {
-	type args struct {
-		taskManager task.Manager
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    Manager
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewManager(tt.args.taskManager)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewManager() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewManager() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
+func TestProgressManagerSuite(t *testing.T) {
+	suite.Run(t, new(ProgressManagerTestSuite))
 }
 
-func Test_manager_PublishPiece(t *testing.T) {
+type ProgressManagerTestSuite struct {
+	manager *manager
+	suite.Suite
+}
+
+func (suite *ProgressManagerTestSuite) SetupSuite() {
+	ctrl := gomock.NewController(suite.T())
+	taskManager := taskMock.NewMockManager(ctrl)
+	manager, err := newManager(taskManager)
+	suite.Nil(err)
+	suite.manager = manager
+}
+
+func (suite *ProgressManagerTestSuite) Test_manager_PublishPiece() {
 	type fields struct {
 		mu               *synclock.LockerPool
 		taskManager      task.Manager
@@ -68,23 +63,18 @@ func Test_manager_PublishPiece(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		//{}
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pm := &manager{
-				mu:               tt.fields.mu,
-				taskManager:      tt.fields.taskManager,
-				seedTaskSubjects: tt.fields.seedTaskSubjects,
-			}
-			if err := pm.PublishPiece(tt.args.ctx, tt.args.taskID, tt.args.record); (err != nil) != tt.wantErr {
-				t.Errorf("PublishPiece() error = %v, wantErr %v", err, tt.wantErr)
+		suite.Run(tt.name, func() {
+			if err := suite.manager.PublishPiece(tt.args.ctx, tt.args.taskID, tt.args.record); (err != nil) != tt.wantErr {
+				suite.T().Errorf("PublishPiece() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func Test_manager_PublishTask(t *testing.T) {
+func (suite *ProgressManagerTestSuite) Test_manager_PublishTask() {
 	type fields struct {
 		mu               *synclock.LockerPool
 		taskManager      task.Manager
@@ -104,20 +94,15 @@ func Test_manager_PublishTask(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pm := &manager{
-				mu:               tt.fields.mu,
-				taskManager:      tt.fields.taskManager,
-				seedTaskSubjects: tt.fields.seedTaskSubjects,
-			}
-			if err := pm.PublishTask(tt.args.ctx, tt.args.taskID, tt.args.seedTask); (err != nil) != tt.wantErr {
-				t.Errorf("PublishTask() error = %v, wantErr %v", err, tt.wantErr)
+		suite.Run(tt.name, func() {
+			if err := suite.manager.PublishTask(tt.args.ctx, tt.args.taskID, tt.args.seedTask); (err != nil) != tt.wantErr {
+				suite.T().Errorf("PublishTask() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func Test_manager_WatchSeedProgress(t *testing.T) {
+func (suite *ProgressManagerTestSuite) Test_manager_WatchSeedProgress() {
 	type fields struct {
 		mu               *synclock.LockerPool
 		taskManager      task.Manager
@@ -134,22 +119,17 @@ func Test_manager_WatchSeedProgress(t *testing.T) {
 		want    <-chan *task.PieceInfo
 		wantErr bool
 	}{
-		{},
+		//{},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pm := &manager{
-				mu:               tt.fields.mu,
-				taskManager:      tt.fields.taskManager,
-				seedTaskSubjects: tt.fields.seedTaskSubjects,
-			}
-			got, err := pm.WatchSeedProgress(tt.args.ctx, "", tt.args.taskID)
+		suite.Run(tt.name, func() {
+			got, err := suite.manager.WatchSeedProgress(tt.args.ctx, "", tt.args.taskID)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("WatchSeedProgress() error = %v, wantErr %v", err, tt.wantErr)
+				suite.T().Errorf("WatchSeedProgress() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WatchSeedProgress() got = %v, want %v", got, tt.want)
+				suite.T().Errorf("WatchSeedProgress() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

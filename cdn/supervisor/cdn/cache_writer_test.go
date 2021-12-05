@@ -24,12 +24,11 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
-	"d7y.io/dragonfly/v2/cdn/constants"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
+	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
 	"d7y.io/dragonfly/v2/cdn/storedriver/local"
@@ -38,7 +37,6 @@ import (
 	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"
-	"d7y.io/dragonfly/v2/pkg/unit"
 )
 
 func TestCacheWriterSuite(t *testing.T) {
@@ -61,24 +59,6 @@ func NewPlugins(workHome string) map[plugins.PluginType][]*plugins.PluginPropert
 					BaseDir: workHome,
 				},
 			},
-		}, "storagemanager": {
-			{
-				Name:   "disk",
-				Enable: true,
-				Config: &storage.Config{
-					GCInitialDelay: 0 * time.Second,
-					GCInterval:     15 * time.Second,
-					DriverConfigs: map[string]*storage.DriverConfig{
-						local.DiskDriverName: {
-							GCConfig: &storage.GCConfig{
-								YoungGCThreshold:  100 * unit.GB,
-								FullGCThreshold:   5 * unit.GB,
-								CleanRatio:        1,
-								IntervalThreshold: 2 * time.Hour,
-							}},
-					},
-				},
-			},
 		},
 	}
 }
@@ -89,11 +69,17 @@ func (suite *CacheWriterTestSuite) SetupSuite() {
 	suite.Nil(plugins.Initialize(NewPlugins(suite.workHome)))
 	ctrl := gomock.NewController(suite.T())
 	progressManager := progressMock.NewMockManager(ctrl)
+	progressManager.EXPECT().PublishPiece(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	progressManager.EXPECT().PublishTask(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	taskManager := taskMock.NewMockManager(ctrl)
-	storageManager, err := storage.Get(constants.DefaultStorageMode).Build(storage.Config{}, taskManager)
-	if err != nil {
-		suite.Failf("failed to create storage mode %s", constants.DefaultStorageMode)
-	}
+	storageManager, err := storage.Get(constants.DefaultStorageMode).Build(storage.Config{
+		GCInitialDelay: 0,
+		GCInterval:     0,
+		DriverConfigs: map[string]*storage.DriverConfig{
+			"disk": {},
+		},
+	}, taskManager)
+	suite.Require().Nil(err)
 	cacheDataManager := newMetadataManager(storageManager)
 	cdnReporter := newReporter(progressManager)
 	suite.writer = newCacheWriter(cdnReporter, cacheDataManager, storageManager)

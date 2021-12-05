@@ -53,6 +53,10 @@ type manager struct {
 }
 
 func NewManager(taskManager task.Manager) (Manager, error) {
+	return newManager(taskManager)
+}
+
+func newManager(taskManager task.Manager) (*manager, error) {
 	return &manager{
 		mu:               synclock.NewLockerPool(),
 		taskManager:      taskManager,

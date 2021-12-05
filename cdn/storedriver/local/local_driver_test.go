@@ -89,8 +89,8 @@ func (s *LocalDriverTestSuite) TestGetPutBytes() {
 				Key:    "foo1",
 			},
 			data:       []byte("hello foo"),
-			wantGetErr: false,
 			wantPutErr: false,
+			wantGetErr: false,
 			expected:   "hello foo",
 		}, {
 			name: "get specific length",
@@ -104,8 +104,8 @@ func (s *LocalDriverTestSuite) TestGetPutBytes() {
 				Offset: 0,
 				Length: 5,
 			},
-			wantGetErr: false,
 			wantPutErr: false,
+			wantGetErr: false,
 			data:       []byte("hello foo"),
 			expected:   "hello",
 		}, {
@@ -120,8 +120,8 @@ func (s *LocalDriverTestSuite) TestGetPutBytes() {
 				Offset: 0,
 				Length: 0,
 			},
-			wantGetErr: false,
 			wantPutErr: false,
+			wantGetErr: false,
 			data:       []byte("hello foo"),
 			expected:   "hello foo",
 		}, {
@@ -136,8 +136,8 @@ func (s *LocalDriverTestSuite) TestGetPutBytes() {
 				Offset: 0,
 				Length: -1,
 			},
-			wantGetErr: false,
-			wantPutErr: true,
+			wantPutErr: false,
+			wantGetErr: true,
 			data:       []byte("hello foo"),
 			expected:   "",
 		}, {
@@ -151,8 +151,8 @@ func (s *LocalDriverTestSuite) TestGetPutBytes() {
 				Bucket: "GetPut",
 				Key:    "foo5",
 			},
-			wantGetErr: false,
 			wantPutErr: false,
+			wantGetErr: false,
 			data:       []byte("hello foo"),
 			expected:   "hello",
 		}, {
@@ -293,7 +293,7 @@ func (s *LocalDriverTestSuite) TestGetPut() {
 			s.Nil(err)
 			// get
 			r, err := s.Get(v.getRaw)
-			s.True(v.wantGetErr)
+			s.True(v.wantGetErr == (err != nil))
 			if err == nil {
 				result, err := ioutil.ReadAll(r)
 				s.Nil(err)

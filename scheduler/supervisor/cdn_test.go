@@ -26,11 +26,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agiledragon/gomonkey"
-	"github.com/golang/mock/gomock"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-
 	"d7y.io/dragonfly/v2/internal/dferrors"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/base"
@@ -38,6 +33,10 @@ import (
 	"d7y.io/dragonfly/v2/pkg/rpc/cdnsystem/client"
 	"d7y.io/dragonfly/v2/scheduler/supervisor"
 	"d7y.io/dragonfly/v2/scheduler/supervisor/mocks"
+	"github.com/agiledragon/gomonkey"
+	"github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -469,7 +468,7 @@ func TestCDN_Initial(t *testing.T) {
 				patch.ApplyMethodSeq(reflect.TypeOf(mockTask), "Log",
 					[]gomonkey.OutputCell{{Values: gomonkey.Params{mockLogger}}})
 
-				const testwords string = "dragonfly-scheduler-test"
+				const testwords string = "dragonfly-scheduler-testssss"
 				res := &http.Response{
 					Body: ioutil.NopCloser(
 						bytes.NewBuffer([]byte(testwords))),
@@ -504,7 +503,7 @@ func TestCDN_Initial(t *testing.T) {
 				assert := assert.New(t)
 				assert.Equal(mockPeer, peer)
 				assert.Nil(err)
-				assert.Equal([]byte("dragonfly-scheduler-test"), mockTask.DirectPiece)
+				assert.Equal([]byte("drago"), mockTask.DirectPiece)
 			},
 		},
 	}
