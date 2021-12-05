@@ -51,6 +51,7 @@ func TestPieceManager_DownloadSource(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	source.UnRegister("http")
 	require.Nil(t, source.Register("http", httpprotocol.NewHTTPSourceClient(), httpprotocol.Adapter))
+	defer source.UnRegister("http")
 	testBytes, err := ioutil.ReadFile(test.File)
 	assert.Nil(err, "load test file")
 

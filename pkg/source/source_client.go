@@ -218,7 +218,7 @@ func (c *clientWrapper) GetLastModifiedMillis(request *Request) (int64, error) {
 func GetContentLength(request *Request) (int64, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return UnKnownSourceFileLen, ErrNoClientFound
+		return UnKnownSourceFileLen, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	if _, ok := request.Context().Deadline(); !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -231,7 +231,7 @@ func GetContentLength(request *Request) (int64, error) {
 func IsSupportRange(request *Request) (bool, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return false, ErrNoClientFound
+		return false, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	if _, ok := request.Context().Deadline(); !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -247,7 +247,7 @@ func IsSupportRange(request *Request) (bool, error) {
 func IsExpired(request *Request, info *ExpireInfo) (bool, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return false, ErrNoClientFound
+		return false, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	if _, ok := request.Context().Deadline(); !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -260,7 +260,7 @@ func IsExpired(request *Request, info *ExpireInfo) (bool, error) {
 func GetLastModifiedMillis(request *Request) (int64, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return -1, ErrNoClientFound
+		return -1, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	if _, ok := request.Context().Deadline(); !ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
@@ -273,7 +273,7 @@ func GetLastModifiedMillis(request *Request) (int64, error) {
 func Download(request *Request) (io.ReadCloser, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return nil, ErrNoClientFound
+		return nil, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	return client.Download(request)
 }
@@ -281,7 +281,7 @@ func Download(request *Request) (io.ReadCloser, error) {
 func DownloadWithExpireInfo(request *Request) (io.ReadCloser, *ExpireInfo, error) {
 	client, ok := _defaultManager.GetClient(request.URL.Scheme)
 	if !ok {
-		return nil, nil, ErrNoClientFound
+		return nil, nil, errors.Wrapf(ErrNoClientFound, "scheme: %s", request.URL.Scheme)
 	}
 	return client.DownloadWithExpireInfo(request)
 }

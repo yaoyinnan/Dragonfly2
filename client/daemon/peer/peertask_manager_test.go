@@ -30,10 +30,11 @@ import (
 	"testing"
 	"time"
 
+	"d7y.io/dragonfly/v2/pkg/source"
+	"d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 	"github.com/golang/mock/gomock"
 	"github.com/phayes/freeport"
 	testifyassert "github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"d7y.io/dragonfly/v2/client/clientutil"
@@ -49,8 +50,6 @@ import (
 	daemonserver "d7y.io/dragonfly/v2/pkg/rpc/dfdaemon/server"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	schedulerclient "d7y.io/dragonfly/v2/pkg/rpc/scheduler/client"
-	_ "d7y.io/dragonfly/v2/pkg/source"
-	_ "d7y.io/dragonfly/v2/pkg/source/httpprotocol"
 )
 
 type componentsOption struct {
@@ -340,6 +339,10 @@ func TestPeerTaskManager_StartStreamPeerTask_BackSource(t *testing.T) {
 		taskID = "task-0"
 	)
 
+	source.UnRegister("http")
+	assert.Nil(source.Register("http", httpprotocol.NewHTTPSourceClient(), httpprotocol.Adapter))
+	defer source.UnRegister("http")
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n, err := w.Write(testBytes)
 		assert.Nil(err)
@@ -383,7 +386,7 @@ func TestPeerTaskManager_StartStreamPeerTask_BackSource(t *testing.T) {
 		PeerId:   peerID,
 		PeerHost: &scheduler.PeerHost{},
 	})
-	require.Nil(t, err, "start stream peer task")
+	assert.Nil(err, "start stream peer task")
 
 	outputBytes, err := ioutil.ReadAll(r)
 	assert.Nil(err, "load read data")
