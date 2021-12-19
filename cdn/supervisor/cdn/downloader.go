@@ -39,7 +39,7 @@ func (cm *manager) download(ctx context.Context, seedTask *task.SeedTask, breakP
 			return nil, errors.Wrapf(err, "calculate the breakRange")
 		}
 	}
-	seedTask.Log().Infof("start downloading %s at range %s with header %s", seedTask.RawURL, breakRange, seedTask.Header)
+	seedTask.Log().Infof("success calculate request range %s", breakRange)
 	downloadRequest, ok := cm.proxyManager.TryProxy(ctx, seedTask)
 	if !ok {
 		downloadRequest, err = source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
@@ -50,6 +50,7 @@ func (cm *manager) download(ctx context.Context, seedTask *task.SeedTask, breakP
 	if !stringutils.IsBlank(breakRange) {
 		downloadRequest.Header.Add(source.Range, breakRange)
 	}
+	seedTask.Log().Infof("start downloading %s at range %s with header %s", seedTask.RawURL, breakRange, seedTask.Header)
 	response, err := source.Download(downloadRequest)
 	if err != nil {
 		return nil, err

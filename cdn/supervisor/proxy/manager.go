@@ -26,8 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-http-utils/headers"
-
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/source"
 )
@@ -123,9 +121,9 @@ func (m *manager) TryProxy(ctx context.Context, seedTask *task.SeedTask) (*sourc
 			proxyURL := fmt.Sprintf("proxy://%s/proxy", item.proxyHost)
 			request, err := source.NewRequestWithContext(ctx, proxyURL, seedTask.Header)
 			// set origin URL
-			request.Header.Set(headers.Referer, seedTask.RawURL)
+			request.Header.Set(source.Referer, seedTask.RawURL)
 			request.Header.Set("taskID", seedTask.ID)
-			seedTask.Log().Infof("%s proxy request %s", item.proxyHost, seedTask.RawURL)
+			seedTask.Log().Infof("%s proxy request %s at Range %s", item.proxyHost, seedTask.RawURL, seedTask.Range)
 			if err != nil {
 				continue
 			}

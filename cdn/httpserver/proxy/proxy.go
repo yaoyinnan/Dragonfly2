@@ -118,8 +118,9 @@ func (proxy *Proxy) handleHTTP(w http.ResponseWriter, req *http.Request) {
 	action := req.URL.Query().Get("action")
 	remoteHost := req.RemoteAddr
 	taskID := req.Header.Get("taskID")
-	originURL := req.Header.Get(headers.Referer)
-	logger.Infof("proxy remote host %s to request taskID %s, url %s on action %s", remoteHost, taskID, originURL, action)
+	originURL := req.Header.Get(source.Referer)
+	requestRange := req.Header.Get(source.Range)
+	logger.Infof("proxy remote host %s to request taskID %s, url %s at range %s on action %s", remoteHost, taskID, originURL, requestRange, action)
 	var (
 		resp *http.Response
 		err  error
@@ -136,9 +137,12 @@ func (proxy *Proxy) handleHTTP(w http.ResponseWriter, req *http.Request) {
 	case proxyprotocol.GetLastModified:
 		resp, err = proxyGetLastModified(req)
 	default:
-		err = nil
+		logger.Errorf("action %s not found to proxy remote host %s for taskID %s: %v", action, remoteHost, taskID, err)
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
 	}
 	if err != nil {
+		logger.Errorf("failed to proxy remote host %s for taskID %s: %v", remoteHost, taskID, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -146,8 +150,9 @@ func (proxy *Proxy) handleHTTP(w http.ResponseWriter, req *http.Request) {
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		logger.Errorf("failed to write http body: %v", err)
+		logger.Errorf("failed to write response body to remote host %s for taskID %s: %v", remoteHost, taskID, err)
 	}
+	logger.Infof("success finish proxy remote host %s for taskID %s", remoteHost, taskID)
 }
 
 func proxyDownload(req *http.Request) (*http.Response, error) {
@@ -273,7 +278,7 @@ func proxyIsSupportRange(req *http.Request) (*http.Response, error) {
 }
 
 func constructRequest(req *http.Request) (*source.Request, error) {
-	originRaw := req.Header.Get(headers.Referer)
+	originRaw := req.Header.Get(source.Referer)
 	header := make(source.Header)
 	for key, values := range req.Header {
 		for i := range values {
@@ -376,7 +381,18 @@ func (proxy *Proxy) handleHTTPS(w http.ResponseWriter, r *http.Request) {
 			r.URL.Host = r.Host
 			r.URL.Scheme = "https"
 		},
-		Transport: proxy.roundTripper(cConfig),
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig:       proxy.remoteConfig(r.Host),
+		},
 	}
 
 	// We have to wait until the connection is closed

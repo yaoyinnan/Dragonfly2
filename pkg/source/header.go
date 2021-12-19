@@ -24,6 +24,7 @@ const (
 	ETag            = "X-Dragonfly-ETag"
 	IfNoneMatch     = "X-Dragonfly-If-None-Match"
 	Range           = "X-Dragonfly-Range" // startIndex-endIndex
+	Referer         = "X-Dragonfly-Referer"
 )
 
 const LastModifiedLayout = "Mon, 02 Jan 2006 15:04:05 GMT"
