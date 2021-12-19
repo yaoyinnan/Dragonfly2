@@ -28,6 +28,7 @@ import (
 	"github.com/golang/groupcache/lru"
 	"github.com/pkg/errors"
 
+	"d7y.io/dragonfly/v2/internal/cert"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 )
 
@@ -76,10 +77,7 @@ func (proxy *Proxy) handleTLSConn(clientConn net.Conn, port int) {
 		if proxy.certCache == nil { // Initialize proxy.certCache on first access. (Lazy init)
 			proxy.certCache = lru.New(100) // Default max entries size = 100
 		}
-		leafCertSpec := LeafCertSpec{
-			proxy.cert.Leaf.PublicKey,
-			proxy.cert.PrivateKey,
-			proxy.cert.Leaf.SignatureAlgorithm}
+		leafCertSpec := cert.NewLeafCertSpec(proxy.cert.Leaf.PublicKey, proxy.cert.PrivateKey, proxy.cert.Leaf.SignatureAlgorithm)
 		sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			// It's assumed that `hello.ServerName` is always same as `host`, in practice.
 			serverName = hello.ServerName
@@ -89,7 +87,7 @@ func (proxy *Proxy) handleTLSConn(clientConn net.Conn, port int) {
 				return cached.(*tls.Certificate), nil
 			}
 			logger.Debugf("Generate temporal leaf TLS cert for ServerName <%s>", hello.ServerName)
-			cert, err := genLeafCert(proxy.cert, &leafCertSpec, serverName)
+			cert, err := cert.GenLeafCert(proxy.cert, leafCertSpec, serverName)
 			if err == nil {
 				// Put cert in cache only if there is no error. So all certs in cache are always valid.
 				// But certs in cache maybe expired (After 24 hours, see the default duration of generated certs)

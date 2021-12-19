@@ -17,12 +17,13 @@
 package config
 
 import (
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"fmt"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
-	"d7y.io/dragonfly/v2/cdn/metrics"
+	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
@@ -33,11 +34,11 @@ import (
 // New creates an instant with default values.
 func New() *Config {
 	return &Config{
-		Metrics:   metrics.DefaultConfig(),
-		Storage:   storage.DefaultConfig(),
-		RPCServer: rpcserver.DefaultConfig(),
-		Task:      task.DefaultConfig(),
-		CDN:       cdn.DefaultConfig(),
+		HTTPServer: httpserver.DefaultConfig(),
+		Storage:    storage.DefaultConfig(),
+		RPCServer:  rpcserver.DefaultConfig(),
+		Task:       task.DefaultConfig(),
+		CDN:        cdn.DefaultConfig(),
 		Manager: ManagerConfig{
 			Addr:         "",
 			CDNClusterID: 0,
@@ -56,11 +57,12 @@ func New() *Config {
 // Config contains all configuration of cdn node.
 type Config struct {
 	base.Options `yaml:",inline" mapstructure:",squash"`
-	Metrics      metrics.Config   `yaml:"metrics" mapstructure:"metrics"`
-	Storage      storage.Config   `yaml:"storage" mapstructure:"storage"`
-	RPCServer    rpcserver.Config `yaml:"rpcServer" mapstructure:"rpcServer"`
-	Task         task.Config      `yaml:"taskConfig" mapstructure:"taskConfig"`
-	CDN          cdn.Config       `yaml:"cdnConfig" mapstructure:"cdnConfig"`
+	HTTPServer   httpserver.Config `yaml:"httpServer" mapstructure:"httpServer"`
+	Storage      storage.Config    `yaml:"storage" mapstructure:"storage"`
+	RPCServer    rpcserver.Config  `yaml:"rpcServer" mapstructure:"rpcServer"`
+	Task         task.Config       `yaml:"taskConfig" mapstructure:"taskConfig"`
+	CDN          cdn.Config        `yaml:"cdnConfig" mapstructure:"cdnConfig"`
+	Proxy        proxy.Config
 	// Manager configuration
 	Manager ManagerConfig `yaml:"manager" mapstructure:"manager"`
 	// Host configuration
@@ -80,7 +82,7 @@ func (c *Config) String() string {
 
 func (c *Config) Validate() []error {
 	var errs []error
-	errs = append(errs, c.Metrics.Validate()...)
+	errs = append(errs, c.HTTPServer.Validate()...)
 	errs = append(errs, c.Storage.Validate()...)
 	errs = append(errs, c.RPCServer.Validate()...)
 	errs = append(errs, c.Task.Validate()...)

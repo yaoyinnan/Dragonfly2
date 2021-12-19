@@ -40,9 +40,12 @@ func (cm *manager) download(ctx context.Context, seedTask *task.SeedTask, breakP
 		}
 	}
 	seedTask.Log().Infof("start downloading %s at range %s with header %s", seedTask.RawURL, breakRange, seedTask.Header)
-	downloadRequest, err := source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
-	if err != nil {
-		return nil, errors.Wrap(err, "create download request")
+	downloadRequest, ok := cm.proxyManager.TryProxy(ctx, seedTask)
+	if !ok {
+		downloadRequest, err = source.NewRequestWithContext(ctx, seedTask.RawURL, seedTask.Header)
+		if err != nil {
+			return nil, errors.Wrap(err, "create download request")
+		}
 	}
 	if !stringutils.IsBlank(breakRange) {
 		downloadRequest.Header.Add(source.Range, breakRange)

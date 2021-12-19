@@ -18,7 +18,7 @@ package cdn
 
 import (
 	"context"
-
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
@@ -26,7 +26,7 @@ import (
 
 	"d7y.io/dragonfly/v2/cdn/config"
 	"d7y.io/dragonfly/v2/cdn/gc"
-	"d7y.io/dragonfly/v2/cdn/metrics"
+	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/supervisor"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
@@ -46,8 +46,8 @@ type Server struct {
 	// GRPC server
 	grpcServer *rpcserver.Server
 
-	// Metrics server
-	metricsServer *metrics.Server
+	// HTTP server
+	httpServer *httpserver.Server
 
 	// Manager client
 	configServer managerClient.Client
@@ -76,8 +76,13 @@ func New(config *config.Config) (*Server, error) {
 		return nil, errors.Wrapf(err, "create storage manager")
 	}
 
+	// Initialize proxy manager
+	proxyManager, err := proxy.NewManager(config.Proxy)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create proxy manager")
+	}
 	// Initialize CDN manager
-	cdnManager, err := cdn.NewManager(config.CDN, storageManager, progressManager, taskManager)
+	cdnManager, err := cdn.NewManager(config.CDN, storageManager, progressManager, taskManager, proxyManager)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create cdn manager")
 	}
@@ -103,10 +108,10 @@ func New(config *config.Config) (*Server, error) {
 		return nil, errors.Wrap(err, "create gcServer")
 	}
 
-	var metricsServer *metrics.Server
-	if config.Metrics.Addr != "" {
+	var httpServer *httpserver.Server
+	if config.HTTPServer.Addr != "" {
 		// Initialize metrics server
-		metricsServer, err = metrics.New(config.Metrics, grpcServer.Server)
+		httpServer, err = httpserver.New(config.HTTPServer, grpcServer.Server)
 		if err != nil {
 			return nil, errors.Wrap(err, "create metricsServer")
 		}
@@ -121,11 +126,11 @@ func New(config *config.Config) (*Server, error) {
 		}
 	}
 	return &Server{
-		config:        config,
-		grpcServer:    grpcServer,
-		metricsServer: metricsServer,
-		configServer:  configServer,
-		gcServer:      gcServer,
+		config:       config,
+		grpcServer:   grpcServer,
+		httpServer:   httpServer,
+		configServer: configServer,
+		gcServer:     gcServer,
 	}, nil
 }
 
@@ -138,9 +143,9 @@ func (s *Server) Serve() error {
 	}()
 
 	go func() {
-		if s.metricsServer != nil {
+		if s.httpServer != nil {
 			// Start metrics server
-			if err := s.metricsServer.ListenAndServe(s.metricsServer.Handler()); err != nil {
+			if err := s.httpServer.ListenAndServe(); err != nil {
 				logger.Fatalf("start metrics server failed: %v", err)
 			}
 		}
@@ -191,7 +196,7 @@ func (s *Server) Stop() error {
 	}
 	g.Go(func() error {
 		// Stop metrics server
-		return s.metricsServer.Shutdown(ctx)
+		return s.httpServer.Shutdown(ctx)
 	})
 
 	g.Go(func() error {

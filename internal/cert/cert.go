@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package proxy
+package cert
 
 import (
 	"crypto"
@@ -38,8 +38,16 @@ type LeafCertSpec struct {
 	signatureAlgorithm x509.SignatureAlgorithm
 }
 
-// genLeafCert generates a Leaf TLS certificate and sign it with given CA
-func genLeafCert(ca *tls.Certificate, leafCertSpec *LeafCertSpec, host string) (*tls.Certificate, error) {
+func NewLeafCertSpec(publicKey crypto.PublicKey, privateKey crypto.PrivateKey, signatureAlgorithm x509.SignatureAlgorithm) *LeafCertSpec {
+	return &LeafCertSpec{
+		publicKey:          publicKey,
+		privateKey:         privateKey,
+		signatureAlgorithm: signatureAlgorithm,
+	}
+}
+
+// GenLeafCert generates a Leaf TLS certificate and sign it with given CA
+func GenLeafCert(ca *tls.Certificate, leafCertSpec *LeafCertSpec, host string) (*tls.Certificate, error) {
 	now := time.Now().Add(-1 * time.Hour).UTC()
 	if !ca.Leaf.IsCA {
 		return nil, errors.New("CA cert is not a CA")

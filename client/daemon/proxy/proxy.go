@@ -39,6 +39,7 @@ import (
 	"d7y.io/dragonfly/v2/client/config"
 	"d7y.io/dragonfly/v2/client/daemon/peer"
 	"d7y.io/dragonfly/v2/client/daemon/transport"
+	"d7y.io/dragonfly/v2/internal/cert"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/scheduler"
 	"d7y.io/dragonfly/v2/pkg/util/stringutils"
@@ -363,10 +364,7 @@ func (proxy *Proxy) handleHTTPS(w http.ResponseWriter, r *http.Request) {
 		if proxy.certCache == nil { // Initialize proxy.certCache on first access. (Lazy init)
 			proxy.certCache = lru.New(100) // Default max entries size = 100
 		}
-		leafCertSpec := LeafCertSpec{
-			proxy.cert.Leaf.PublicKey,
-			proxy.cert.PrivateKey,
-			proxy.cert.Leaf.SignatureAlgorithm}
+		leafCertSpec := cert.NewLeafCertSpec(proxy.cert.Leaf.PublicKey, proxy.cert.PrivateKey, proxy.cert.Leaf.SignatureAlgorithm)
 		host, _, _ := net.SplitHostPort(r.Host)
 		sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			cConfig.ServerName = host
@@ -378,7 +376,7 @@ func (proxy *Proxy) handleHTTPS(w http.ResponseWriter, r *http.Request) {
 				return cached.(*tls.Certificate), nil
 			}
 			logger.Debugf("Generate temporal leaf TLS cert for ServerName <%s>, host <%s>", hello.ServerName, host)
-			cert, err := genLeafCert(proxy.cert, &leafCertSpec, host)
+			cert, err := cert.GenLeafCert(proxy.cert, leafCertSpec, host)
 			if err == nil {
 				// Put cert in cache only if there is no error. So all certs in cache are always valid.
 				// But certs in cache maybe expired (After 24 hours, see the default duration of generated certs)

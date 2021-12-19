@@ -14,28 +14,14 @@
  * limitations under the License.
  */
 
-package metrics
+package proxy
 
-import (
-	"net"
-	"testing"
+type Config struct {
+	// proxy rules
+	rules []*Proxy `yaml:"rules" mapstructure:"rules"`
+}
 
-	"github.com/stretchr/testify/assert"
-)
-
-func TestConfig(t *testing.T) {
-	tcpConfig := Config{
-		Net:  "tcp",
-		Addr: "1.1.1.1:22",
-	}
-	addr, err := net.ResolveTCPAddr(tcpConfig.Net, tcpConfig.Addr)
-	assert.Equal(t, tcpConfig.Addr, addr.String())
-	assert.Nil(t, err)
-	unixConfig := Config{
-		Net:  "unix",
-		Addr: "/unix/metrics.sock",
-	}
-	unixAddr, err := net.ResolveUnixAddr(unixConfig.Net, unixConfig.Addr)
-	assert.Equal(t, unixConfig.Addr, unixAddr.String())
-	assert.Nil(t, err)
+type Proxy struct {
+	Regx      string `yaml:"regx" mapstructure:"regx"`
+	ProxyHost string `yaml:"proxyHost" mapstructure:"proxyHost"`
 }

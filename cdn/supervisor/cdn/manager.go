@@ -21,6 +21,7 @@ package cdn
 import (
 	"context"
 	"crypto/md5"
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -72,6 +73,7 @@ type manager struct {
 	metadataManager *metadataManager
 	progressManager progress.Manager
 	taskManager     task.Manager
+	proxyManager    proxy.Manager
 	cdnReporter     *reporter
 	detector        *cacheDetector
 	writer          *cacheWriter
@@ -79,11 +81,11 @@ type manager struct {
 
 // NewManager returns a new Manager.
 func NewManager(config Config, cacheStore storage.Manager, progressManager progress.Manager,
-	taskManager task.Manager) (Manager, error) {
-	return newManager(config, cacheStore, progressManager, taskManager)
+	taskManager task.Manager, proxyManager proxy.Manager) (Manager, error) {
+	return newManager(config, cacheStore, progressManager, taskManager, proxyManager)
 }
 
-func newManager(config Config, cacheStore storage.Manager, progressManager progress.Manager, taskManager task.Manager) (Manager, error) {
+func newManager(config Config, cacheStore storage.Manager, progressManager progress.Manager, taskManager task.Manager, proxyManager proxy.Manager) (Manager, error) {
 	rateLimiter := ratelimiter.NewRateLimiter(ratelimiter.TransRate(int64(config.MaxBandwidth-config.SystemReservedBandwidth)), 2)
 	metadataManager := newMetadataManager(cacheStore)
 	cdnReporter := newReporter(progressManager)
@@ -95,6 +97,7 @@ func newManager(config Config, cacheStore storage.Manager, progressManager progr
 		cdnReporter:     cdnReporter,
 		progressManager: progressManager,
 		taskManager:     taskManager,
+		proxyManager:    proxyManager,
 		detector:        newCacheDetector(metadataManager, cacheStore),
 		writer:          newCacheWriter(cdnReporter, metadataManager, cacheStore),
 		cdnLocker:       synclock.NewLockerPool(),

@@ -17,6 +17,7 @@
 package config
 
 import (
+	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -25,7 +26,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 
-	"d7y.io/dragonfly/v2/cdn/metrics"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
@@ -63,7 +63,7 @@ func (c DeprecatedConfig) Convert() *Config {
 	newConfig.LogDir = baseProperties.LogDir
 	newConfig.WorkHome = baseProperties.WorkHome
 	if baseProperties.Metrics != nil {
-		newConfig.Metrics = metrics.Config{
+		newConfig.HTTPServer = httpserver.Config{
 			Net:  "tcp",
 			Addr: baseProperties.Metrics.Addr,
 		}

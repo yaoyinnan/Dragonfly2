@@ -237,6 +237,7 @@ type clientWrapper struct {
 }
 
 func (c *clientWrapper) GetContentLength(request *Request) (int64, error) {
+
 	return c.rc.GetContentLength(c.adapter(request))
 }
 
