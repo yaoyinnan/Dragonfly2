@@ -17,7 +17,6 @@
 package config
 
 import (
-	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -26,6 +25,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 
+	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/storedriver"

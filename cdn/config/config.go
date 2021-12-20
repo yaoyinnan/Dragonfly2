@@ -17,7 +17,6 @@
 package config
 
 import (
-	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"fmt"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/cmd/dependency/base"
 )

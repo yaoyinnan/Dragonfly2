@@ -18,7 +18,7 @@ package cdn
 
 import (
 	"context"
-	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
+
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
@@ -32,6 +32,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/rpc/manager"

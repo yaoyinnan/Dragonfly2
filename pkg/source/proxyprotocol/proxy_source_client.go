@@ -18,9 +18,10 @@ package proxyprotocol
 
 import (
 	"fmt"
-	"github.com/go-http-utils/headers"
 	"net/http"
 	"strings"
+
+	"github.com/go-http-utils/headers"
 
 	"d7y.io/dragonfly/v2/pkg/source"
 	"d7y.io/dragonfly/v2/pkg/util/timeutils"

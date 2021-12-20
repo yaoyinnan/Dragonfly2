@@ -30,6 +30,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	_ "d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage/disk"
 	progressMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/progress"
+	proxyMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/proxy"
 	taskMock "d7y.io/dragonfly/v2/cdn/supervisor/mocks/task"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	"d7y.io/dragonfly/v2/pkg/idgen"
@@ -67,7 +68,8 @@ func (suite *CDNManagerTestSuite) SetupSuite() {
 	progressManager.EXPECT().PublishPiece(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(98 * 2)
 	progressManager.EXPECT().PublishTask(gomock.Any(), md5TaskID, gomock.Any()).Return(nil).Times(2)
 	progressManager.EXPECT().PublishTask(gomock.Any(), sha256TaskID, gomock.Any()).Return(nil).Times(2)
-	suite.cm, _ = NewManager(Config{}.applyDefaults(), storageManager, progressManager, taskManager)
+	proxyManasger := proxyMock.NewMockManager(ctrl)
+	suite.cm, _ = NewManager(Config{}.applyDefaults(), storageManager, progressManager, taskManager, proxyManasger)
 }
 
 var (

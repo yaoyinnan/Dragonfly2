@@ -23,7 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"d7y.io/dragonfly/v2/cdn/metrics"
+	"d7y.io/dragonfly/v2/cdn/httpserver"
 	"d7y.io/dragonfly/v2/cdn/plugins"
 	"d7y.io/dragonfly/v2/cdn/rpcserver"
 	"d7y.io/dragonfly/v2/cdn/storedriver"
@@ -117,7 +117,7 @@ func TestConfig_Convert(t *testing.T) {
 				ServiceName: "dragonfly-config-test",
 			},
 		},
-		Metrics: metrics.Config{
+		HTTPServer: httpserver.Config{
 			Net:  "tcp",
 			Addr: ":8081",
 		},

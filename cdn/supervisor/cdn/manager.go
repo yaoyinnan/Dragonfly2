@@ -21,7 +21,6 @@ package cdn
 import (
 	"context"
 	"crypto/md5"
-	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -33,6 +32,7 @@ import (
 	"d7y.io/dragonfly/v2/cdn/constants"
 	"d7y.io/dragonfly/v2/cdn/supervisor/cdn/storage"
 	"d7y.io/dragonfly/v2/cdn/supervisor/progress"
+	"d7y.io/dragonfly/v2/cdn/supervisor/proxy"
 	"d7y.io/dragonfly/v2/cdn/supervisor/task"
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/pkg/ratelimiter/limitreader"

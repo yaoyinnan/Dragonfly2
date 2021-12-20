@@ -313,8 +313,16 @@ func tunnelHTTPS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	}
 
-	go copyAndClose(dst, clientConn)
-	go copyAndClose(clientConn, dst)
+	go func() {
+		if err := copyAndClose(dst, clientConn); err != nil {
+			logger.Errorf("copy and close: %v", err)
+		}
+	}()
+	go func() {
+		if err := copyAndClose(clientConn, dst); err != nil {
+			logger.Errorf("copy and close: %v", err)
+		}
+	}()
 }
 
 func (proxy *Proxy) handleHTTPS(w http.ResponseWriter, r *http.Request) {

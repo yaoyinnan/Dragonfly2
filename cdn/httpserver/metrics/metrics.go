@@ -17,9 +17,10 @@
 package metrics
 
 import (
-	"d7y.io/dragonfly/v2/internal/constants"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"d7y.io/dragonfly/v2/internal/constants"
 )
 
 // Variables declared for metrics.
