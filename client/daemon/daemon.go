@@ -39,6 +39,7 @@ import (
 	"d7y.io/dragonfly/v2/client/clientutil"
 	"d7y.io/dragonfly/v2/client/config"
 	"d7y.io/dragonfly/v2/client/daemon/gc"
+	"d7y.io/dragonfly/v2/client/daemon/metrics"
 	"d7y.io/dragonfly/v2/client/daemon/peer"
 	"d7y.io/dragonfly/v2/client/daemon/proxy"
 	"d7y.io/dragonfly/v2/client/daemon/rpcserver"
@@ -142,19 +143,19 @@ func New(opt *config.DaemonOption, d dfpath.Dfpath) (Daemon, error) {
 
 	// Storage.Option.DataPath is same with Daemon DataDir
 	opt.Storage.DataPath = d.DataDir()
-	storageManager, err := storage.NewStorageManager(opt.Storage.StoreStrategy, &opt.Storage,
-		/* gc callback */
-		func(request storage.CommonTaskRequest) {
-			er := sched.LeaveTask(context.Background(), &scheduler.PeerTarget{
-				TaskId: request.TaskID,
-				PeerId: request.PeerID,
-			})
-			if er != nil {
-				logger.Errorf("step 4:leave task %s/%s, error: %v", request.TaskID, request.PeerID, er)
-			} else {
-				logger.Infof("step 4:leave task %s/%s state ok", request.TaskID, request.PeerID)
-			}
+	gcCallback := func(request storage.CommonTaskRequest) {
+		er := sched.LeaveTask(context.Background(), &scheduler.PeerTarget{
+			TaskId: request.TaskID,
+			PeerId: request.PeerID,
 		})
+		if er != nil {
+			logger.Errorf("step 4:leave task %s/%s, error: %v", request.TaskID, request.PeerID, er)
+		} else {
+			logger.Infof("step 4:leave task %s/%s state ok", request.TaskID, request.PeerID)
+		}
+	}
+	storageManager, err := storage.NewStorageManager(opt.Storage.StoreStrategy, &opt.Storage,
+		gcCallback, storage.WithGCInterval(opt.GCInterval.Duration))
 	if err != nil {
 		return nil, err
 	}
@@ -483,6 +484,19 @@ func (cd *clientDaemon) Serve() error {
 			logger.Info("dynconfig start successfully")
 			return nil
 		})
+	}
+
+	if cd.Option.Metrics != "" {
+		metricsServer := metrics.New(cd.Option.Metrics)
+		go func() {
+			logger.Infof("started metrics server at %s", metricsServer.Addr)
+			if err := metricsServer.ListenAndServe(); err != nil {
+				if err == http.ErrServerClosed {
+					return
+				}
+				logger.Fatalf("metrics server closed unexpect: %v", err)
+			}
+		}()
 	}
 
 	werr := g.Wait()

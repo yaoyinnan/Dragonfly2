@@ -2,18 +2,18 @@ name: Compatibility E2E Test
 
 on:
   push:
-    branches: [ main, release-* ]
-    paths-ignore: [ '**.md', '**.png', '**.jpg', '**.svg', '**/docs/**' ]
+    branches: [main, release-*]
+    paths-ignore: ["**.md", "**.png", "**.jpg", "**.svg", "**/docs/**"]
   pull_request:
-    branches: [ main, release-* ]
-    paths-ignore: [ '**.md', '**.png', '**.jpg', '**.svg', '**/docs/**' ]
+    branches: [main, release-*]
+    paths-ignore: ["**.md", "**.png", "**.jpg", "**.svg", "**/docs/**"]
 
 env:
   GO_VERSION: 1.17
   KIND_VERSION: v0.11.1
   CONTAINERD_VERSION: v1.5.2
   KIND_CONFIG_PATH: test/testdata/kind/config.yaml
-  DRAGONFLY_STABLE_IMAGE_TAG: v2.0.1-rc.10
+  DRAGONFLY_STABLE_IMAGE_TAG: v2.0.2-rc.0
   DRAGONFLY_CHARTS_PATH: deploy/helm-charts/charts/dragonfly
   DRAGONFLY_CHARTS_CONFIG_PATH: test/testdata/charts/config.yaml
   DRAGONFLY_FILE_SERVER_PATH: test/testdata/k8s/file-server.yaml
@@ -22,6 +22,7 @@ env:
 jobs:
   compatibility_e2e_tests:
     name: e2e_tests_with_${{ matrix.module }}
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -89,7 +90,4 @@ jobs:
         with:
           name: ${{ matrix.module }}-compatibility-e2e-tests-logs
           path: |
-            /tmp/artifact/manager/*.log
-            /tmp/artifact/daemon/*.log
-            /tmp/artifact/scheduler/*.log
-            /tmp/artifact/cdn/*.log
+            /tmp/artifact/**/*.log
