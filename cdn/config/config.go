@@ -18,8 +18,10 @@ package config
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
+	compression "d7y.io/dragonfly/v2/pkg/compress"
 	"gopkg.in/yaml.v3"
 
 	"d7y.io/dragonfly/v2/cdn/metrics"
@@ -50,6 +52,12 @@ func New() *Config {
 			IDC:      "",
 		},
 		LogDir: "",
+		Compress: CompressConfig{
+			Ratio:          DefaultCompressRatio,
+			Algorithm:      DefaultCompressAlgorithm,
+			DetectChanSize: DefaultDetectQueueSize,
+			ConcurrentSize: runtime.NumCPU(),
+		},
 	}
 }
 
@@ -65,10 +73,12 @@ type Config struct {
 	Manager ManagerConfig `yaml:"manager" mapstructure:"manager"`
 	// Host configuration
 	Host HostConfig `yaml:"host" mapstructure:"host"`
-	// Log directory
+	// LogDir Log directory
 	LogDir string `yaml:"logDir" mapstructure:"logDir"`
 	// WorkHome directory
 	WorkHome string `mapstructure:"workHome" yaml:"workHome"`
+	// Compress compress configuration
+	Compress CompressConfig `yaml:"compress" mapstructure:"compress"`
 }
 
 func (c *Config) String() string {
@@ -131,3 +141,23 @@ type HostConfig struct {
 	// IDC for scheduler
 	IDC string `mapstructure:"idc" yaml:"idc"`
 }
+
+type CompressConfig struct {
+	// Ratio Compress ratio
+	Ratio float32 `yaml:"ratio" mapstructure:"ratio"`
+
+	// Algorithm compress type
+	Algorithm compression.CompressAlgorithm `yaml:"algorithm" mapstructure:"algorithm"`
+
+	// DetectChanSize
+	DetectChanSize int `yaml:"detectChanSize" mapstructure:"detectChanSize"`
+
+	// ConcurrentSize compress detect goroutine size
+	ConcurrentSize int `yaml:"concurrentSize" mapstructure:"concurrentSize"`
+}
+
+const (
+	DefaultCompressRatio     = 3
+	DefaultCompressAlgorithm = compression.GZIP
+	DefaultDetectQueueSize   = 64
+)

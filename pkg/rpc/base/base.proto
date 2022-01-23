@@ -68,6 +68,7 @@ enum Code{
 
 enum PieceStyle{
   PLAIN = 0;
+  GZIP = 1;
 }
 
 enum SizeScope{

@@ -17,6 +17,7 @@
 package disk
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	compression "d7y.io/dragonfly/v2/pkg/compress"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/atomic"
@@ -131,6 +133,20 @@ func (s *diskStorageManager) WriteDownloadFile(taskID string, offset int64, len 
 	raw := storage.GetDownloadRaw(taskID)
 	raw.Offset = offset
 	raw.Length = len
+	isCompress := compression.DefaultCompress.IsCompress(taskID)
+	if isCompress {
+		var bf bytes.Buffer
+		writeCloser, err := compression.DefaultCompress.Compression(&bf)
+		if err != nil {
+			return err
+		}
+		_, err = io.CopyN(writeCloser, data, offset)
+		if err != nil {
+			return err
+		}
+		writeCloser.Close()
+		return s.diskDriver.Put(raw, &bf)
+	}
 	return s.diskDriver.Put(raw, data)
 }
 
