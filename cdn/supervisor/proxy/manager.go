@@ -56,10 +56,14 @@ type manager struct {
 
 // NewManager returns a new Manager Object.
 func NewManager(config Config) (Manager, error) {
-	config.rules = append(config.rules, &Proxy{
-		Regx:      "https://download.jetbrains.com.cn/go/goland-2021.3.dmg",
-		ProxyHost: "localhost:8080",
-	})
+	return newManager(config)
+}
+
+func newManager(config Config) (*manager, error) {
+	//config.rules = append(config.rules, &Proxy{
+	//	Regx:      "https://download.jetbrains.com.cn/go/goland-2021.3.dmg",
+	//	ProxyHost: "localhost:8080",
+	//})
 	proxies := make(map[string]*proxyItem)
 	for _, rule := range config.rules {
 		compiled, err := regexp.Compile(rule.Regx)
